@@ -114,6 +114,8 @@ async function main() {
   await git.cwd(repoName);
   await git.init();
   await git.checkoutLocalBranch('main');
+  await git.addConfig('user.name', 'AI Dev Agent');
+  await git.addConfig('user.email', 'ai-dev-agent@example.com');
   await git.add('.');
   await git.commit('Initial commit');
     console.log('📦 Oppretter GitHub-repo...');
