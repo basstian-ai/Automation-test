@@ -22,7 +22,7 @@ async function generateCode(prompt) {
     messages: [
       {
         role: 'system',
-        content: 'Du er en erfaren fullstack-utvikler som lager produksjonsklar Next.js-applikasjon. Du returnerer kun gyldig JSON.'
+        content: 'Du er en erfaren fullstack-utvikler som lager produksjonsklar Next.js-applikasjon. Du returnerer kun gyldig JSON, uten forklaring, tekst eller kommentarer.'
       },
       {
         role: 'user',
@@ -32,6 +32,18 @@ async function generateCode(prompt) {
   });
 
   return response.choices[0].message.content;
+}
+
+function tryParseJSON(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const cleaned = raw
+      .replace(/^```(?:json)?/, '')
+      .replace(/```$/, '')
+      .trim();
+    return JSON.parse(cleaned);
+  }
 }
 
 async function createRepo(repoName) {
@@ -94,20 +106,27 @@ async function deployToVercel(projectName) {
 async function main() {
   const timestamp = Date.now();
   const repoName = `simple-pim-${timestamp}`;
-  const prompt = `Lag en enkel Next.js PIM-applikasjon der man kan:
-- Legge inn produktdata (navn, beskrivelse, pris)
-- Vise produktene på en offentlig side
-- Lagring i lokal JSON-fil
+  const prompt = `
+Du skal returnere kun gyldig JSON (ikke forklarende tekst, ikke kommentarer). Returner et objekt der nøkler er filbaner og verdiene er filinnhold. 
+Eksempel:
+{
+  "pages/index.js": "// next.js komponent",
+  "package.json": "{...}"
+}
 
-Generer hele prosjektet med mappestruktur og filinnhold:
+Lag en enkel Next.js PIM-applikasjon hvor man kan:
+- legge inn produktdata (navn, beskrivelse, pris)
+- vise produktene offentlig
+- lagre data i lokal JSON-fil (ingen database)
+Inkluder filer som:
 - pages/index.js
 - pages/admin.js
 - pages/api/products/index.js
-- data/products.json (med tom array)
-- package.json (med nødvendige avhengigheter)
+- data/products.json (tom array)
 - .gitignore
+- package.json
+`;
 
-Returner kun et JSON-objekt der nøkkelen er filstien og verdien er filens innhold.`;
   const dirPath = path.join(process.cwd(), repoName);
 
   if (fs.existsSync(dirPath)) {
@@ -118,14 +137,15 @@ Returner kun et JSON-objekt der nøkkelen er filstien og verdien er filens innho
   fs.mkdirSync(dirPath);
 
   console.log('🚀 Genererer kode med OpenAI...');
-  const code = await generateCode(prompt);
+  const rawOutput = await generateCode(prompt);
 
   let files;
   try {
-    files = JSON.parse(code);
-  } catch {
-    const cleaned = code.trim().replace(/^```(?:json)?\n/, '').replace(/```$/, '');
-    files = JSON.parse(cleaned);
+    files = tryParseJSON(rawOutput);
+  } catch (err) {
+    console.error('🧨 Klarte ikke å parse OpenAI-respons som JSON.');
+    fs.writeFileSync(`${dirPath}/openai-output.txt`, rawOutput);
+    process.exit(1);
   }
 
   for (const [filePath, content] of Object.entries(files)) {
@@ -144,6 +164,7 @@ Returner kun et JSON-objekt der nøkkelen er filstien og verdien er filens innho
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
   await git.add('.');
   await git.commit('Initial commit');
+
   console.log('📦 Oppretter GitHub-repo...');
   const cloneUrl = await createRepo(repoName);
   const remoteUrlWithAuth = cloneUrl.replace(
@@ -160,7 +181,7 @@ Returner kun et JSON-objekt der nøkkelen er filstien og verdien er filens innho
   console.log(`🔗 GitHub: https://github.com/${GH_USERNAME}/${repoName}`);
   console.log(`🔗 Vercel: https://vercel.com/${VERCEL_TEAM_ID}/${repoName}`);
 }
+
 main().catch((err) => {
   console.error('❌ Uventet feil:', err);
 });
-
