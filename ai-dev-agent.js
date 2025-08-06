@@ -22,7 +22,7 @@ async function generateCode(prompt) {
     messages: [
       {
         role: 'system',
-        content: 'Du er en erfaren fullstack-utvikler som lager produksjonsklar Next.js-applikasjon. Du returnerer kun gyldig JSON, uten forklaring, tekst eller kommentarer.'
+        content: 'Du er en erfaren fullstack-utvikler som lager produksjonsklar Next.js-applikasjon. Returner KUN et gyldig JSON-objekt uten kodeblokker (ingen ```), uten forklarende tekst eller kommentarer. N\u00f8kler skal v\u00e6re filbaner og verdier skal v\u00e6re filinnhold.'
       },
       {
         role: 'user',
@@ -41,7 +41,8 @@ function tryParseJSON(raw) {
     const cleaned = raw
       .replace(/^```(?:json)?/, '')
       .replace(/```$/, '')
-      .trim();
+      .replace(/^[\s\S]*?\{/, '{')
+      .replace(/\}[\s\S]*$/, '}');
     return JSON.parse(cleaned);
   }
 }
@@ -107,7 +108,7 @@ async function main() {
   const timestamp = Date.now();
   const repoName = `simple-pim-${timestamp}`;
   const prompt = `
-Du skal returnere kun gyldig JSON (ikke forklarende tekst, ikke kommentarer). Returner et objekt der nøkler er filbaner og verdiene er filinnhold. 
+Returner KUN et gyldig JSON-objekt uten kodeblokker (ingen \`\`\`), ingen forklarende tekst eller kommentarer. Objektets nøkler skal være filbaner og verdiene filinnhold.
 Eksempel:
 {
   "pages/index.js": "// next.js komponent",
@@ -144,6 +145,12 @@ Inkluder filer som:
     files = tryParseJSON(rawOutput);
   } catch (err) {
     console.error('🧨 Klarte ikke å parse OpenAI-respons som JSON.');
+    fs.writeFileSync(`${dirPath}/openai-output.txt`, rawOutput);
+    process.exit(1);
+  }
+
+  if (typeof files !== 'object' || files === null || Array.isArray(files)) {
+    console.error('🧨 Responsen fra OpenAI er ikke et gyldig JSON-objekt.');
     fs.writeFileSync(`${dirPath}/openai-output.txt`, rawOutput);
     process.exit(1);
   }
