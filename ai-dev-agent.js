@@ -7,11 +7,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const {
-  GITHUB_TOKEN,
-  VERCEL_TOKEN,
-  VERCEL_TEAM_ID,
   OPENAI_API_KEY,
-  GITHUB_USERNAME
+  PERSONAL_ACCESS_TOKEN,
+  GH_USERNAME,
+  VERCEL_TOKEN,
+  VERCEL_TEAM_ID
 } = process.env;
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -44,7 +44,7 @@ async function createRepo(repoName) {
       },
       {
         headers: {
-          Authorization: `token ${GITHUB_TOKEN}`
+          Authorization: `token ${PERSONAL_ACCESS_TOKEN}`
         }
       }
     );
@@ -65,7 +65,7 @@ async function deployToVercel(projectName) {
         framework: 'nextjs',
         gitRepository: {
           type: 'github',
-          repo: `${GITHUB_USERNAME}/${projectName}`
+          repo: `${GH_USERNAME}/${projectName}`
         },
         buildCommand: 'npm run build',
         outputDirectory: 'out',
@@ -95,7 +95,6 @@ async function main() {
   const timestamp = Date.now();
   const repoName = `simple-pim-${timestamp}`;
   const prompt = 'Lag en enkel Next.js PIM-applikasjon hvor man kan legge inn produktinformasjon (navn, beskrivelse, pris) og vise dette på en produktside. Ingen database – bruk lokal JSON-fil for lagring.';
-
   const dirPath = path.join(process.cwd(), repoName);
 
   if (fs.existsSync(dirPath)) {
@@ -109,34 +108,11 @@ async function main() {
   const code = await generateCode(prompt);
 
   fs.writeFileSync(`${dirPath}/README.md`, `# ${repoName}\n\n${prompt}`);
-  fs.writeFileSync(`${dirPath}/index.js`, code); // Du kan gjøre mer parsing her senere
+  fs.writeFileSync(`${dirPath}/index.js`, code);
 
   const git = simpleGit();
   await git.cwd(repoName);
   await git.init();
   await git.checkoutLocalBranch('main');
   await git.add('.');
-  await git.commit('Initial commit');
-
-  console.log('📦 Oppretter GitHub-repo...');
-  const cloneUrl = await createRepo(repoName);
-const remoteUrlWithAuth = cloneUrl.replace(
-  'https://',
-  `https://${GITHUB_USERNAME}:${GITHUB_TOKEN}@`
-);
-await git.addRemote('origin', remoteUrlWithAuth);
-  await git.push('origin', 'main');
-
-  console.log('🌐 Trigger deploy på Vercel...');
-  await deployToVercel(repoName);
-
-  console.log('\n✅ Ferdig!');
-  console.log(`🔗 GitHub: https://github.com/${GITHUB_USERNAME}/${repoName}`);
-  console.log(`🔗 Vercel: https://vercel.com/${VERCEL_TEAM_ID}/${repoName}`);
-  console.log('🧹 Slett gamle repoer om ønskelig: https://github.com/settings/repositories');
-}
-
-main().catch((err) => {
-  console.error('❌ Uventet feil:', err);
-});
-
+  await git.commit('Initial commit')
