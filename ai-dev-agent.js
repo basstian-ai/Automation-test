@@ -115,4 +115,24 @@ async function main() {
   await git.init();
   await git.checkoutLocalBranch('main');
   await git.add('.');
-  await git.commit('Initial commit')
+  await git.commit('Initial commit');
+    console.log('📦 Oppretter GitHub-repo...');
+  const cloneUrl = await createRepo(repoName);
+  const remoteUrlWithAuth = cloneUrl.replace(
+    'https://',
+    `https://${GH_USERNAME}:${PERSONAL_ACCESS_TOKEN}@`
+  );
+  await git.addRemote('origin', remoteUrlWithAuth);
+  await git.push('origin', 'main');
+
+  console.log('🌐 Trigger deploy på Vercel...');
+  await deployToVercel(repoName);
+
+  console.log('\n✅ Ferdig!');
+  console.log(`🔗 GitHub: https://github.com/${GH_USERNAME}/${repoName}`);
+  console.log(`🔗 Vercel: https://vercel.com/${VERCEL_TEAM_ID}/${repoName}`);
+}
+main().catch((err) => {
+  console.error('❌ Uventet feil:', err);
+});
+
