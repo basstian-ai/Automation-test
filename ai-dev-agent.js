@@ -22,7 +22,7 @@ async function generateCode(prompt) {
     messages: [
       {
         role: 'system',
-        content: 'Du er en erfaren fullstack-utvikler som lager produksjonsklar Next.js-applikasjon. Du returnerer kun gyldig kode.'
+        content: 'Du er en erfaren fullstack-utvikler som lager produksjonsklar Next.js-applikasjon. Du returnerer kun gyldig JSON.'
       },
       {
         role: 'user',
@@ -94,7 +94,20 @@ async function deployToVercel(projectName) {
 async function main() {
   const timestamp = Date.now();
   const repoName = `simple-pim-${timestamp}`;
-  const prompt = 'Lag en enkel Next.js PIM-applikasjon hvor man kan legge inn produktinformasjon (navn, beskrivelse, pris) og vise dette på en produktside. Ingen database – bruk lokal JSON-fil for lagring.';
+  const prompt = `Lag en enkel Next.js PIM-applikasjon der man kan:
+- Legge inn produktdata (navn, beskrivelse, pris)
+- Vise produktene på en offentlig side
+- Lagring i lokal JSON-fil
+
+Generer hele prosjektet med mappestruktur og filinnhold:
+- pages/index.js
+- pages/admin.js
+- pages/api/products/index.js
+- data/products.json (med tom array)
+- package.json (med nødvendige avhengigheter)
+- .gitignore
+
+Returner kun et JSON-objekt der nøkkelen er filstien og verdien er filens innhold.`;
   const dirPath = path.join(process.cwd(), repoName);
 
   if (fs.existsSync(dirPath)) {
@@ -107,8 +120,21 @@ async function main() {
   console.log('🚀 Genererer kode med OpenAI...');
   const code = await generateCode(prompt);
 
+  let files;
+  try {
+    files = JSON.parse(code);
+  } catch {
+    const cleaned = code.trim().replace(/^```(?:json)?\n/, '').replace(/```$/, '');
+    files = JSON.parse(cleaned);
+  }
+
+  for (const [filePath, content] of Object.entries(files)) {
+    const fullPath = path.join(dirPath, filePath);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, content);
+  }
+
   fs.writeFileSync(`${dirPath}/README.md`, `# ${repoName}\n\n${prompt}`);
-  fs.writeFileSync(`${dirPath}/index.js`, code);
 
   const git = simpleGit();
   await git.cwd(repoName);
@@ -118,7 +144,7 @@ async function main() {
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
   await git.add('.');
   await git.commit('Initial commit');
-    console.log('📦 Oppretter GitHub-repo...');
+  console.log('📦 Oppretter GitHub-repo...');
   const cloneUrl = await createRepo(repoName);
   const remoteUrlWithAuth = cloneUrl.replace(
     'https://',
