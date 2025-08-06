@@ -1,0 +1,28 @@
+{
+  "name": "ai-dev-agent",
+  "version": "1.0.0",
+  "description": "Autonom AI-basert utviklingsagent for generering, versjonskontroll og deploy av kode via OpenAI, GitHub og Vercel.",
+  "main": "ai-dev-agent.js",
+  "type": "module",
+  "scripts": {
+    "start": "node ai-dev-agent.js"
+  },
+  "keywords": [
+    "ai",
+    "openai",
+    "gpt",
+    "agent",
+    "vercel",
+    "github",
+    "automation"
+  ],
+  "author": "Stian Prestegård",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.8",
+    "dotenv": "^17.2.1",
+    "openai": "^4.23.0",
+    "simple-git": "^3.22.0"
+  }
+}
+
