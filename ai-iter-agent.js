@@ -143,26 +143,6 @@ Returnér KUN gyldig JSON:
   ]);
   await git.push();
 
- /* 8) Trigger deploy -------------------------------------------------- */
-  let deploy;
-  try {
-    if (lastDeployId) {
-      // 🚀  redeploy previous build
-      ({ data: deploy } = await vercel.post(
-        `/v13/deployments/${lastDeployId}/redeploy`,
-        { target: 'production' }               // body can be empty; target just to be clear
-      ));
-    } else {
-      // 🆕  first (or regular) deploy
-      ({ data: deploy } = await vercel.post('/v13/deployments', {
-        name:   VERCEL_PROJECT,  // project slug
-        files:  [],              // required by schema
-        target: 'production'
-      }));
-    }
-  } catch (err) {
-    console.error('❌ Vercel-deploy feilet:', err.response?.data || err.message);
-    process.exit(1);
-  }
-  console.log('✅ Ny iterasjon pushet – deploy trigget:', deploy.url);
+  /* 8) Ferdig – GitHub-pushen ovenfor trigger Vercel automatisk */
++  console.log('✅ Ny iterasjon pushet – Vercel bygger nå via Git-integrasjonen');
 })();
