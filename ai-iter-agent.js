@@ -147,7 +147,11 @@ Returnér KUN gyldig JSON:
     process.exit(1);
   }
   console.log('🔎 AI-payload:', Object.keys(payload.files));
-
+  if (Object.keys(payload.files).length === 0) {
+    console.log('🟡 AI foreslo ingen endringer – hopper over commit/push.');
+    process.exit(0);
+  }
+  
   /* 5) Skriv filer, commit & push */
   writeFiles(payload.files);
 
