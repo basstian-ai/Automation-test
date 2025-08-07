@@ -148,7 +148,8 @@ Returnér KUN gyldig JSON:
     // første gang: bruk prosjekt-IDen (prj_xxx) i stedet for bare navn
  ({ data: deploy } = await vercel.post('/v13/deployments', {
     projectId: VERCEL_PROJECT, // prj_xxx…
-    name:      VERCEL_PROJECT  // samme verdi er OK
+    name:      VERCEL_PROJECT,  // samme verdi er OK
+    files:     []                // <- må være et array, tomt er OK
  }));
     }
 } catch (err) {
