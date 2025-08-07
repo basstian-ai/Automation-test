@@ -78,9 +78,15 @@ async function safeCompletion(opts, retries = 3) {
 
   /* 4) Prompt → OpenAI */
   const systemPrompt = `
-Du er en autonom utvikler for et Next.js PIM-prosjekt. Du skal kjøre små, inkrementelle forbedringer og alltid sørge for at løsningen bygger på Vercel.
+Du er en autonom utvikler for et Next.js PIM-prosjekt. Du skal kjøre små, inkrementelle forbedringer og alltid sørge for at løsningen er funksjonell og bygger i Vercel.
+Du får:
+- "files": kodebasen som JSON (fil -> innhold)
+- "buildLog": den siste Vercel-build-loggen
 
-Returnér KUN gyldig JSON:
+Oppgave:
+1. Hvis buildLog inneholder en feil, identifiser årsak og fiks.
+2. Hvis buildLog er OK, implementer neste viktige, små forbedring/feature.
+3. Returnér KUN gyldig JSON:
 {
   "files":        { "<filsti>": "<nyttInnhold>", ... },
   "commitMessage": "Kort beskrivelse"
@@ -117,6 +123,8 @@ Returnér KUN gyldig JSON:
     console.error('❌ AI-respons mangler "files" eller "commitMessage"');
     process.exit(1);
   }
+   console.log('🔎 AI-payload:', Object.keys(payload.files));
+
 
   /* 6) Skriv nye/endrede filer */
   writeFiles(payload.files);
@@ -124,24 +132,16 @@ Returnér KUN gyldig JSON:
   /* 7) Commit & push */
   await git.addConfig('user.name', 'AI Dev Agent');
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
-  await git.add(Object.keys(payload.files));
+  await git.add('.');
   await git.commit(payload.commitMessage);
   const repoSlug = process.env.GITHUB_REPOSITORY;   // settes automatisk av Actions
-
-  await git.remote([
-    'set-url',
-    'origin',
-    `https://x-access-token:${process.env.GITHUB_TOKEN}@github.com/${repoSlug}.git`
-  ]);
-  await git.push();
-
   
   await git.remote([
     'set-url',
     'origin',
     `https://x-access-token:${process.env.GITHUB_TOKEN}@github.com/${repoSlug}.git`
   ]);
-  await git.push();
+  await git.push('origin', 'main');
 
   /* 8) Ferdig – GitHub-pushen ovenfor trigger Vercel automatisk */
 +  console.log('✅ Ny iterasjon pushet – Vercel bygger nå via Git-integrasjonen');
