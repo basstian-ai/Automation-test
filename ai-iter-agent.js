@@ -135,5 +135,6 @@ Returnér KUN gyldig JSON:
   /* 9) Lagre state */
   fs.writeFileSync('state.json', JSON.stringify({ lastDeployId: deploy.id }, null, 2));
 
+
   console.log('✅ Ny iterasjon pushet – deploy trigget:', deploy.url);
 })();
