@@ -63,11 +63,11 @@ async function fetchLatestDeployId() {
   }
 }
 
-/** Hent build-logg for et deployment-uid via /v6 */
+/** Hent build-logg for et deployment-uid via /v3 */
 async function fetchBuildLog(deployId) {
   if (!deployId) return 'Ingen forrige deploy.';
   try {
-    const { data } = await vercel.get(`/v6/deployments/${deployId}/events`, {
+    const { data } = await vercel.get(`/v3/deployments/${deployId}/events`, {
       params: { limit: 200 },
     });
     return data
