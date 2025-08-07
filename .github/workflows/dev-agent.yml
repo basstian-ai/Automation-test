@@ -1,29 +1,30 @@
 name: AI Dev Agent
 
 on:
-  workflow_dispatch:  # Manuell triggering fra GitHub UI
+  workflow_dispatch:
 
 jobs:
   run-agent:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write          # <- gjør GITHUB_TOKEN skrivbar
     steps:
-      - name: 📥 Sjekk ut repo
+      - name: 📥 Checkout
         uses: actions/checkout@v3
 
-      - name: ⚙️ Sett opp Node.js
+      - name: ⚙️ Setup Node
         uses: actions/setup-node@v3
         with:
-          node-version: '20'
+          node-version: 20
 
-      - name: 📦 Installer avhengigheter
+      - name: 📦 Install deps
         run: npm install
 
-      - name: 🚀 Kjør AI Dev Agent
+      - name: 🚀 Run agent
+        run: node ai-iter-agent.js
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          GH_USERNAME: ${{ secrets.GH_USERNAME }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          GITHUB_TOKEN:   ${{ secrets.GITHUB_TOKEN }}
+          VERCEL_TOKEN:   ${{ secrets.VERCEL_TOKEN }}
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-        run: node ai-iter-agent.js
+          VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
