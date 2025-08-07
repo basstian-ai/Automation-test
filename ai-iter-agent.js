@@ -13,10 +13,10 @@ import { encode } from 'gpt-3-encoder';   // token-sjekk
 // ───────────────────────── ENV ─────────────────────────
 const {
   OPENAI_API_KEY,
-  GH_USERNAME,
   VERCEL_TOKEN,
   VERCEL_TEAM_ID,
-  VERCEL_PROJECT          // f.eks. "simple-pim-123..."
+  VERCEL_PROJECT,          
+  GH_USERNAME = ''
 } = process.env;
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -127,7 +127,14 @@ Returnér KUN gyldig JSON:
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
   await git.add(Object.keys(payload.files));
   await git.commit(payload.commitMessage);
-  await git.push();
+const repoSlug = process.env.GITHUB_REPOSITORY || `${GH_USERNAME}/Automation-test`;
+
+await git.remote([
+  'set-url',
+  'origin',
+  `https://x-access-token:${process.env.GITHUB_TOKEN}@github.com/${repoSlug}.git`
+]);  
+await git.push();
 
   /* 8) Trigger ny deploy */
   const { data: deploy } = await vercel.post('/v13/deployments', { name: VERCEL_PROJECT });
