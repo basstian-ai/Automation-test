@@ -63,28 +63,28 @@ async function fetchLatestDeployId() {
   }
 }
 
-/** Hent build-logg for et deployment-uid via /v3 */
+/** Hent build-logg for et deployment-uid via /v6 */
 async function fetchBuildLog(deployId) {
   if (!deployId) return 'Ingen forrige deploy.';
 
   try {
-    // NB: ingen "direction" lenger 🚫
-    const { data } = await vercel.get(
-      `/v3/deployments/${deployId}/events`,
-      { params: { limit: 2000 } }      // evt. legg til "until" / "since"
-    );
+    const { data } = await vercel.get(`/v6/deployments/${deployId}/events`, {
+      params: { limit: 2000 }            // høyere grense – nyeste kommer sist
+      // NB: ikke direction/backwards her – gir 400
+    });
 
     return data
-      .filter(e => e.payload?.text)
-      .map(e  => e.payload.text)
+      .filter(e => e.payload?.text)      // bare tekstlinjer
+      .map(   e => e.payload.text)
       .join('\n')
-      .slice(-8_000);                  // maks 8 k tegn til GPT
+      .slice(-8_000);                    // maks 8 k tegn til LLM-prompten
   } catch (err) {
     console.warn('⚠️  Kunne ikke hente build-logg:',
                  err.response?.data || err.message);
     return 'Ingen forrige deploy.';
   }
 }
+
 
 
 
