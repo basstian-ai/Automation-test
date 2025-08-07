@@ -16,7 +16,6 @@ const {
   VERCEL_TOKEN,
   VERCEL_TEAM_ID,
   VERCEL_PROJECT,
-  GH_USERNAME = ''
 } = process.env;
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -127,7 +126,7 @@ Returnér KUN gyldig JSON:
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
   await git.add(Object.keys(payload.files));
   await git.commit(payload.commitMessage);
-  const repoSlug = process.env.GITHUB_REPOSITORY || `${GH_USERNAME}/Automation-test`;
+  const repoSlug = process.env.GITHUB_REPOSITORY;   // settes automatisk av Actions
 
   await git.remote([
     'set-url',
