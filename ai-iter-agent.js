@@ -63,34 +63,29 @@ async function fetchLatestDeployId() {
   }
 }
 
-/** Hent build-logg for et deployment-uid */
+/** Hent build-logg for et deployment-uid via /v3 */
 async function fetchBuildLog(deployId) {
   if (!deployId) return 'Ingen forrige deploy.';
 
-  // 1) Vent maks ~3 min på at deploy blir ferdig
-  for (let i = 0; i < 18; i++) {          // 18 × 10 s ≈ 3 min
-    const { data: dpl } = await vercel.get(`/v6/deployments/${deployId}`);
-    if (['READY','ERROR','CANCELED'].includes(dpl.state)) break;
-    await new Promise(r => setTimeout(r, 10_000));
-  }
-
-  // 2) Hent hele loggen (forwards)
   try {
-    const { data } = await vercel.get(`/v3/deployments/${deployId}/events`, {
-      params: { limit: 4000 }             // ingen direction ⇒ forwards
-    });
+    // NB: ingen "direction" lenger 🚫
+    const { data } = await vercel.get(
+      `/v3/deployments/${deployId}/events`,
+      { params: { limit: 2000 } }      // evt. legg til "until" / "since"
+    );
 
     return data
       .filter(e => e.payload?.text)
-      .map(e => e.payload.text)
+      .map(e  => e.payload.text)
       .join('\n')
-      .slice(-8_000);
+      .slice(-8_000);                  // maks 8 k tegn til GPT
   } catch (err) {
-    console.warn('⚠️  Henting av build-logg feilet:',
+    console.warn('⚠️  Kunne ikke hente build-logg:',
                  err.response?.data || err.message);
     return 'Ingen forrige deploy.';
   }
 }
+
 
 
 
