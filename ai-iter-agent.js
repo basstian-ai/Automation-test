@@ -104,6 +104,10 @@ async function safeCompletion(opts, retries = 3) {
   const lastDeployId = await fetchLatestDeployId();
   const buildLog     = await fetchBuildLog(lastDeployId);
 
+  console.log('📝 lastDeployId:', lastDeployId);
+  console.log('🔍 buildLog-preview:', buildLog.slice(0, 400)); // første 400 tegn
+
+
   /* 3) Prompt til GPT-4o-mini */
   const systemPrompt = `
 Du er en autonom utvikler for et Next.js PIM-prosjekt.
