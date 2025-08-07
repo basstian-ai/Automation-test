@@ -1,6 +1,6 @@
 {
   "name": "ai-dev-agent",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Autonom AI-basert utviklingsagent for generering, versjonskontroll og deploy av kode via OpenAI, GitHub og Vercel.",
   "main": "ai-iter-agent.js",
   "type": "module",
