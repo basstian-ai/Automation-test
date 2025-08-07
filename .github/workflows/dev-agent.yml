@@ -2,16 +2,15 @@
 name: AI Dev Agent
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main]          # når du pusher til Automation-test
-  workflow_dispatch:          # “Run workflow”-knapp i UI
+    branches: [main]
 
 jobs:
   iter:
     runs-on: ubuntu-latest
-
-    env:                      # felles miljø­variabler
-      TARGET_REPO:  basstian-ai/simple-pim-1754492683911   # <- mål-repo
+    env:
+      TARGET_REPO: basstian-ai/simple-pim-1754492683911
       TARGET_BRANCH: main
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
@@ -20,31 +19,33 @@ jobs:
       PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
 
     steps:
-      # 1) Hent **agent-koden** (dette repoet)
-      - name: Checkout agent repo
-        uses: actions/checkout@v4
+      # 1) Sjekk ut **agent-repoet** (dette) i ./agent
+      - uses: actions/checkout@v4
         with:
-          path: agent                     # legges i ./agent
+          path: agent
 
-      # 2) Hent **mål-repoet** som skal modifiseres
-      - name: Checkout target repo
-        uses: actions/checkout@v4
+      # 2) Sjekk ut **PIM-målet** i ./target
+      - uses: actions/checkout@v4
         with:
           repository: ${{ env.TARGET_REPO }}
-          token:       ${{ env.PAT_TOKEN || secrets.GITHUB_TOKEN }}
-          path:        work               # legges i ./work
-          fetch-depth: 0                  # full historikk
-          persist-credentials: false      # vi setter egen remote i scriptet
+          token: ${{ secrets.PAT_TOKEN }}     # trengs for push-tilgang
+          path: target
 
       # 3) Installer agent-avhengigheter
       - name: Install agent deps
+        run: npm ci
         working-directory: agent
-        run: npm ci                       # package.json ligger i agent-mappen
 
-      # 4) Kjør agenten **inni mål-repoet**
-      - name: Run AI iter-agent
-        working-directory: work           # ⇒ process.cwd() === ./work
-        env:
-          # arver alle env-varene definert over
-          NODE_PATH: ${{ github.workspace }}/agent  # sørger for at import ... virker
+      # 4) Kjør agenten INNE i target-mappen
+      - name: Run AI Dev Agent
         run: node ../agent/ai-iter-agent.js
+        working-directory: target
+        env:
+          # sender videre alle env-variablene som allerede er satt
+          TARGET_REPO: ${{ env.TARGET_REPO }}
+          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
+          VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
+          PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
