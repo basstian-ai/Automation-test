@@ -82,32 +82,31 @@ async function safeCompletion(opts, retries = 3) {
 
 // ───────────────────────── MAIN LOOP ─────────────────────────
 (async () => {
-  /* 1) Repo‑snapshot (maks 50 filer) */
+  // 1) Repo-snapshot
   const repoFilesArr = await readFileTree('.', 50);
   const repoFiles    = Object.fromEntries(repoFilesArr.map(f => [f.path, f.content]));
 
-// 2) Finn siste Vercel-deploy (hvis finnes)
-let lastDeployId = null;
+  /* 2) Finn siste Vercel-deploy */
+  let lastDeployId = null;
+  try {
+    const params = { limit: 1, order: 'desc' };
 
-try {
-  const params = { limit: 1, order: 'desc' };
+    if (VERCEL_PROJECT?.startsWith('prj_')) {
+      params.projectId = VERCEL_PROJECT;   // prosjekt-ID
+    } else if (VERCEL_PROJECT) {
+      params.project   = VERCEL_PROJECT;   // slug
+    } else {
+      throw new Error('VERCEL_PROJECT not set');
+    }
 
-  if (process.env.VERCEL_PROJECT?.startsWith('prj_')) {
-    params.projectId = process.env.VERCEL_PROJECT;   // ID
-  } else if (process.env.VERCEL_PROJECT) {
-    params.project   = process.env.VERCEL_PROJECT;   // slug
-  } else {
-    throw new Error('VERCEL_PROJECT not set');
+    const { data } = await vercel.get('/v13/deployments', { params });
+    lastDeployId = data.deployments?.[0]?.id ?? null;
+    console.log('ℹ️  Siste deploy-id:', lastDeployId);
+  } catch (err) {
+    console.warn('⚠️  Kunne ikke hente siste deploy-id:', err.response?.data || err.message);
   }
 
-  const { data } = await vercel.get('/v13/deployments', { params });
-  lastDeployId = data.deployments?.[0]?.id ?? null;
-} catch (err) {
-  console.warn('⚠️  Kunne ikke hente siste deploy-id:', err.response?.data || err.message);
-}
-
-
-  /* 3) Siste Vercel‑build‑logg */
+  /* 3) Siste build-logg */
   let buildLog = 'Ingen forrige deploy.';
   if (lastDeployId) {
     const { data } = await vercel.get(`/v13/deployments/${lastDeployId}/events`, { params: { limit: 200 } });
@@ -115,9 +114,9 @@ try {
       .filter(e => e.payload?.text)
       .map(e => e.payload.text)
       .join('\n')
-      .slice(-8_000); // max 8 k tegn
+      .slice(-8_000);
   }
-
+  
   /* 4) Prompt → OpenAI */
   const systemPrompt = `
 Du er en autonom utvikler for et Next.js PIM‑prosjekt. Du skal kjøre små, inkrementelle forbedringer og alltid sørge for at løsningen er funksjonell og bygger i Vercel.
@@ -187,5 +186,5 @@ Oppgave:
   await git.push('origin', TARGET_BRANCH);
 
   /* 8) Ferdig – GitHub‑pushen ovenfor trigger Vercel automatisk */
-  console.log('✅ Ny iterasjon pushet – Vercel bygger nå via Git‑integrasjonen');
+   console.log('✅ Ny iterasjon pushet – Vercel bygger nå via Git-integrasjonen');
 })();
