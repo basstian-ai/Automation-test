@@ -18,7 +18,9 @@ const {
   TARGET_BRANCH = 'main', // default branch å pushe til
   OPENAI_API_KEY,
   VERCEL_TOKEN,
-  VERCEL_TEAM_ID
+  VERCEL_TEAM_ID,
+  VERCEL_PROJECT
+
 } = process.env;
 
 // hvilket repo skal pushes til, og med hvilket token?
@@ -84,20 +86,26 @@ async function safeCompletion(opts, retries = 3) {
   const repoFilesArr = await readFileTree('.', 50);
   const repoFiles    = Object.fromEntries(repoFilesArr.map(f => [f.path, f.content]));
 
-  /* 2) Finn siste Vercel-deploy (hvis finnes) */
-  let lastDeployId = null;
-  try {
-    const { data } = await vercel.get('/v13/deployments', {
-      params: {
-        projectId: VERCEL_PROJECT,  // prj_xxx eller slug
-        limit: 1,
-        order: 'desc'
-      }
-    });
-    lastDeployId = data.deployments?.[0]?.id ?? null;
-  } catch (err) {
-    console.warn('⚠️  Kunne ikke hente siste deploy-id:', err.response?.data || err.message);
+// 2) Finn siste Vercel-deploy (hvis finnes)
+let lastDeployId = null;
+
+try {
+  const params = { limit: 1, order: 'desc' };
+
+  if (process.env.VERCEL_PROJECT?.startsWith('prj_')) {
+    params.projectId = process.env.VERCEL_PROJECT;   // ID
+  } else if (process.env.VERCEL_PROJECT) {
+    params.project   = process.env.VERCEL_PROJECT;   // slug
+  } else {
+    throw new Error('VERCEL_PROJECT not set');
   }
+
+  const { data } = await vercel.get('/v13/deployments', { params });
+  lastDeployId = data.deployments?.[0]?.id ?? null;
+} catch (err) {
+  console.warn('⚠️  Kunne ikke hente siste deploy-id:', err.response?.data || err.message);
+}
+
 
   /* 3) Siste Vercel‑build‑logg */
   let buildLog = 'Ingen forrige deploy.';
