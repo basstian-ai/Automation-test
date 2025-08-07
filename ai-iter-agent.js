@@ -134,14 +134,14 @@ Oppgave:
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
   await git.add('.');
   await git.commit(payload.commitMessage);
-  const repoSlug = process.env.GITHUB_REPOSITORY;   // settes automatisk av Actions
+  const repoSlug = process.env.TARGET_REPO || process.env.GITHUB_REPOSITORY;
   
   await git.remote([
-    'set-url',
-    'origin',
-    `https://x-access-token:${process.env.GITHUB_TOKEN}@github.com/${repoSlug}.git`
-  ]);
-  await git.push('origin', 'main');
+  'set-url',
+  'origin',
+  `https://${process.env.PAT_TOKEN}@github.com/${repoSlug}.git`
+]);
+  await git.push('origin', process.env.TARGET_BRANCH || 'main');
 
   /* 8) Ferdig – GitHub-pushen ovenfor trigger Vercel automatisk */
   console.log('✅ Ny iterasjon pushet – Vercel bygger nå via Git-integrasjonen');
