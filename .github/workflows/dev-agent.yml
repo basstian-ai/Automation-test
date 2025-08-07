@@ -1,30 +1,30 @@
+# .github/workflows/dev-agent.yml
 name: AI Dev Agent
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]         # trigges manuelt eller når du pusher nye prompts
+  workflow_dispatch:         # gir “Run workflow”-knapp i UI
 
 jobs:
-  run-agent:
+  iter:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write          # <- gjør GITHUB_TOKEN skrivbar
+    env:
+      TARGET_REPO: basstian-ai/simple-pim-1754492683911   # <- viktig
+      TARGET_BRANCH: main                                 # evt «prod» e.l.
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
+      VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
+      PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: ⚙️ Setup Node
-        uses: actions/setup-node@v3
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: 📦 Install deps
-        run: npm install
+      - run: npm ci          # install av ai-skriptets deps
 
-      - name: 🚀 Run agent
-        run: node ai-iter-agent.js
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN:   ${{ secrets.GITHUB_TOKEN }}
-          VERCEL_TOKEN:   ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-          VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
+      - run: node ai-iter-agent.js
