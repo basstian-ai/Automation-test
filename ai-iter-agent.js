@@ -140,15 +140,17 @@ Returnér KUN gyldig JSON:
   try {
     if (lastDeployId) {
     // rask redeploy av forrige build
-    ({ data: deploy } = await vercel.post(
-        `/v13/deployments/${lastDeployId}/redeploy`
-    ));
+   ({ data: deploy } = await vercel.post(
+     `/v13/deployments/${lastDeployId}/redeploy`,
+     { name: VERCEL_PROJECT }   // må med!
+   ));
   } else {
     // første gang: bruk prosjekt-IDen (prj_xxx) i stedet for bare navn
-    ({ data: deploy } = await vercel.post('/v13/deployments', {
-       projectId: VERCEL_PROJECT   // sett VERCEL_PROJECT=prj_abc123 i secrets
-    }));
-  }
+ ({ data: deploy } = await vercel.post('/v13/deployments', {
+    projectId: VERCEL_PROJECT, // prj_xxx…
+    name:      VERCEL_PROJECT  // samme verdi er OK
+ }));
+    }
 } catch (err) {
   console.error('❌ Vercel-deploy feilet:', err.response?.data || err.message);
   process.exit(1);
