@@ -84,10 +84,19 @@ async function safeCompletion(opts, retries = 3) {
   const repoFilesArr = await readFileTree('.', 50);
   const repoFiles    = Object.fromEntries(repoFilesArr.map(f => [f.path, f.content]));
 
-  /* 2) Forrige deploy‑ID (om finnes) */
+  /* 2) Finn siste Vercel-deploy (hvis finnes) */
   let lastDeployId = null;
-  if (fs.existsSync('state.json')) {
-    ({ lastDeployId } = JSON.parse(fs.readFileSync('state.json', 'utf8')));
+  try {
+    const { data } = await vercel.get('/v13/deployments', {
+      params: {
+        projectId: VERCEL_PROJECT,  // prj_xxx eller slug
+        limit: 1,
+        order: 'desc'
+      }
+    });
+    lastDeployId = data.deployments?.[0]?.id ?? null;
+  } catch (err) {
+    console.warn('⚠️  Kunne ikke hente siste deploy-id:', err.response?.data || err.message);
   }
 
   /* 3) Siste Vercel‑build‑logg */
