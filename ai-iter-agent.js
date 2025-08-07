@@ -63,29 +63,30 @@ async function fetchLatestDeployId() {
   }
 }
 
-/** Hent build-logg for et deployment-uid via Vercel v6 */
+/** Hent build-logg for et deployment-uid via /v2 */
 async function fetchBuildLog(deployId) {
   if (!deployId) return 'Ingen forrige deploy.';
 
   try {
-    const { data } = await vercel.get(`/v6/deployments/${deployId}/events`, {
+    const { data } = await vercel.get(`/v2/deployments/${deployId}/events`, {
       params: {
-        limit: 500           // v6 tillater maks 500
-        // ingen "direction"
+        limit     : 2000,       // høyere grense
+        direction : 'backwards' // start bakerst (nyest) → minst trafikk
       }
     });
 
     return data
       .filter(e => e.payload?.text)
-      .map(e => e.payload.text)
+      .map(e  => e.payload.text)
       .join('\n')
-      .slice(-8_000);        // behold de siste 8 k tegn
+      .slice(-8_000);          // klipp til maks 8 k tegn
   } catch (err) {
     console.warn('⚠️  Kunne ikke hente build-logg:',
                  err.response?.data || err.message);
     return 'Ingen forrige deploy.';
   }
 }
+
 
 
 /** Rate-limit-safe ChatGPT-kall */
