@@ -1,107 +1,111 @@
 // ai-iter-agent.js  -----------------------------------------------
+import dotenv from 'dotenv';
+dotenv.config();
+
 import OpenAI from 'openai';
+import { readFileTree } from './readFileTree.js';
 import simpleGit from 'simple-git';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import dotenv from 'dotenv';
-dotenv.config();
+import { encode } from 'gpt-3-encoder';   // token-sjekk
 
 // ───────────────────────── ENV ─────────────────────────
 const {
   OPENAI_API_KEY,
-  PERSONAL_ACCESS_TOKEN,
   GH_USERNAME,
   VERCEL_TOKEN,
   VERCEL_TEAM_ID,
-  VERCEL_PROJECT,        // f.eks. "simple-pim-123..."
+  VERCEL_PROJECT          // f.eks. "simple-pim-123..."
 } = process.env;
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-const git = simpleGit();
+const git    = simpleGit();
 
 // ───────────────────────── HELPERS ─────────────────────────
-const readAllFiles = (dir, base = '') => {
-  let map = {};
-  for (const entry of fs.readdirSync(dir)) {
-    const p = path.join(dir, entry);
-    const rel = path.join(base, entry);
-    if (fs.statSync(p).isDirectory()) {
-      map = { ...map, ...readAllFiles(p, rel) };
-    } else {
-      map[rel] = fs.readFileSync(p, 'utf8');
-    }
-  }
-  return map;
-};
-
-const writeFiles = (fileMap) => {
+/** Skriv filer ned på disk fra et "fil → innhold"-objekt */
+function writeFiles(fileMap) {
   for (const [file, content] of Object.entries(fileMap)) {
     const full = path.join(process.cwd(), file);
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, content);
   }
-};
+}
 
+/** Minimal axios-klient mot Vercel v13 */
 const vercel = axios.create({
   baseURL: 'https://api.vercel.com',
   headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
-  params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {},
+  params:  VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
 });
+
+/** Retry‐hjelper som håndterer 429 / rate limits */
+async function safeCompletion(opts, retries = 3) {
+  try {
+    return await openai.chat.completions.create(opts);
+  } catch (err) {
+    if (retries && err.code === 'rate_limit_exceeded') {
+      const wait = 15_000;
+      console.warn(`⏳ Rate-limit – venter ${wait / 1000}s …`);
+      await new Promise(r => setTimeout(r, wait));
+      return safeCompletion(opts, retries - 1);
+    }
+    throw err;
+  }
+}
 
 // ───────────────────────── MAIN LOOP ─────────────────────────
 (async () => {
-  // 1) repo snapshot
-  const repoFiles = readAllFiles(process.cwd());
-  const codeBlob = JSON.stringify(repoFiles);
+  /* 1) Repo-snapshot (maks 50 filer) */
+  const repoFilesArr = await readFileTree('.', 50);
+  const repoFiles    = Object.fromEntries(repoFilesArr.map(f => [f.path, f.content]));
 
-  // 2) hent forrige deploy-ID
+  /* 2) Forrige deploy-ID (om finnes) */
   let lastDeployId = null;
   if (fs.existsSync('state.json')) {
-    lastDeployId = JSON.parse(fs.readFileSync('state.json', 'utf8')).lastDeployId;
+    ({ lastDeployId } = JSON.parse(fs.readFileSync('state.json', 'utf8')));
   }
 
-  // 3) hent build-logg (hvis forrige deploy finnes)
+  /* 3) Siste Vercel-build-logg */
   let buildLog = 'Ingen forrige deploy.';
   if (lastDeployId) {
-    const { data } = await vercel.get(`/v13/deployments/${lastDeployId}/events`, {
-      params: { limit: 200 },
-    });
+    const { data } = await vercel.get(`/v13/deployments/${lastDeployId}/events`, { params: { limit: 200 } });
     buildLog = data
-      .filter((e) => e.payload?.text)
-      .map((e) => e.payload.text)
+      .filter(e => e.payload?.text)
+      .map(e   => e.payload.text)
       .join('\n')
-      .slice(-8000); // kutt til maks 8k tegn
+      .slice(-8_000); // max 8 k tegn
   }
 
-  // 4) bygg prompt
+  /* 4) Prompt → OpenAI */
   const systemPrompt = `
-Du er en autonom udvikler for et Next.js PIM-prosjekt. 
-Du får:
-- "files": hele kodebasen som JSON (fil -> innhold)
-- "buildLog": den siste Vercel-build-loggen
+Du er en autonom utvikler for et Next.js PIM-prosjekt. Du skal kjøre små, inkrementelle forbedringer og alltid sørge for at løsningen bygger på Vercel.
 
-Oppgave:
-1. Hvis buildLog inneholder en feil, identifiser årsak og fiks.
-2. Hvis buildLog er OK, implementer neste viktige, små forbedring/feature.
-3. Returnér KUN gyldig JSON:
+Returnér KUN gyldig JSON:
 {
-  "files": { "<filsti>": "<nyttInnhold>", ... },
+  "files":        { "<filsti>": "<nyttInnhold>", ... },
   "commitMessage": "Kort beskrivelse"
-}`;
+}
+`.trim();
 
   const userPrompt = JSON.stringify({ files: repoFiles, buildLog });
 
-  const aiRes = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',          // evt. gpt-4o eller gpt-4o-128k
+  if (encode(userPrompt).length > 150_000) {
+    console.error('❌ Prompt for stor – reduser antall filer i readFileTree.');
+    process.exit(1);
+  }
+
+  const aiRes  = await safeCompletion({
+    model: 'gpt-4o-mini',
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
+      { role: 'user',   content: userPrompt }
     ],
     temperature: 0.2,
-    response_format: { type: 'json_object' },
+    response_format: { type: 'json_object' }
   });
 
+  /* 5) Parse & valider */
   let payload;
   try {
     payload = JSON.parse(aiRes.choices[0].message.content);
@@ -115,24 +119,21 @@ Oppgave:
     process.exit(1);
   }
 
-  // 5) skriv filer
+  /* 6) Skriv nye/endrede filer */
   writeFiles(payload.files);
 
-  // 6) commit & push
-  await git.addConfig('user.name', 'AI Dev Agent');
+  /* 7) Commit & push */
+  await git.addConfig('user.name',  'AI Dev Agent');
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
   await git.add(Object.keys(payload.files));
   await git.commit(payload.commitMessage);
   await git.push();
 
-  // 7) trigger ny deploy (via Vercel API)
-  const { data: deploy } = await vercel.post('/v13/deployments', {
-    name: VERCEL_PROJECT,
-    gitSource: { type: 'github', repoId: `${GH_USERNAME}/${VERCEL_PROJECT}`, ref: 'main' },
-  });
+  /* 8) Trigger ny deploy */
+  const { data: deploy } = await vercel.post('/v13/deployments', { name: VERCEL_PROJECT });
 
-  // 8) lagre state
+  /* 9) Lagre state */
   fs.writeFileSync('state.json', JSON.stringify({ lastDeployId: deploy.id }, null, 2));
 
-  console.log('✅ Ny iterasjon pushet og deploy trigget:', deploy.url);
+  console.log('✅ Ny iterasjon pushet – deploy trigget:', deploy.url);
 })();
