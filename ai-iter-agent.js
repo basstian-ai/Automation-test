@@ -8,7 +8,6 @@ import simpleGit from 'simple-git';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { encode } from 'gpt-3-encoder';
 
 // ─────────────── ENV ───────────────
 const {
@@ -53,67 +52,35 @@ async function fetchBuildLog(deployId) {
     return 'Ingen forrige deploy.';
   }
 
-  // Try multiple API versions, starting with the most recent
-  const versions = ['v13', 'v3', 'v2']; // Adjust based on Vercel API docs
+  try {
+    const { data } = await vercel.get(`/v3/deployments/${deployId}/events`);
 
-  for (const version of versions) {
-    try {
-      const response = await vercel.get(
-        `/${version}/deployments/${deployId}/events`,
-        {
-          params: { limit: 100 }, // Reduced limit to avoid rate-limiting
-          headers: {
-            Authorization: `Bearer ${VERCEL_TOKEN}`, // Use VERCEL_TOKEN directly
-          },
-        }
-      );
-
-      const data = response.data;
-
-      // Log response for debugging
-      console.log(`API response for version ${version}:`, JSON.stringify(data, null, 2));
-
-      // Check if data is empty or not an array
-      if (!Array.isArray(data) || data.length === 0) {
-        console.warn(`⚠️ No events found for deploy ${deployId} in version ${version}.`);
-        continue; // Try next version
-      }
-
-      // Filter and map events to extract logs
-      const logs = data
-        .filter((event) => event?.payload?.text)
-        .map((event) => event.payload.text)
-        .join('\n');
-
-      if (!logs) {
-        console.warn(`⚠️ No valid log content found for deploy ${deployId} in version ${version}.`);
-        continue; // Try next version
-      }
-
-      return logs.slice(-8000); // Return last 8,000 characters
-    } catch (err) {
-      const status = err.response?.status;
-      const message = err.response?.data?.message ?? err.message;
-
-      console.error(`Error fetching logs for version ${version}:`, { status, message });
-
-      // Handle specific errors
-      if (status === 404 || /invalid api version/i.test(message)) {
-        continue; // Try next version
-      } else if (status === 401 || status === 403) {
-        console.error('⚠️ Authentication error. Check VERCEL_TOKEN.');
-        return 'Autentiseringsfeil ved henting av build-logg.';
-      } else if (status === 429) {
-        console.error('⚠️ Rate limit exceeded. Try again later.');
-        return 'For mange forespørsler. Prøv igjen senere.';
-      } else {
-        throw err; // Rethrow unexpected errors
-      }
+    if (!Array.isArray(data) || !data.some((e) => e.payload?.text)) {
+      console.warn(`⚠️ No events found for deploy ${deployId}.`);
+      return 'Kunne ikke hente build-logg.';
     }
-  }
 
-  console.warn(`⚠️ Could not fetch build logs for deploy ${deployId} – all versions failed.`);
-  return 'Kunne ikke hente build-logg.';
+    const logs = data
+      .filter((event) => event?.payload?.text)
+      .map((event) => event.payload.text)
+      .join('\n');
+
+    return logs.slice(-8000); // Return last 8,000 characters
+  } catch (err) {
+    const status = err.response?.status;
+    const message = err.response?.data?.message ?? err.message;
+
+    console.error('Error fetching logs:', { status, message });
+
+    if (status === 401 || status === 403) {
+      console.error('⚠️ Authentication error. Check VERCEL_TOKEN.');
+      return 'Autentiseringsfeil ved henting av build-logg.';
+    } else if (status === 429) {
+      console.error('⚠️ Rate limit exceeded. Try again later.');
+      return 'For mange forespørsler. Prøv igjen senere.';
+    }
+    throw err;
+  }
 }
 
 /** Rate-limit-safe ChatGPT call */
@@ -121,7 +88,7 @@ async function safeCompletion(opts, retries = 3) {
   try {
     return await openai.chat.completions.create(opts);
   } catch (err) {
-    if (retries && err.code === 'rate_limit_exceeded') {
+    if (retries && err instanceof OpenAI.errors.RateLimitError) {
       await new Promise((r) => setTimeout(r, 15_000));
       return safeCompletion(opts, retries - 1);
     }
@@ -132,14 +99,10 @@ async function safeCompletion(opts, retries = 3) {
 /** Fetch the latest deployment ID */
 async function fetchLatestDeployId() {
   try {
-    const response = await vercel.get('/v13/now/deployments', {
-      params: {
-        projectId: VERCEL_PROJECT,
-        limit: 1,
-      },
+    const { data } = await vercel.get('/v6/deployments', {
+      params: { projectId: VERCEL_PROJECT, limit: 1 },
     });
-    const deployments = response.data.deployments;
-    return deployments.length > 0 ? deployments[0].uid : null;
+    return data?.deployments?.[0]?.uid ?? null;
   } catch (err) {
     console.error('Error fetching latest deploy ID:', err.message);
     return null;
@@ -174,7 +137,7 @@ Returnér KUN gyldig JSON:
 
   const userPrompt = JSON.stringify({ files: repoFiles, buildLog });
 
-  if (encode(userPrompt).length > 150_000) {
+  if (userPrompt.length / 3.5 > 150_000) {
     console.error('❌ Prompt too large – reduce number of files in readFileTree.');
     process.exit(1);
   }
@@ -219,7 +182,7 @@ Returnér KUN gyldig JSON:
   }
   await git.addConfig('user.name', 'AI Dev Agent');
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
-  await git.add(Object.keys(payload.files));
+  await git.add('-A');
   await git.commit(payload.commitMessage);
 
   const repoSlug = TARGET_REPO || process.env.GITHUB_REPOSITORY;
