@@ -22,7 +22,7 @@
     "axios": "^1.11.0",
     "dotenv": "^17.2.1",
     "openai": "^4.104.0",
-    "simple-git": "^3.28.0"
+    "simple-git": "^3.28.0",
     "gpt-3-encoder": "^1.1.4"
   }
 }
