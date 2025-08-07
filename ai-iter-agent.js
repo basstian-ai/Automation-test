@@ -70,23 +70,22 @@ async function fetchBuildLog(deployId) {
   try {
     const { data } = await vercel.get(`/v2/deployments/${deployId}/events`, {
       params: {
-        limit     : 2000,       // høyere grense
-        direction : 'backwards' // start bakerst (nyest) → minst trafikk
+        limit: 2000           // nok til å fange hele loggen
+        // direction fjernet – API støtter det ikke
       }
     });
 
     return data
-      .filter(e => e.payload?.text)
+      .filter(e => e.payload?.text)  // kun linjer med tekst
       .map(e  => e.payload.text)
       .join('\n')
-      .slice(-8_000);          // klipp til maks 8 k tegn
+      .slice(-8_000);                // maks 8 kB til prompten
   } catch (err) {
     console.warn('⚠️  Kunne ikke hente build-logg:',
                  err.response?.data || err.message);
     return 'Ingen forrige deploy.';
   }
 }
-
 
 
 /** Rate-limit-safe ChatGPT-kall */
