@@ -135,30 +135,34 @@ Returnér KUN gyldig JSON:
   ]);
   await git.push();
 
-  /* 8) Trigger ny deploy */
+  
+  await git.remote([
+    'set-url',
+    'origin',
+    `https://x-access-token:${process.env.GITHUB_TOKEN}@github.com/${repoSlug}.git`
+  ]);
+  await git.push();
+
+ /* 8) Trigger deploy -------------------------------------------------- */
   let deploy;
   try {
     if (lastDeployId) {
-    // rask redeploy av forrige build
-   ({ data: deploy } = await vercel.post(
-     `/v13/deployments/${lastDeployId}/redeploy`,
-     { name: VERCEL_PROJECT }   // må med!
-   ));
-  } else {
-    // første gang: bruk prosjekt-IDen (prj_xxx) i stedet for bare navn
- ({ data: deploy } = await vercel.post('/v13/deployments', {
-    projectId: VERCEL_PROJECT, // prj_xxx…
-    name:      VERCEL_PROJECT,  // samme verdi er OK
-    files:     []                // <- må være et array, tomt er OK
- }));
+      // 🚀  redeploy previous build
+      ({ data: deploy } = await vercel.post(
+        `/v13/deployments/${lastDeployId}/redeploy`,
+        { target: 'production' }               // body can be empty; target just to be clear
+      ));
+    } else {
+      // 🆕  first (or regular) deploy
+      ({ data: deploy } = await vercel.post('/v13/deployments', {
+        name:   VERCEL_PROJECT,  // project slug
+        files:  [],              // required by schema
+        target: 'production'
+      }));
     }
-} catch (err) {
-  console.error('❌ Vercel-deploy feilet:', err.response?.data || err.message);
-  process.exit(1);
-}
-
-  /* 9) Lagre state */
-  fs.writeFileSync('state.json', JSON.stringify({ lastDeployId: deploy.id }, null, 2));
-
+  } catch (err) {
+    console.error('❌ Vercel-deploy feilet:', err.response?.data || err.message);
+    process.exit(1);
+  }
   console.log('✅ Ny iterasjon pushet – deploy trigget:', deploy.url);
 })();
