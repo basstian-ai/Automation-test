@@ -15,12 +15,12 @@ const {
   OPENAI_API_KEY,
   VERCEL_TOKEN,
   VERCEL_TEAM_ID,
-  VERCEL_PROJECT,          
+  VERCEL_PROJECT,
   GH_USERNAME = ''
 } = process.env;
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-const git    = simpleGit();
+const git = simpleGit();
 
 // ───────────────────────── HELPERS ─────────────────────────
 /** Skriv filer ned på disk fra et "fil → innhold"-objekt */
@@ -36,7 +36,7 @@ function writeFiles(fileMap) {
 const vercel = axios.create({
   baseURL: 'https://api.vercel.com',
   headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
-  params:  VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
+  params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
 });
 
 /** Retry‐hjelper som håndterer 429 / rate limits */
@@ -58,7 +58,7 @@ async function safeCompletion(opts, retries = 3) {
 (async () => {
   /* 1) Repo-snapshot (maks 50 filer) */
   const repoFilesArr = await readFileTree('.', 50);
-  const repoFiles    = Object.fromEntries(repoFilesArr.map(f => [f.path, f.content]));
+  const repoFiles = Object.fromEntries(repoFilesArr.map(f => [f.path, f.content]));
 
   /* 2) Forrige deploy-ID (om finnes) */
   let lastDeployId = null;
@@ -72,7 +72,7 @@ async function safeCompletion(opts, retries = 3) {
     const { data } = await vercel.get(`/v13/deployments/${lastDeployId}/events`, { params: { limit: 200 } });
     buildLog = data
       .filter(e => e.payload?.text)
-      .map(e   => e.payload.text)
+      .map(e => e.payload.text)
       .join('\n')
       .slice(-8_000); // max 8 k tegn
   }
@@ -95,11 +95,11 @@ Returnér KUN gyldig JSON:
     process.exit(1);
   }
 
-  const aiRes  = await safeCompletion({
+  const aiRes = await safeCompletion({
     model: 'gpt-4o-mini',
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user',   content: userPrompt }
+      { role: 'user', content: userPrompt }
     ],
     temperature: 0.2,
     response_format: { type: 'json_object' }
@@ -123,25 +123,24 @@ Returnér KUN gyldig JSON:
   writeFiles(payload.files);
 
   /* 7) Commit & push */
-  await git.addConfig('user.name',  'AI Dev Agent');
+  await git.addConfig('user.name', 'AI Dev Agent');
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
   await git.add(Object.keys(payload.files));
   await git.commit(payload.commitMessage);
-const repoSlug = process.env.GITHUB_REPOSITORY || `${GH_USERNAME}/Automation-test`;
+  const repoSlug = process.env.GITHUB_REPOSITORY || `${GH_USERNAME}/Automation-test`;
 
-await git.remote([
-  'set-url',
-  'origin',
-  `https://x-access-token:${process.env.GITHUB_TOKEN}@github.com/${repoSlug}.git`
-]);  
-await git.push();
+  await git.remote([
+    'set-url',
+    'origin',
+    `https://x-access-token:${process.env.GITHUB_TOKEN}@github.com/${repoSlug}.git`
+  ]);
+  await git.push();
 
   /* 8) Trigger ny deploy */
   const { data: deploy } = await vercel.post('/v13/deployments', { name: VERCEL_PROJECT });
 
   /* 9) Lagre state */
   fs.writeFileSync('state.json', JSON.stringify({ lastDeployId: deploy.id }, null, 2));
-
 
   console.log('✅ Ny iterasjon pushet – deploy trigget:', deploy.url);
 })();
