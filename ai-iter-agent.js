@@ -63,38 +63,37 @@ async function fetchLatestDeployId() {
   }
 }
 
-/** Hent build-logg for et deployment-uid.
- *  Prøv /v13 først, fallback til /v6 om vi får “bad_request → invalid API version”.
- */
+/** Hent build-logg for et deployment-uid. */
 async function fetchBuildLog(deployId) {
   if (!deployId) return 'Ingen forrige deploy.';
 
-  // Nyeste, anbefalt endepunkt
-  const paths = [
-    `/v13/deployments/${deployId}/events`,
-    `/v6/deployments/${deployId}/events`    // fallback
-  ];
+  const versions = ['v3'];              // kjør v3 først …
+  // Hvis du MÅ ha fallback:
+  // const versions = ['v3', 'v2', 'v1'];
 
-  for (const p of paths) {
+  for (const v of versions) {
     try {
-      const { data } = await vercel.get(p, { params: { limit: 2000 } });
+      const { data } = await vercel.get(
+        `/${v}/deployments/${deployId}/events`,
+        { params: { limit: 2000 } }
+      );
 
       return data
         .filter(e => e.payload?.text)
-        .map(   e => e.payload.text)
+        .map(e => e.payload.text)
         .join('\n')
         .slice(-8_000);
     } catch (err) {
-      // Hvis det ikke var “invalid API version”, kast videre
-      const code = err.response?.data?.code;
-      if (code !== 'bad_request' && code !== 'invalid_query_param') throw err;
-      // Ellers prøver vi neste sti i lista
+      const msg = err.response?.data?.message ?? '';
+      if (!/invalid api version/i.test(msg)) throw err;  // andre feil → ut
+      // ellers: prøv neste versjon i lista
     }
   }
 
-  console.warn('⚠️  Kunne ikke hente build-logg fra v13 eller v6 – gir opp.');
+  console.warn('⚠️  Kunne ikke hente build-logg – gir opp.');
   return 'Ingen forrige deploy.';
 }
+
 
 
 
