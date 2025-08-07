@@ -137,7 +137,23 @@ Returnér KUN gyldig JSON:
   await git.push();
 
   /* 8) Trigger ny deploy */
-  const { data: deploy } = await vercel.post('/v13/deployments', { name: VERCEL_PROJECT });
+  let deploy;
+  try {
+    if (lastDeployId) {
+    // rask redeploy av forrige build
+    ({ data: deploy } = await vercel.post(
+        `/v13/deployments/${lastDeployId}/redeploy`
+    ));
+  } else {
+    // første gang: bruk prosjekt-IDen (prj_xxx) i stedet for bare navn
+    ({ data: deploy } = await vercel.post('/v13/deployments', {
+       projectId: VERCEL_PROJECT   // sett VERCEL_PROJECT=prj_abc123 i secrets
+    }));
+  }
+} catch (err) {
+  console.error('❌ Vercel-deploy feilet:', err.response?.data || err.message);
+  process.exit(1);
+}
 
   /* 9) Lagre state */
   fs.writeFileSync('state.json', JSON.stringify({ lastDeployId: deploy.id }, null, 2));
