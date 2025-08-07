@@ -1,4 +1,4 @@
-// ai-iter-agent.js  ---------------------------------------------------------
+// ai-iter-agent.js
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -15,7 +15,7 @@ const {
   // ❶ Git / repo
   PAT_TOKEN,
   GITHUB_TOKEN,
-  TARGET_REPO,          // f.eks. "org/navn"
+  TARGET_REPO,          // e.g., "org/navn"
   TARGET_BRANCH = 'main',
 
   // ❷ OpenAI
@@ -27,17 +27,17 @@ const {
   VERCEL_PROJECT,       // prj_xxx…
 } = process.env;
 
-const git   = simpleGit();
+const git = simpleGit();
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-// ─────────────── Vercel-klient ───────────────
+// ─────────────── Vercel Client ───────────────
 const vercel = axios.create({
-  baseURL : 'https://api.vercel.com',
-  headers : { Authorization: `Bearer ${VERCEL_TOKEN}` },
-  params  : VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {},
+  baseURL: 'https://api.vercel.com',
+  headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
+  params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {},
 });
 
-// ─────────────── Hjelpere ───────────────
+// ─────────────── Helpers ───────────────
 function writeFiles(fileMap) {
   for (const [file, content] of Object.entries(fileMap)) {
     const full = path.join(process.cwd(), file);
@@ -63,7 +63,7 @@ async function fetchBuildLog(deployId) {
         {
           params: { limit: 100 }, // Reduced limit to avoid rate-limiting
           headers: {
-            Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}`, // Ensure token is set
+            Authorization: `Bearer ${VERCEL_TOKEN}`, // Use VERCEL_TOKEN directly
           },
         }
       );
@@ -81,7 +81,7 @@ async function fetchBuildLog(deployId) {
 
       // Filter and map events to extract logs
       const logs = data
-        .filter((event) => event?.payload?.text) // Ensure payload.text exists
+        .filter((event) => event?.payload?.text)
         .map((event) => event.payload.text)
         .join('\n');
 
@@ -101,7 +101,7 @@ async function fetchBuildLog(deployId) {
       if (status === 404 || /invalid api version/i.test(message)) {
         continue; // Try next version
       } else if (status === 401 || status === 403) {
-        console.error('⚠️ Authentication error. Check VERCEL_API_TOKEN.');
+        console.error('⚠️ Authentication error. Check VERCEL_TOKEN.');
         return 'Autentiseringsfeil ved henting av build-logg.';
       } else if (status === 429) {
         console.error('⚠️ Rate limit exceeded. Try again later.');
@@ -116,71 +116,50 @@ async function fetchBuildLog(deployId) {
   return 'Kunne ikke hente build-logg.';
 }
 
-/** Hent build-logg for et deployment-uid. */
-async function fetchBuildLog(deployId) {
-  if (!deployId) return 'Ingen forrige deploy.';
-
-  const versions = ['v3'];              // kjør v3 først …
-  // Hvis du MÅ ha fallback:
-  // const versions = ['v3', 'v2', 'v1'];
-
-  for (const v of versions) {
-    try {
-      const { data } = await vercel.get(
-        `/${v}/deployments/${deployId}/events`,
-        { params: { limit: 2000 } }
-      );
-
-      return data
-        .filter(e => e.payload?.text)
-        .map(e => e.payload.text)
-        .join('\n')
-        .slice(-8_000);
-    } catch (err) {
-      const msg = err.response?.data?.message ?? '';
-      if (!/invalid api version/i.test(msg)) throw err;  // andre feil → ut
-      // ellers: prøv neste versjon i lista
-    }
-  }
-
-  console.warn('⚠️  Kunne ikke hente build-logg – gir opp.');
-  return 'Ingen forrige deploy.';
-}
-
-
-
-
-
-
-
-/** Rate-limit-safe ChatGPT-kall */
+/** Rate-limit-safe ChatGPT call */
 async function safeCompletion(opts, retries = 3) {
   try {
     return await openai.chat.completions.create(opts);
   } catch (err) {
     if (retries && err.code === 'rate_limit_exceeded') {
-      await new Promise(r => setTimeout(r, 15_000));
+      await new Promise((r) => setTimeout(r, 15_000));
       return safeCompletion(opts, retries - 1);
     }
     throw err;
   }
 }
 
+/** Fetch the latest deployment ID */
+async function fetchLatestDeployId() {
+  try {
+    const response = await vercel.get('/v13/now/deployments', {
+      params: {
+        projectId: VERCEL_PROJECT,
+        limit: 1,
+      },
+    });
+    const deployments = response.data.deployments;
+    return deployments.length > 0 ? deployments[0].uid : null;
+  } catch (err) {
+    console.error('Error fetching latest deploy ID:', err.message);
+    return null;
+  }
+}
+
 // ─────────────── MAIN ───────────────
 (async () => {
-  /* 1) Snapshot av repoet (maks 50 filer) */
+  /* 1) Snapshot of the repo (max 50 files) */
   const repoFilesArr = await readFileTree('.', 50);
-  const repoFiles    = Object.fromEntries(repoFilesArr.map(f => [f.path, f.content]));
+  const repoFiles = Object.fromEntries(repoFilesArr.map((f) => [f.path, f.content]));
 
-  /* 2) Siste deploy-ID + build-logg */
+  /* 2) Latest deploy ID + build log */
   const lastDeployId = await fetchLatestDeployId();
-  const buildLog     = await fetchBuildLog(lastDeployId);
+  const buildLog = await fetchBuildLog(lastDeployId);
 
   console.log('📝 lastDeployId:', lastDeployId);
-  console.log('🔍 buildLog-preview:', buildLog.slice(0, 400)); // første 400 tegn
+  console.log('🔍 buildLog-preview:', buildLog.slice(0, 400)); // First 400 characters
 
-
-  /* 3) Prompt til GPT-4o-mini */
+  /* 3) Prompt to GPT-4o-mini */
   const systemPrompt = `
 Du er en autonom utvikler for et Next.js PIM-prosjekt.
 Du skal:
@@ -196,57 +175,55 @@ Returnér KUN gyldig JSON:
   const userPrompt = JSON.stringify({ files: repoFiles, buildLog });
 
   if (encode(userPrompt).length > 150_000) {
-    console.error('❌ Prompt for stor – reduser antall filer i readFileTree.');
+    console.error('❌ Prompt too large – reduce number of files in readFileTree.');
     process.exit(1);
   }
 
-  const aiRes  = await safeCompletion({
+  const aiRes = await safeCompletion({
     model: 'gpt-4o-mini',
     temperature: 0.2,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user',   content: userPrompt  },
+      { role: 'user', content: userPrompt },
     ],
   });
 
-  /* 4) Parse & valider */
+  /* 4) Parse & validate */
   let payload;
   try {
     payload = JSON.parse(aiRes.choices[0].message.content);
   } catch (e) {
-    console.error('❌ Kunne ikke parse AI-responsen:', e);
+    console.error('❌ Could not parse AI response:', e);
     process.exit(1);
   }
   if (!payload.files || !payload.commitMessage) {
-    console.error('❌ AI-respons mangler "files" eller "commitMessage"');
+    console.error('❌ AI response missing "files" or "commitMessage"');
     process.exit(1);
   }
   console.log('🔎 AI-payload:', Object.keys(payload.files));
   if (Object.keys(payload.files).length === 0) {
-    console.log('🟡 AI foreslo ingen endringer – hopper over commit/push.');
+    console.log('🟡 AI suggested no changes – skipping commit/push.');
     process.exit(0);
   }
-  
-  /* 5) Skriv filer, commit & push */
-  writeFiles(payload.files);
-const status = await git.status();
-console.log('🗂️  Git-status før commit:', status);
 
-// hvis alt allerede er commit-et → hopp over push
-if (status.modified.length === 0 &&
-    status.created.length  === 0 &&
-    status.deleted.length  === 0) {
-  console.log('🟡 Ingen reelle endringer – hopper over commit/push.');
-  process.exit(0);
-}
-  await git.addConfig('user.name',  'AI Dev Agent');
+  /* 5) Write files, commit & push */
+  writeFiles(payload.files);
+  const status = await git.status();
+  console.log('🗂️ Git status before commit:', status);
+
+  // If nothing to commit, skip push
+  if (status.modified.length === 0 && status.created.length === 0 && status.deleted.length === 0) {
+    console.log('🟡 No changes – skipping commit/push.');
+    process.exit(0);
+  }
+  await git.addConfig('user.name', 'AI Dev Agent');
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
   await git.add(Object.keys(payload.files));
   await git.commit(payload.commitMessage);
 
-  const repoSlug  = TARGET_REPO || process.env.GITHUB_REPOSITORY;
-  const pushToken = PAT_TOKEN    || GITHUB_TOKEN;
+  const repoSlug = TARGET_REPO || process.env.GITHUB_REPOSITORY;
+  const pushToken = PAT_TOKEN || GITHUB_TOKEN;
 
   await git.remote([
     'set-url',
@@ -255,5 +232,5 @@ if (status.modified.length === 0 &&
   ]);
   await git.push('origin', TARGET_BRANCH);
 
-  console.log('✅ Ny iterasjon pushet – Vercel bygger nå via Git-integrasjonen');
+  console.log('✅ New iteration pushed – Vercel building now via Git integration');
 })();
