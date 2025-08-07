@@ -3,28 +3,48 @@ name: AI Dev Agent
 
 on:
   push:
-    branches: [main]         # trigges manuelt eller når du pusher nye prompts
-  workflow_dispatch:         # gir “Run workflow”-knapp i UI
+    branches: [main]          # når du pusher til Automation-test
+  workflow_dispatch:          # “Run workflow”-knapp i UI
 
 jobs:
   iter:
     runs-on: ubuntu-latest
-    env:
-      TARGET_REPO: basstian-ai/simple-pim-1754492683911   # <- viktig
-      TARGET_BRANCH: main                                 # evt «prod» e.l.
+
+    env:                      # felles miljø­variabler
+      TARGET_REPO:  basstian-ai/simple-pim-1754492683911   # <- mål-repo
+      TARGET_BRANCH: main
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
       VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
       VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
       PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
+
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      # 1) Hent **agent-koden** (dette repoet)
+      - name: Checkout agent repo
+        uses: actions/checkout@v4
         with:
-          node-version: 20
+          path: agent                     # legges i ./agent
 
-      - run: npm ci          # install av ai-skriptets deps
+      # 2) Hent **mål-repoet** som skal modifiseres
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          token:       ${{ env.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          path:        work               # legges i ./work
+          fetch-depth: 0                  # full historikk
+          persist-credentials: false      # vi setter egen remote i scriptet
 
-      - run: node ai-iter-agent.js
+      # 3) Installer agent-avhengigheter
+      - name: Install agent deps
+        working-directory: agent
+        run: npm ci                       # package.json ligger i agent-mappen
+
+      # 4) Kjør agenten **inni mål-repoet**
+      - name: Run AI iter-agent
+        working-directory: work           # ⇒ process.cwd() === ./work
+        env:
+          # arver alle env-varene definert over
+          NODE_PATH: ${{ github.workspace }}/agent  # sørger for at import ... virker
+        run: node ../agent/ai-iter-agent.js
