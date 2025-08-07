@@ -53,14 +53,18 @@ async function fetchBuildLog(deployId) {
   }
 
   try {
-    const { data } = await vercel.get(`/v3/deployments/${deployId}/events`);
+    const { data } = await vercel.get(`/v3/deployments/${deployId}/events`, {
+      params: { limit: 1000 },
+    });
 
-    if (!Array.isArray(data) || !data.some((e) => e.payload?.text)) {
+    const events = Array.isArray(data) ? data : data.events || [];
+
+    if (!events.some((e) => e.payload?.text)) {
       console.warn(`⚠️ No events found for deploy ${deployId}.`);
       return 'Kunne ikke hente build-logg.';
     }
 
-    const logs = data
+    const logs = events
       .filter((event) => event?.payload?.text)
       .map((event) => event.payload.text)
       .join('\n');
