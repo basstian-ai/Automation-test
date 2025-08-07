@@ -69,18 +69,19 @@ async function fetchBuildLog(deployId) {
   try {
     const { data } = await vercel.get(`/v3/deployments/${deployId}/events`, {
       params: {
-        builds : 1,   // få med bygg-stegene
-        limit  : 200, // eller -1 for hele loggen
-        direction: 'backward'
-      },
+        limit     : 2000,       // høyere grense
+        direction : 'backwards' // start bakerst (nyeste) → minst trafikk
+      }
     });
+
     return data
       .filter(e => e.payload?.text)
       .map(e => e.payload.text)
       .join('\n')
-      .slice(-8000);
+      .slice(-8_000); // klipp til maks 8 k tegn
   } catch (err) {
-    console.warn('⚠️  Kunne ikke hente build-logg:', err.response?.data || err.message);
+    console.warn('⚠️  Kunne ikke hente build-logg:',
+                 err.response?.data || err.message);
     return 'Ingen forrige deploy.';
   }
 }
@@ -119,7 +120,7 @@ Du er en autonom utvikler for et Next.js PIM-prosjekt.
 Du skal:
 1. Analysere buildLog for feil og rette dem, ELLER
 2. Implementere små, inkrementelle forbedringer når builden er grønn.
-
+Du skal alltid gjøre en fornuftig endring i koden
 Returnér KUN gyldig JSON:
 {
   "files": { "<filsti>": "<innhold>" },
