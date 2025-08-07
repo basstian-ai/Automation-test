@@ -165,7 +165,16 @@ Returnér KUN gyldig JSON:
   
   /* 5) Skriv filer, commit & push */
   writeFiles(payload.files);
+const status = await git.status();
+console.log('🗂️  Git-status før commit:', status);
 
+// hvis alt allerede er commit-et → hopp over push
+if (status.modified.length === 0 &&
+    status.created.length  === 0 &&
+    status.deleted.length  === 0) {
+  console.log('🟡 Ingen reelle endringer – hopper over commit/push.');
+  process.exit(0);
+}
   await git.addConfig('user.name',  'AI Dev Agent');
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
   await git.add(Object.keys(payload.files));
