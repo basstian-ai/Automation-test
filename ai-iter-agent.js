@@ -46,21 +46,74 @@ function writeFiles(fileMap) {
   }
 }
 
-/** Hent UID til siste deploy for prosjektet via /v6 */
-async function fetchLatestDeployId() {
-  if (!VERCEL_PROJECT) return null;
-  try {
-    const { data } = await vercel.get('/v6/deployments', {
-      params: {
-        projectId: VERCEL_PROJECT, // evt. projectName hvis du foretrekker
-        limit    : 1,
-      },
-    });
-    return data.deployments?.[0]?.uid ?? null;
-  } catch (err) {
-    console.warn('⚠️  Kunne ikke hente siste deploy-id:', err.response?.data || err.message);
-    return null;
+/** Fetch build logs for a deployment ID. */
+async function fetchBuildLog(deployId) {
+  if (!deployId) {
+    console.warn('⚠️ No deploy ID provided.');
+    return 'Ingen forrige deploy.';
   }
+
+  // Try multiple API versions, starting with the most recent
+  const versions = ['v13', 'v3', 'v2']; // Adjust based on Vercel API docs
+
+  for (const version of versions) {
+    try {
+      const response = await vercel.get(
+        `/${version}/deployments/${deployId}/events`,
+        {
+          params: { limit: 100 }, // Reduced limit to avoid rate-limiting
+          headers: {
+            Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}`, // Ensure token is set
+          },
+        }
+      );
+
+      const data = response.data;
+
+      // Log response for debugging
+      console.log(`API response for version ${version}:`, JSON.stringify(data, null, 2));
+
+      // Check if data is empty or not an array
+      if (!Array.isArray(data) || data.length === 0) {
+        console.warn(`⚠️ No events found for deploy ${deployId} in version ${version}.`);
+        continue; // Try next version
+      }
+
+      // Filter and map events to extract logs
+      const logs = data
+        .filter((event) => event?.payload?.text) // Ensure payload.text exists
+        .map((event) => event.payload.text)
+        .join('\n');
+
+      if (!logs) {
+        console.warn(`⚠️ No valid log content found for deploy ${deployId} in version ${version}.`);
+        continue; // Try next version
+      }
+
+      return logs.slice(-8000); // Return last 8,000 characters
+    } catch (err) {
+      const status = err.response?.status;
+      const message = err.response?.data?.message ?? err.message;
+
+      console.error(`Error fetching logs for version ${version}:`, { status, message });
+
+      // Handle specific errors
+      if (status === 404 || /invalid api version/i.test(message)) {
+        continue; // Try next version
+      } else if (status === 401 || status === 403) {
+        console.error('⚠️ Authentication error. Check VERCEL_API_TOKEN.');
+        return 'Autentiseringsfeil ved henting av build-logg.';
+      } else if (status === 429) {
+        console.error('⚠️ Rate limit exceeded. Try again later.');
+        return 'For mange forespørsler. Prøv igjen senere.';
+      } else {
+        throw err; // Rethrow unexpected errors
+      }
+    }
+  }
+
+  console.warn(`⚠️ Could not fetch build logs for deploy ${deployId} – all versions failed.`);
+  return 'Kunne ikke hente build-logg.';
 }
 
 /** Hent build-logg for et deployment-uid. */
