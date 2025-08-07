@@ -63,27 +63,39 @@ async function fetchLatestDeployId() {
   }
 }
 
-/** Hent build-logg for et deployment-uid via /v6 */
+/** Hent build-logg for et deployment-uid.
+ *  Prøv /v13 først, fallback til /v6 om vi får “bad_request → invalid API version”.
+ */
 async function fetchBuildLog(deployId) {
   if (!deployId) return 'Ingen forrige deploy.';
 
-  try {
-    const { data } = await vercel.get(`/v6/deployments/${deployId}/events`, {
-      params: { limit: 2000 }            // høyere grense – nyeste kommer sist
-      // NB: ikke direction/backwards her – gir 400
-    });
+  // Nyeste, anbefalt endepunkt
+  const paths = [
+    `/v13/deployments/${deployId}/events`,
+    `/v6/deployments/${deployId}/events`    // fallback
+  ];
 
-    return data
-      .filter(e => e.payload?.text)      // bare tekstlinjer
-      .map(   e => e.payload.text)
-      .join('\n')
-      .slice(-8_000);                    // maks 8 k tegn til LLM-prompten
-  } catch (err) {
-    console.warn('⚠️  Kunne ikke hente build-logg:',
-                 err.response?.data || err.message);
-    return 'Ingen forrige deploy.';
+  for (const p of paths) {
+    try {
+      const { data } = await vercel.get(p, { params: { limit: 2000 } });
+
+      return data
+        .filter(e => e.payload?.text)
+        .map(   e => e.payload.text)
+        .join('\n')
+        .slice(-8_000);
+    } catch (err) {
+      // Hvis det ikke var “invalid API version”, kast videre
+      const code = err.response?.data?.code;
+      if (code !== 'bad_request' && code !== 'invalid_query_param') throw err;
+      // Ellers prøver vi neste sti i lista
+    }
   }
+
+  console.warn('⚠️  Kunne ikke hente build-logg fra v13 eller v6 – gir opp.');
+  return 'Ingen forrige deploy.';
 }
+
 
 
 
