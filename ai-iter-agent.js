@@ -144,5 +144,5 @@ Oppgave:
   await git.push('origin', 'main');
 
   /* 8) Ferdig – GitHub-pushen ovenfor trigger Vercel automatisk */
-+  console.log('✅ Ny iterasjon pushet – Vercel bygger nå via Git-integrasjonen');
+  console.log('✅ Ny iterasjon pushet – Vercel bygger nå via Git-integrasjonen');
 })();
