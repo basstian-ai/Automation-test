@@ -1,6 +1,6 @@
 /**
  * ai-iter-agent.js
- * Autonomous Dev Flow for PIM System — with local build verification
+ * Autonomous Dev Flow for PIM System — merged Vercel + local build logs for fixes
  */
 
 import fs from 'fs';
@@ -9,7 +9,7 @@ import { execSync } from 'child_process';
 import OpenAI from 'openai';
 import fetch from 'node-fetch';
 
-const PIM_REPO_DIR = path.resolve('../target'); // matches your workflow
+const PIM_REPO_DIR = path.resolve('../target'); // matches workflow paths
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
@@ -21,9 +21,6 @@ if (!VERCEL_TOKEN || !VERCEL_TEAM_ID || !VERCEL_PROJECT) {
   process.exit(1);
 }
 
-// -----------------
-// Helpers
-// -----------------
 function run(cmd, cwd = PIM_REPO_DIR) {
   console.log(`\n$ ${cmd}`);
   return execSync(cmd, { cwd, stdio: 'pipe' }).toString().trim();
@@ -33,7 +30,7 @@ function safeRun(cmd, cwd = PIM_REPO_DIR) {
   try {
     return run(cmd, cwd);
   } catch (err) {
-    return err.stdout?.toString() || err.message || 'Unknown error';
+    return (err.stdout?.toString() || '') + '\n' + (err.stderr?.toString() || '');
   }
 }
 
@@ -43,9 +40,8 @@ async function fetchLatestBuildLog() {
     { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
   );
   const depData = await depRes.json();
-  if (!depData.deployments || depData.deployments.length === 0) {
-    throw new Error('No deployments found for project');
-  }
+  if (!depData.deployments?.length) throw new Error('No deployments found for project');
+
   const deployment = depData.deployments[0];
   const deployId = deployment.uid;
   const state = deployment.state;
@@ -55,26 +51,32 @@ async function fetchLatestBuildLog() {
     { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
   );
   const logData = await logRes.json();
-  const logs = JSON.stringify(logData, null, 2);
 
-  return { logs, state, deployId };
+  return { logs: JSON.stringify(logData, null, 2), state, deployId };
 }
 
-async function applyAIFix(buildLogs) {
+async function applyAIFix(mergedLogs) {
   const prompt = `
-You are an autonomous senior software engineer.
-You are working inside a Next.js 10 PIM (Product Information Management) application.
+You are an autonomous senior software engineer improving a Next.js 10 PIM (Product Information Management) application.
 
-The latest Vercel build has failed. The following build logs are provided:
+The latest build failed. Below are BOTH the Vercel build logs and the local build output for full context.
 
-${buildLogs}
+===== BEGIN VERCEL LOGS =====
+${mergedLogs.vercel}
+===== END VERCEL LOGS =====
+
+===== BEGIN LOCAL BUILD OUTPUT =====
+${mergedLogs.local}
+===== END LOCAL BUILD OUTPUT =====
 
 Instructions:
-- Identify the root cause of the failure.
-- Propose and implement the minimal code change(s) needed to fix the error.
-- Do not remove existing features unless required to fix the build.
-- Ensure 'npm run build' will succeed locally after your changes.
-- Provide only the updated file contents, each starting with: FILE_PATH: <path from repo root>
+- Identify the root cause(s) of failure.
+- Apply the minimal changes needed to fix the build.
+- Keep existing features unless removal is strictly required to fix the build.
+- Ensure 'npm run build' will succeed locally after changes.
+- Return updated file contents only, each starting with:
+  FILE_PATH: <path from repo root>
+<file contents>
 `;
 
   const resp = await openai.chat.completions.create({
@@ -83,25 +85,21 @@ Instructions:
     temperature: 0,
   });
 
-  await applyCodeDiff(resp.choices[0].message.content);
+  await applyCodeDiff(resp.choices[0].message.content, true);
 }
 
 async function developNextFeature() {
   const featurePrompt = `
-You are building a modern Product Information Management (PIM) system
-using Next.js 10 and best practices in software engineering.
-
-The application must always be deployable. When the build is green,
-you will add the next most valuable, production-ready feature that such a PIM should have.
+You are building a modern Product Information Management (PIM) system in Next.js 10.
+When the build is green, implement the next high-value, production-ready feature.
 
 Guidelines:
-- Implement features in small, working increments.
-- Prioritize: Product CRUD, Category management, Bulk import/export, Media asset handling,
-  User roles & permissions, API integration endpoints, Search/filtering/sorting, Dashboard with KPIs.
-- Use clean, maintainable, well-documented code.
-- Ensure 'npm run build' passes after your changes.
+- Build in small, deployable increments.
+- Priorities: Product CRUD, Category management, Bulk import/export, Media asset handling, User roles & permissions, API endpoints, Search/filtering/sorting, Dashboard with KPIs.
+- Follow clean, maintainable code practices.
+- Ensure 'npm run build' passes after changes.
 
-Return only updated/added files in the following format:
+Return updated files only:
 FILE_PATH: <path>
 <file contents>
 `;
@@ -112,10 +110,10 @@ FILE_PATH: <path>
     temperature: 0.7,
   });
 
-  await applyCodeDiff(resp.choices[0].message.content);
+  await applyCodeDiff(resp.choices[0].message.content, true);
 }
 
-async function applyCodeDiff(aiOutput) {
+async function applyCodeDiff(aiOutput, verifyAfter = false) {
   const fileRegex = /^FILE_PATH:\s*(.+)$/gm;
   let match;
   const files = [];
@@ -131,8 +129,8 @@ async function applyCodeDiff(aiOutput) {
     if (nextMatch) fileRegex.lastIndex = nextMatch.index;
   }
 
-  if (files.length === 0) {
-    console.error('No files found in AI output.');
+  if (!files.length) {
+    console.error('No FILE_PATH entries found in AI output.');
     console.log(aiOutput);
     return;
   }
@@ -144,18 +142,23 @@ async function applyCodeDiff(aiOutput) {
     console.log(`Updated: ${filePath}`);
   }
 
-  console.log('🛠 Running local npm install...');
+  console.log('🛠 Installing deps...');
   safeRun('npm install');
 
-  console.log('🧪 Verifying local build...');
-  const buildResult = safeRun('npm run build');
-
-  if (buildResult.toLowerCase().includes('error') || buildResult.toLowerCase().includes('failed')) {
-    console.error('❌ Local build failed. Not pushing changes.');
-    console.log(buildResult);
-    return;
+  if (verifyAfter) {
+    console.log('🧪 Verifying local build...');
+    const buildOutput = safeRun('npm run build');
+    if (/error/i.test(buildOutput) || /failed/i.test(buildOutput)) {
+      console.error('❌ Local build still failing — retrying AI fix...');
+      const { logs: vercelLogs } = await fetchLatestBuildLog();
+      await applyAIFix({ vercel: vercelLogs, local: buildOutput });
+      return;
+    }
+    pushChanges();
   }
+}
 
+function pushChanges() {
   run('git config user.email "ci-bot@example.com"');
   run('git config user.name "CI Bot"');
   run('git add .');
@@ -163,18 +166,18 @@ async function applyCodeDiff(aiOutput) {
   run(`git push origin ${process.env.TARGET_BRANCH || 'main'}`);
 }
 
-// -----------------
-// Main loop
-// -----------------
 (async () => {
   console.log('🔄 Fetching latest Vercel build logs...');
-  const { logs, state } = await fetchLatestBuildLog();
+  const { logs: vercelLogs, state } = await fetchLatestBuildLog();
 
-  if (state !== 'READY') {
-    console.log('❌ Build failed — applying AI fix...');
-    await applyAIFix(logs);
+  console.log('🧪 Running local build check before decision...');
+  const localBuildOutput = safeRun('npm run build');
+
+  if (state !== 'READY' || /error/i.test(localBuildOutput) || /failed/i.test(localBuildOutput)) {
+    console.log('❌ Build failing — sending merged logs to AI...');
+    await applyAIFix({ vercel: vercelLogs, local: localBuildOutput });
   } else {
-    console.log('✅ Build passed — developing next PIM feature...');
+    console.log('✅ Build green — developing next PIM feature...');
     await developNextFeature();
   }
 })();
