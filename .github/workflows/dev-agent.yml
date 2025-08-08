@@ -1,46 +1,44 @@
-name: Dev Agent
+name: AI Iteration Agent
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # manual run
+  schedule:
+    - cron: "*/15 * * * *" # every 15 minutes
 
 jobs:
-  run-agent:
+  ai-iteration:
     runs-on: ubuntu-latest
-    env:
-      TARGET_REPO: basstian-ai/simple-pim-1754492683911
-      TARGET_BRANCH: main
     steps:
       - name: Checkout automation repo
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}
+          path: target
+          ref: ${{ env.TARGET_BRANCH }}
+
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install automation deps
-        run: npm ci || npm i
+        run: npm install
         working-directory: automation
 
-      - name: Clone target repo (clean)
-        run: |
-          rm -rf target
-          git clone https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ env.TARGET_REPO }} target
-          cd target
-          git checkout ${{ env.TARGET_BRANCH }}
-          git config user.name "AI Dev Agent"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Run AI Iteration Agent (INSIDE target)
-        working-directory: target
+      - name: Run AI Iteration Agent
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
-          VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
-          TARGET_REPO:     ${{ env.TARGET_REPO }}
-          TARGET_BRANCH:   ${{ env.TARGET_BRANCH }}
-          PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
+          TARGET_REPO: ${{ secrets.TARGET_REPO }}
+          TARGET_BRANCH: ${{ secrets.TARGET_BRANCH }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
+          cd target
           NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" \
           node ../automation/ai-iter-agent.cjs
