@@ -45,46 +45,84 @@ function writeFiles(fileMap) {
   }
 }
 
-/** Fetch build logs for a deployment ID using Vercel v13 events API. */
+/** Check deployment status */
+async function getDeploymentStatus(deployId) {
+  try {
+    const { data } = await vercel.get(`/v9/now/deployments/${deployId}`);
+    return data.readyState;
+  } catch (err) {
+    console.error('Error fetching deployment status:', err.message);
+    return null;
+  }
+}
+
+/** Fetch build logs for a deployment ID using Vercel API */
 async function fetchBuildLog(deployId) {
   if (!deployId) {
     console.warn('⚠️ No deploy ID provided.');
     return 'Ingen forrige deploy.';
   }
 
-  try {
-    const { data } = await vercel.get(`/v13/deployments/${deployId}/events`, {
-      params: { limit: 100 },
-    });
-
-    const events = Array.isArray(data) ? data : data.events || [];
-
-    if (!events.some((e) => e.payload?.text)) {
-      console.warn(`⚠️ No events found for deploy ${deployId}.`);
-      return 'Kunne ikke hente build-logg.';
-    }
-
-    const logs = events
-      .filter((event) => event?.payload?.text)
-      .map((event) => event.payload.text)
-      .join('\n');
-
-    return logs.slice(-8000); // Return last 8,000 characters
-  } catch (err) {
-    const status = err.response?.status;
-    const message = err.response?.data?.message ?? err.message;
-
-    console.error('Error fetching logs:', { status, message });
-
-    if (status === 401 || status === 403) {
-      console.error('⚠️ Authentication error. Check VERCEL_TOKEN.');
-      return 'Autentiseringsfeil ved henting av build-logg.';
-    } else if (status === 429) {
-      console.error('⚠️ Rate limit exceeded. Try again later.');
-      return 'For mange forespørsler. Prøv igjen senere.';
-    }
-    throw err;
+  const status = await getDeploymentStatus(deployId);
+  if (status && status !== 'READY' && status !== 'ERROR') {
+    console.warn(`⚠️ Deployment ${deployId} is in state ${status}. Logs may not be available.`);
+    return 'Build-logg ikke tilgjengelig ennå.';
   }
+
+  const versions = ['v9', 'v6', 'v2'];
+
+  for (const version of versions) {
+    try {
+      const response = await vercel.get(`/${version}/deployments/${deployId}/events`, {
+        params: { limit: 100 },
+      });
+
+      const data = response.data;
+      console.log(`API response for version ${version}:`, JSON.stringify(data, null, 2));
+
+      const events = Array.isArray(data) ? data : data.events || [];
+      if (events.length === 0) {
+        console.warn(`⚠️ No events found for deploy ${deployId} in version ${version}.`);
+        continue;
+      }
+
+      const logs = events
+        .filter((event) => event?.text)
+        .map((event) => `${event.type} at ${new Date(event.created).toLocaleTimeString()}: ${event.text}`)
+        .join('\n');
+
+      if (!logs) {
+        console.warn(`⚠️ No valid log content found for deploy ${deployId} in version ${version}.`);
+        continue;
+      }
+
+      return logs.slice(-8000);
+    } catch (err) {
+      const status = err.response?.status;
+      const message = err.response?.data?.message ?? err.message;
+
+      console.error(`Error fetching logs for version ${version}:`, { status, message });
+
+      if (status === 400 && /invalid api version/i.test(message)) {
+        continue;
+      } else if (status === 401 || status === 403) {
+        console.error('⚠️ Authentication error. Check VERCEL_TOKEN.');
+        return 'Autentiseringsfeil ved henting av build-logg.';
+      } else if (status === 429) {
+        console.error('⚠️ Rate limit exceeded. Retrying after delay...');
+        await new Promise((r) => setTimeout(r, 10000));
+        continue;
+      } else if (status === 404) {
+        console.error(`⚠️ Deployment ${deployId} not found or inaccessible.`);
+        return 'Ugyldig eller utilgjengelig deploy ID.';
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  console.warn(`⚠️ Could not fetch build logs for deploy ${deployId} – all versions failed.`);
+  return 'Kunne ikke hente build-logg.';
 }
 
 /** Rate-limit-safe ChatGPT call */
@@ -103,7 +141,7 @@ async function safeCompletion(opts, retries = 3) {
 /** Fetch the latest deployment ID */
 async function fetchLatestDeployId() {
   try {
-    const { data } = await vercel.get('/v6/deployments', {
+    const { data } = await vercel.get('/v9/now/deployments', {
       params: { projectId: VERCEL_PROJECT, limit: 1 },
     });
     return data?.deployments?.[0]?.uid ?? null;
