@@ -1,130 +1,132 @@
-import fs from 'fs';
-import { execSync } from 'child_process';
-import fetch from 'node-fetch';
-import OpenAI from 'openai';
+import fs from "fs";
+import path from "path";
+import { execSync } from "child_process";
+import fetch from "node-fetch";
+import OpenAI from "openai";
 
-const TARGET_REPO = process.env.TARGET_REPO;
-const TARGET_BRANCH = process.env.TARGET_BRANCH;
-const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
-const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
-const VERCEL_PROJECT = process.env.VERCEL_PROJECT;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const {
+  OPENAI_API_KEY,
+  VERCEL_TOKEN,
+  VERCEL_TEAM_ID,
+  VERCEL_PROJECT,
+  TARGET_BRANCH,
+  PAT_TOKEN
+} = process.env;
 
-const PIM_REPO_DIR = '../target'; // where the PIM repo is checked out
+if (!OPENAI_API_KEY || !VERCEL_TOKEN) {
+  console.error("❌ Missing required env vars.");
+  process.exit(1);
+}
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-// -------------------- Helpers --------------------
-function run(cmd, cwd = '.') {
+async function run(cmd, opts = {}) {
   console.log(`$ ${cmd}`);
-  return execSync(cmd, { cwd, encoding: 'utf8' });
+  return execSync(cmd, { stdio: "pipe", encoding: "utf-8", ...opts });
 }
 
-function truncateLog(log, maxLines = 400) {
-  if (!log) return '';
-  const lines = log.split('\n');
-  return lines.length > maxLines ? lines.slice(-maxLines).join('\n') : log;
-}
-
-// -------------------- Step 1: Pull latest code --------------------
-console.log('🔄 Pulling latest PIM repo code...');
-run(`git pull origin ${TARGET_BRANCH}`, PIM_REPO_DIR);
-
-// -------------------- Step 2: Get latest Vercel build logs --------------------
-async function getLatestVercelLogs() {
-  console.log('🔄 Fetching latest Vercel build logs...');
-
-  const deploymentsRes = await fetch(
+async function fetchVercelLogs() {
+  console.log("🔄 Fetching latest Vercel build logs...");
+  const depRes = await fetch(
     `https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT}&teamId=${VERCEL_TEAM_ID}&limit=1`,
     { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
   );
-  const deployments = await deploymentsRes.json();
-  if (!deployments.deployments || deployments.deployments.length === 0) {
-    console.error('❌ No deployments found.');
-    return '';
-  }
+  const depData = await depRes.json();
+  const latest = depData.deployments?.[0];
+  if (!latest) return { state: "NONE", logs: "" };
 
-  const latest = deployments.deployments[0];
-  const buildId = latest.uid;
-  console.log(`📦 Latest deployment: ${buildId}, state: ${latest.readyState}`);
-
-  const logsRes = await fetch(
-    `https://api.vercel.com/v1/deployments/${buildId}/events?teamId=${VERCEL_TEAM_ID}`,
+  const logRes = await fetch(
+    `https://api.vercel.com/v2/deployments/${latest.uid}/events?teamId=${VERCEL_TEAM_ID}`,
     { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
   );
-
-  const logsJson = await logsRes.json();
-  const logText = logsJson
-    .map(e => e.payload?.text || '')
-    .filter(Boolean)
-    .join('\n');
-
-  return truncateLog(logText);
+  const logData = await logRes.json();
+  const logs = logData.map(l => l.payload?.text || "").join("\n");
+  return { state: latest.state, logs };
 }
 
-// -------------------- Step 3: Local build to capture errors --------------------
-function getLocalBuildLogs() {
-  console.log('🧪 Running local build check before decision...');
-  try {
-    run('npm install', PIM_REPO_DIR);
-    run('npm run build', PIM_REPO_DIR);
-    console.log('✅ Local build succeeded.');
-    return null; // means build passed
-  } catch (err) {
-    console.log('❌ Local build failed.');
-    return truncateLog(err.stdout?.toString() || err.message || '');
-  }
-}
+async function getAIUpdate({ logs, buildOk }) {
+  const systemPrompt = `
+You are an autonomous developer maintaining a Product Information Management (PIM) system.
+Rules:
+- If buildOk=false: Find and fix the cause using the logs + current codebase.
+- If buildOk=true: Implement the next most valuable modern PIM feature following best practices.
+- Only commit working, deployable code.
+- PIM features can include: advanced search, product variants, bulk editing, category management, integrations, image handling, etc.
+- Keep changes minimal if fixing; be more ambitious if adding features.
+`;
 
-// -------------------- Step 4: Send to OpenAI --------------------
-async function applyAIFix(logs) {
-  console.log('🤖 Asking AI to fix or improve code...');
-  const prompt = `
-You are an autonomous senior full-stack developer working on a Next.js based PIM system.
-If logs indicate a build failure, fix the errors in the code.
-If logs indicate success, implement the next best-practice feature for a modern PIM system
-(such as advanced product search, bulk editing, improved data validation, etc.).
+  const files = listFilesRecursive(".");
+  const content = files
+    .map(f => `// FILE: ${f}\n${fs.readFileSync(f, "utf8")}`)
+    .join("\n\n");
 
-Constraints:
-- The repo is at ${PIM_REPO_DIR}.
-- Modify only necessary files to fix or add features.
-- Commit changes with a clear message.
+  const userPrompt = `
+Build status: ${buildOk ? "GREEN" : "RED"}
+Latest Vercel logs:\n${logs}
 
-Logs from Vercel:
-${logs.vercel}
-
-Logs from local build:
-${logs.local}
-  `;
+Current codebase:\n${content}
+`;
 
   const resp = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0
+    model: "gpt-4.1",
+    temperature: 0.2,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ]
   });
 
-  const aiResponse = resp.choices[0].message.content;
-  console.log('--- AI Response Start ---\n', aiResponse, '\n--- AI Response End ---');
-
-  fs.writeFileSync(`${PIM_REPO_DIR}/ai-fix-plan.txt`, aiResponse, 'utf8');
-
-  // You can extend this to parse and apply patches from AI response automatically.
+  return resp.choices[0].message.content;
 }
 
-// -------------------- Main Flow --------------------
-(async () => {
-  const vercelLogs = await getLatestVercelLogs();
-  const localLogs = getLocalBuildLogs();
+function listFilesRecursive(dir) {
+  let results = [];
+  fs.readdirSync(dir).forEach(file => {
+    if (["node_modules", ".next", ".git"].includes(file)) return;
+    const filePath = path.join(dir, file);
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      results = results.concat(listFilesRecursive(filePath));
+    } else {
+      results.push(filePath);
+    }
+  });
+  return results;
+}
 
-  await applyAIFix({ vercel: vercelLogs, local: localLogs });
+async function main() {
+  console.log("🔄 Pulling latest PIM repo code...");
+  run(`git pull origin ${TARGET_BRANCH}`);
 
-  // Commit & push changes if there are any
+  const { state, logs } = await fetchVercelLogs();
+  console.log(`📦 Latest deployment state: ${state}`);
+
+  console.log("🧪 Running local build check...");
+  let buildOk = true;
   try {
-    run('git add .', PIM_REPO_DIR);
-    run(`git commit -m "AI iteration update" || echo "No changes to commit"`, PIM_REPO_DIR);
-    run(`git push origin ${TARGET_BRANCH}`, PIM_REPO_DIR);
-    console.log('📤 Changes pushed to repo.');
-  } catch (err) {
-    console.error('⚠️ Commit/push step failed:', err.message);
+    run("npm install");
+    run("npm run build");
+  } catch {
+    buildOk = false;
   }
-})();
+
+  const aiPatch = await getAIUpdate({ logs, buildOk });
+  console.log("🤖 AI suggested update:\n", aiPatch);
+
+  fs.writeFileSync("AI_PATCH.txt", aiPatch);
+
+  // Apply patch manually here (AI returns full file changes or diffs)
+  // This assumes AI outputs full new files — you'll need a parser if diff-based
+
+  run(`git config user.name "AI Dev Agent"`);
+  run(`git config user.email "ai-agent@example.com"`);
+  run("git add .");
+  run(`git commit -m "AI iteration update" || echo "No changes to commit"`);
+  run(`git pull --rebase origin ${TARGET_BRANCH}`);
+  run(`git push origin ${TARGET_BRANCH}`);
+}
+
+main().catch(err => {
+  console.error("❌ Agent failed", err);
+  process.exit(1);
+});
