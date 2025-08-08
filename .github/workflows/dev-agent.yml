@@ -22,14 +22,13 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run AI Iteration Agent
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-          VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
-          TARGET_REPO: basstian-ai/simple-pim-1754492683911
-          TARGET_BRANCH: main
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-        run: |
-          NODE_OPTIONS="--max-old-space-size=8192" node ai-iter-agent.js
+      - name: Run AI Dev Agent
+  run: NODE_OPTIONS="--max-old-space-size=8192" node ai-iter-agent.js
+  env:
+    TARGET_REPO: ${{ env.TARGET_REPO }}
+    TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+    VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
+    PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
