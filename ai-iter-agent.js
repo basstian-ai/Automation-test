@@ -22,7 +22,7 @@ const {
 
   // Vercel
   VERCEL_TOKEN,
-  VERCEL_TEAM_ID,             // optional
+  VERCEL_TEAM_ID,             // optional (required if project is under a team)
   VERCEL_PROJECT              // required: projectId like prj_xxx
 } = process.env;
 
@@ -35,6 +35,9 @@ const vercel = axios.create({
   headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
   params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
 });
+
+// helper: always include default client params (like teamId) on requests
+const qp = (extra = {}) => ({ ...(vercel.defaults.params || {}), ...extra });
 
 // ─────────────── Utils ───────────────
 function writeFiles(fileMap) {
@@ -59,10 +62,7 @@ async function fetchLatestDeployment() {
 
   try {
     const res = await vercel.get('/v6/deployments', {
-      params: {
-        projectId: VERCEL_PROJECT,
-        limit: 1
-      }
+      params: qp({ projectId: VERCEL_PROJECT, limit: 1 })
     });
 
     const deployments = res.data?.deployments || [];
@@ -87,53 +87,151 @@ async function fetchLatestDeployment() {
   }
 }
 
-/** Fetch raw build output text for a deployment */
+/** Fetch build log text for a deployment by trying multiple official paths. */
 async function fetchBuildLog(deployId) {
   if (!deployId) return 'Ingen forrige deploy.';
 
+  const chunks = [];
+  const push = (label, text) => {
+    if (text && String(text).trim()) {
+      chunks.push(`\n===== ${label} =====\n${String(text).trim()}`);
+    }
+  };
+
+  // Helper: stitch payload.text from events arrays
+  const stitchEvents = (arr) =>
+    (Array.isArray(arr) ? arr : [])
+      .filter((e) => e?.payload?.text)
+      .map((e) => e.payload.text)
+      .join('\n');
+
+  // 1) v13 deployment events (preferred)
   try {
-    // This endpoint returns the whole build output (not just structured events)
-    const res = await vercel.get(`/v6/deployments/${deployId}`, {
-      params: { buildLogs: 1 } // undocumented but works
+    const r = await vercel.get(`/v13/deployments/${deployId}/events`, {
+      params: qp({ limit: 2000 })
     });
-
-    // In v6 deployments API, raw logs are often in `readyStateLogs` or `logs` array
-    const logs = res.data?.readyStateLogs || res.data?.logs || [];
-
-    // Logs can be an array of { type, text } objects or just a string
-    let textOutput;
-    if (Array.isArray(logs)) {
-      textOutput = logs.map(l => l.text || '').join('\n');
-    } else if (typeof logs === 'string') {
-      textOutput = logs;
+    const data = Array.isArray(r.data) ? r.data : r.data?.events || [];
+    const txt = stitchEvents(data);
+    if (txt.trim()) {
+      push('v13 /deployments/:id/events', txt);
     } else {
-      textOutput = '';
+      console.warn('⚠️ v13 /events returned no payload.text');
     }
-
-    if (!textOutput.trim()) {
-      console.warn(`⚠️ No raw logs found in /v6/deployments/${deployId}`);
-      return 'Ingen build-logger funnet.';
-    }
-
-    return textOutput.slice(-8000);
   } catch (err) {
-    const status = err.response?.status;
-    console.error('❌ Error fetching build log:', status, err.response?.data);
-    return 'Kunne ikke hente build-logg.';
+    console.warn('⚠️ v13 /deployments/:id/events failed', {
+      status: err.response?.status,
+      code: err.response?.data?.code,
+      message: err.response?.data?.message || err.message,
+    });
   }
-}
 
+  // 2) v6 deployment events (fallback)
+  if (chunks.length === 0) {
+    try {
+      const r = await vercel.get(`/v6/deployments/${deployId}/events`, {
+        params: qp({ limit: 2000 })
+      });
+      const data = Array.isArray(r.data) ? r.data : r.data?.events || [];
+      const txt = stitchEvents(data);
+      if (txt.trim()) {
+        push('v6 /deployments/:id/events', txt);
+      } else {
+        console.warn('⚠️ v6 /events returned no payload.text');
+      }
+    } catch (err) {
+      console.warn('⚠️ v6 /deployments/:id/events failed', {
+        status: err.response?.status,
+        code: err.response?.data?.code,
+        message: err.response?.data?.message || err.message,
+      });
+    }
+  }
+
+  // 3) Per-build logs (some orgs/projects only expose logs here)
+  if (chunks.length === 0) {
+    try {
+      const buildsRes = await vercel.get(`/v13/deployments/${deployId}/builds`, {
+        params: qp()
+      });
+      const builds = Array.isArray(buildsRes.data) ? buildsRes.data : buildsRes.data?.builds || [];
+      if (!builds.length) {
+        console.warn('⚠️ No builds listed for deployment (v13 /deployments/:id/builds).');
+      }
+
+      for (const b of builds) {
+        const buildId = b.id || b.uid || b.buildId;
+        if (!buildId) continue;
+
+        // Try /builds/:id/logs
+        try {
+          const rLogs = await vercel.get(`/v13/builds/${buildId}/logs`, {
+            params: qp()
+          });
+          let txt = '';
+          if (typeof rLogs.data === 'string') txt = rLogs.data;
+          else if (Array.isArray(rLogs.data)) txt = rLogs.data.join('\n');
+          else if (Array.isArray(rLogs.data?.logs)) txt = rLogs.data.logs.join('\n');
+
+          if (txt && txt.trim()) {
+            push(`v13 /builds/${buildId}/logs`, txt);
+          } else {
+            console.warn(`⚠️ v13 /builds/${buildId}/logs had no text`);
+          }
+        } catch (err) {
+          console.warn(`⚠️ v13 /builds/${buildId}/logs failed`, {
+            status: err.response?.status,
+            code: err.response?.data?.code,
+            message: err.response?.data?.message || err.message,
+          });
+        }
+
+        // Try /builds/:id/events
+        try {
+          const rEv = await vercel.get(`/v13/builds/${buildId}/events`, {
+            params: qp({ limit: 2000 })
+          });
+          const data = Array.isArray(rEv.data) ? rEv.data : rEv.data?.events || [];
+          const txt = stitchEvents(data);
+          if (txt.trim()) {
+            push(`v13 /builds/${buildId}/events`, txt);
+          } else {
+            console.warn(`⚠️ v13 /builds/${buildId}/events returned no payload.text`);
+          }
+        } catch (err) {
+          console.warn(`⚠️ v13 /builds/${buildId}/events failed`, {
+            status: err.response?.status,
+            code: err.response?.data?.code,
+            message: err.response?.data?.message || err.message,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ v13 /deployments/:id/builds failed', {
+        status: err.response?.status,
+        code: err.response?.data?.code,
+        message: err.response?.data?.message || err.message,
+      });
+    }
+  }
+
+  const out = chunks.join('\n').trim();
+  if (!out) {
+    console.warn('⚠️ No build logs found from any path; returning placeholder.');
+    return 'Ingen build-logger funnet.';
+  }
+  console.log('🔍 buildLog len =', out.length);
+  // keep last 8k chars for token sanity
+  return out.slice(-8000);
+}
 
 /** Decide if build failed using readyState first, then log heuristics */
 function detectBuildFailed(readyState, buildLog) {
-  // Trust the platform state first if present
   if (readyState) {
     const rs = String(readyState).toUpperCase();
     if (['ERROR', 'FAILED', 'CANCELED'].includes(rs)) return true;
     if (['READY', 'SUCCESS'].includes(rs)) return false;
   }
 
-  // Heuristics on logs as fallback
   const log = (buildLog || '').toLowerCase();
   const redSignals = [
     'build failed',
@@ -161,9 +259,7 @@ function detectBuildFailed(readyState, buildLog) {
 
   if (redHit && !greenHit) return true;
   if (greenHit && !redHit) return false;
-
-  // Ambiguous? Default to "green" so we don’t block improvements forever.
-  return false;
+  return false; // ambiguous → treat as green only if readyState said so
 }
 
 // ─────────────── OpenAI helpers ───────────────
@@ -198,7 +294,7 @@ async function safeCompletion(opts, retries = 3) {
 
   // 3) Tailored system prompt
   const modeText = buildFailed
-    ? `Bygget er RØDT. Finn årsaken i buildLog og rett feilen. Prioriter å gjøre det minimal-invasivt (små, sikre endringer).`
+    ? `Bygget er RØDT. Finn årsaken i buildLog og rett feilen. Prioriter små, sikre endringer.`
     : `Bygget er GRØNT. Implementer en liten, inkrementell forbedring i PIM-systemet (kodekvalitet, tilgjengelighet, DX, tests, eller en liten UI/UX-polish).`;
 
   const systemPrompt = `
@@ -208,8 +304,8 @@ ${modeText}
 Krav:
 - Endringer skal være små, atomiske og trygge.
 - Forklar kort hva du endrer i "commitMessage".
-- Ikke modifiser låste filer (lockfiles) manuelt.
-- Kjør type-/lint-fiks (ved behov) i koden du endrer.
+- Ikke modifiser lockfiles manuelt.
+- Kjør type-/lint-fiks i koden du endrer ved behov.
 
 Returnér KUN gyldig JSON:
 {
