@@ -30,12 +30,12 @@ jobs:
           token: ${{ secrets.PAT_TOKEN }}
           path: target
 
-      # 3) Install agent deps (from this repo)
+      # 3) Install agent deps
       - name: Install agent deps
         run: npm ci
         working-directory: agent
 
-      # 4) Run AI Dev Agent from the agent repo root
+      # 4) Run AI Dev Agent (auto-apply mode)
       - name: Run AI Dev Agent
         run: NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" node ai-iter-agent.js
         working-directory: agent
