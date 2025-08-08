@@ -1,58 +1,61 @@
-name: AI Dev Agent
+name: Dev Agent Iteration
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+  schedule:
+    - cron: "0 * * * *" # every hour — adjust as needed
+
+permissions:
+  contents: write
 
 jobs:
   iter:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+
     env:
       TARGET_REPO: basstian-ai/simple-pim-1754492683911
       TARGET_BRANCH: main
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
-      VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
-      PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+      VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
 
     steps:
-      # 1) Check out automation repo (this repo)
-      - uses: actions/checkout@v4
+      - name: Checkout automation repo
+        uses: actions/checkout@v4
 
-      # 2) Clone target repo fresh into ./target
       - name: Clone target repo
         run: |
           rm -rf target
-          git clone https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ env.TARGET_REPO }} target
+          git clone https://${{ secrets.PAT_TOKEN }}@github.com/${TARGET_REPO}.git target
           cd target
-          git checkout ${{ env.TARGET_BRANCH }}
+          git config user.name "AI Dev Agent"
+          git config user.email "ai-agent@example.com"
+          git checkout ${TARGET_BRANCH}
 
-      # 3) Install deps for automation agent
-      - name: Install agent dependencies
-        run: npm ci
+      - name: Install deps for target
+        run: |
+          cd target
+          npm ci || npm install
 
-      # 4) Run the AI iteration agent inside target folder
-      - name: Run AI Dev Agent
+      - name: Run AI iteration
         run: |
           cd target
           NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" node ../ai-iter-agent.js
-        env:
-          TARGET_REPO: ${{ env.TARGET_REPO }}
-          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
-          VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
-          PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
 
-      # 5) Commit & push results
-      - name: Commit & Push changes
+      - name: Push changes
         run: |
           cd target
-          git config user.name "AI Iteration Bot"
-          git config user.email "bot@example.com"
           git add .
-          git commit --allow-empty -m "AI iteration update [skip ci]"
-          git push origin ${{ env.TARGET_BRANCH }}
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "AI iteration: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+            git push origin ${TARGET_BRANCH}
+          fi
+
+      - name: Deploy to Vercel
+        run: |
+          cd target
+          npx vercel --token $VERCEL_TOKEN --scope $VERCEL_TEAM_ID --prod --confirm
