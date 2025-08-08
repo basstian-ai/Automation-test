@@ -45,7 +45,7 @@ function writeFiles(fileMap) {
   }
 }
 
-/** Fetch build logs for a deployment ID. */
+/** Fetch build logs for a deployment ID using Vercel v13 events API. */
 async function fetchBuildLog(deployId) {
   if (!deployId) {
     console.warn('⚠️ No deploy ID provided.');
@@ -53,8 +53,8 @@ async function fetchBuildLog(deployId) {
   }
 
   try {
-    const { data } = await vercel.get(`/v3/deployments/${deployId}/events`, {
-      params: { limit: 1000 },
+    const { data } = await vercel.get(`/v13/deployments/${deployId}/events`, {
+      params: { limit: 100 },
     });
 
     const events = Array.isArray(data) ? data : data.events || [];
