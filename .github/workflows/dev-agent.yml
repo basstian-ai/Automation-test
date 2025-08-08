@@ -19,30 +19,34 @@ jobs:
       PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
 
     steps:
-      # 1) Sjekk ut **agent-repoet** (dette) i ./agent
+      # 1) Checkout agent repo into ./agent
       - uses: actions/checkout@v4
         with:
           path: agent
 
-      # 2) Sjekk ut **PIM-målet** i ./target
+      # 2) Checkout PIM target repo into ./target
       - uses: actions/checkout@v4
         with:
           repository: ${{ env.TARGET_REPO }}
-          token: ${{ secrets.PAT_TOKEN }}     # trengs for push-tilgang
+          token: ${{ secrets.PAT_TOKEN }} # needed for push access
           path: target
 
-      # 3) Installer agent-avhengigheter
-      - name: Install agent deps
+      # 3) Set Git identity so commits work in Actions
+      - name: Configure Git identity
+        run: |
+          git config --global user.email "bot@github.com"
+          git config --global user.name "AI Dev Agent"
+
+      # 4) Install agent dependencies
+      - name: Install agent dependencies
         run: npm ci
         working-directory: agent
 
-      # 4) Kjør agenten INNE i target-mappen
+      # 5) Run AI Dev Agent from inside the target repo
       - name: Run AI Dev Agent
-        run: node --max-old-space-size=8192 ../agent/ai-iter-agent.js
+        run: NODE_OPTIONS=--openssl-legacy-provider node --max-old-space-size=8192 ../agent/ai-iter-agent.js
         working-directory: target
-
         env:
-          # sender videre alle env-variablene som allerede er satt
           TARGET_REPO: ${{ env.TARGET_REPO }}
           TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
