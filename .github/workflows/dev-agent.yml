@@ -38,8 +38,9 @@ jobs:
 
       # 4) Kjør agenten INNE i target-mappen
       - name: Run AI Dev Agent
-        run: node ../agent/ai-iter-agent.js
+        run: node --max-old-space-size=8192 ../agent/ai-iter-agent.js
         working-directory: target
+
         env:
           # sender videre alle env-variablene som allerede er satt
           TARGET_REPO: ${{ env.TARGET_REPO }}
