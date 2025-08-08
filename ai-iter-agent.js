@@ -1,64 +1,103 @@
-import OpenAI from "openai";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import fs from "fs";
+import OpenAI from "openai";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const TARGET_REPO = process.env.TARGET_REPO;
-const TARGET_BRANCH = process.env.TARGET_BRANCH;
+function run(cmd) {
+  try {
+    return execSync(cmd, { encoding: "utf8" }).trim();
+  } catch {
+    return "";
+  }
+}
 
-async function run() {
-  console.log("📦 Installing dependencies...");
-  execSync("npm install", { stdio: "inherit" });
+function fetchVercelLogs() {
+  console.log("🔄 Fetching build logs...");
+  try {
+    const deployments = JSON.parse(run(
+      `curl -s -H "Authorization: Bearer ${process.env.VERCEL_TOKEN}" "https://api.vercel.com/v6/deployments?projectId=${process.env.VERCEL_PROJECT}&teamId=${process.env.VERCEL_TEAM_ID}&limit=1"`
+    ));
+    const id = deployments.deployments?.[0]?.uid;
+    if (!id) return { status: "unknown", logs: "" };
 
-  console.log("🔄 Fetching Vercel build logs...");
-  const buildLogs = await getVercelLogs();
+    const deployment = JSON.parse(run(
+      `curl -s -H "Authorization: Bearer ${process.env.VERCEL_TOKEN}" "https://api.vercel.com/v13/deployments/${id}"`
+    ));
 
-  console.log("🤖 Asking AI for iteration...");
+    const state = deployment.readyState;
+    const logs = run(
+      `curl -s -H "Authorization: Bearer ${process.env.VERCEL_TOKEN}" "https://api.vercel.com/v3/deployments/${id}/events"`
+    );
+
+    return { status: state, logs };
+  } catch (e) {
+    return { status: "error", logs: e.toString() };
+  }
+}
+
+function validatePatch(patch) {
+  return patch.startsWith("diff --git");
+}
+
+function applyAndPush(patch) {
+  fs.writeFileSync("patch.diff", patch);
+  run("git config user.email 'dev-agent@github.com'");
+  run("git config user.name 'AI Dev Agent'");
+  run("git apply patch.diff || git apply --reject --whitespace=fix patch.diff");
+  run("git add .");
+  try {
+    run(`git commit -m "AI iteration update"`);
+    run(`git push https://${process.env.PAT_TOKEN}@github.com/${process.env.TARGET_REPO}.git ${process.env.TARGET_BRANCH}`);
+    console.log("✅ Changes pushed");
+  } catch {
+    console.log("⚠️ No changes to commit");
+  }
+}
+
+async function main() {
+  const { status, logs } = fetchVercelLogs();
+  const mode = status === "ERROR" || status === "FAILED" ? "fix" : "improve";
+
+  console.log(`🔍 Mode: ${mode.toUpperCase()}`);
+
+  const repoTree = run("find . -type f -not -path './.git/*' -maxdepth 3");
+  const lastCommit = run("git log -1 --pretty=%B");
+
   const prompt = `
-You are an autonomous senior full-stack developer working on a modern PIM system.
-Your goals:
-1. Always keep the code deployable after each change.
-2. If the last build failed, fix the issue.
-3. If the last build passed, implement the next best feature or improvement based on best practices in modern PIM systems.
-4. Prioritize features that improve scalability, data model flexibility, and UX for managing products.
-5. Do not remove important existing functionality unless absolutely necessary.
-6. Return only a valid unified diff (patch) from the current codebase.
+You are an autonomous software improvement agent.
 
+If build failed: fix the build error using the logs.
+If build succeeded: choose and implement the next most valuable improvement or feature for this PIM system, based on modern best practices.
+
+Build status: ${status}
 Build logs:
-${buildLogs}
-  `;
+${logs}
 
-  const res = await client.chat.completions.create({
+Repository structure:
+${repoTree}
+
+Last commit message:
+${lastCommit}
+
+Rules:
+- Output ONLY a unified diff starting with "diff --git"
+- No explanations, no markdown
+`;
+
+  const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
-    messages: [{ role: "user", content: prompt }],
+    messages: [{ role: "system", content: prompt }],
+    temperature: 0,
   });
 
-  const diff = res.choices[0].message.content.trim();
-  fs.writeFileSync("ai_patch.diff", diff);
+  const patch = response.choices[0].message.content.trim();
 
-  console.log("📜 Applying patch...");
-  execSync("git apply ai_patch.diff", { stdio: "inherit" });
+  if (validatePatch(patch)) {
+    applyAndPush(patch);
+  } else {
+    console.log("❌ Invalid patch from AI");
+  }
 }
 
-async function getVercelLogs() {
-  const fetch = (await import("node-fetch")).default;
-  const resp = await fetch(
-    `https://api.vercel.com/v13/deployments?projectId=${process.env.VERCEL_PROJECT}&teamId=${process.env.VERCEL_TEAM_ID}`,
-    { headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}` } }
-  );
-  const data = await resp.json();
-  const latest = data.deployments?.[0]?.uid;
-  if (!latest) return "No deployments found.";
-
-  const logResp = await fetch(
-    `https://api.vercel.com/v1/deployments/${latest}/events?teamId=${process.env.VERCEL_TEAM_ID}`,
-    { headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}` } }
-  );
-  return await logResp.text();
-}
-
-run().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main();
