@@ -8,32 +8,29 @@ import simpleGit from 'simple-git';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
+import { encode } from 'gpt-3-encoder';
 
 // ─────────────── ENV ───────────────
 const {
-  // ❶ Git / repo
   PAT_TOKEN,
   GITHUB_TOKEN,
-  TARGET_REPO,          // e.g., "org/navn"
+  TARGET_REPO,
   TARGET_BRANCH = 'main',
 
-  // ❷ OpenAI
   OPENAI_API_KEY,
 
-  // ❸ Vercel
   VERCEL_TOKEN,
   VERCEL_TEAM_ID,
-  VERCEL_PROJECT,       // prj_xxx…
+  VERCEL_PROJECT // projectId (prj_xxx)
 } = process.env;
 
 const git = simpleGit();
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-// ─────────────── Vercel Client ───────────────
 const vercel = axios.create({
   baseURL: 'https://api.vercel.com',
   headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
-  params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {},
+  params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
 });
 
 // ─────────────── Helpers ───────────────
@@ -45,84 +42,54 @@ function writeFiles(fileMap) {
   }
 }
 
-/** Check deployment status */
-async function getDeploymentStatus(deployId) {
+/** Fetch latest deployment ID for the project */
+async function fetchLatestDeployId() {
   try {
-    const { data } = await vercel.get(`/v9/now/deployments/${deployId}`);
-    return data.readyState;
+    const res = await vercel.get('/v6/deployments', {
+      params: {
+        projectId: VERCEL_PROJECT,
+        limit: 1
+      }
+    });
+    const deployments = res.data.deployments || [];
+    if (deployments.length === 0) {
+      console.warn('⚠️ No deployments found.');
+      return null;
+    }
+    return deployments[0].uid;
   } catch (err) {
-    console.error('Error fetching deployment status:', err.message);
+    console.error('❌ Error fetching latest deploy ID:', err.response?.data || err.message);
     return null;
   }
 }
 
-/** Fetch build logs for a deployment ID using Vercel API */
+/** Fetch build logs from Vercel for given deployment ID */
 async function fetchBuildLog(deployId) {
-  if (!deployId) {
-    console.warn('⚠️ No deploy ID provided.');
-    return 'Ingen forrige deploy.';
-  }
+  if (!deployId) return 'Ingen forrige deploy.';
 
-  const status = await getDeploymentStatus(deployId);
-  if (status && status !== 'READY' && status !== 'ERROR') {
-    console.warn(`⚠️ Deployment ${deployId} is in state ${status}. Logs may not be available.`);
-    return 'Build-logg ikke tilgjengelig ennå.';
-  }
+  try {
+    const res = await vercel.get(`/v3/deployments/${deployId}/events`, {
+      params: { limit: -1 }
+    });
 
-  const versions = ['v9', 'v6', 'v2'];
+    // Some responses return { events: [...] }, others just an array
+    const events = Array.isArray(res.data) ? res.data : res.data.events || [];
 
-  for (const version of versions) {
-    try {
-      const response = await vercel.get(`/${version}/deployments/${deployId}/events`, {
-        params: { limit: 100 },
-      });
-
-      const data = response.data;
-      console.log(`API response for version ${version}:`, JSON.stringify(data, null, 2));
-
-      const events = Array.isArray(data) ? data : data.events || [];
-      if (events.length === 0) {
-        console.warn(`⚠️ No events found for deploy ${deployId} in version ${version}.`);
-        continue;
-      }
-
-      const logs = events
-        .filter((event) => event?.text)
-        .map((event) => `${event.type} at ${new Date(event.created).toLocaleTimeString()}: ${event.text}`)
-        .join('\n');
-
-      if (!logs) {
-        console.warn(`⚠️ No valid log content found for deploy ${deployId} in version ${version}.`);
-        continue;
-      }
-
-      return logs.slice(-8000);
-    } catch (err) {
-      const status = err.response?.status;
-      const message = err.response?.data?.message ?? err.message;
-
-      console.error(`Error fetching logs for version ${version}:`, { status, message });
-
-      if (status === 400 && /invalid api version/i.test(message)) {
-        continue;
-      } else if (status === 401 || status === 403) {
-        console.error('⚠️ Authentication error. Check VERCEL_TOKEN.');
-        return 'Autentiseringsfeil ved henting av build-logg.';
-      } else if (status === 429) {
-        console.error('⚠️ Rate limit exceeded. Retrying after delay...');
-        await new Promise((r) => setTimeout(r, 10000));
-        continue;
-      } else if (status === 404) {
-        console.error(`⚠️ Deployment ${deployId} not found or inaccessible.`);
-        return 'Ugyldig eller utilgjengelig deploy ID.';
-      } else {
-        throw err;
-      }
+    if (events.length === 0) {
+      console.warn(`⚠️ No build events for deploy ${deployId}.`);
+      return 'Ingen build-logger funnet.';
     }
-  }
 
-  console.warn(`⚠️ Could not fetch build logs for deploy ${deployId} – all versions failed.`);
-  return 'Kunne ikke hente build-logg.';
+    const logs = events
+      .filter(e => e?.payload?.text || e?.text)
+      .map(e => e.payload?.text || e.text)
+      .join('\n');
+
+    return logs.slice(-8000); // last 8k chars
+  } catch (err) {
+    console.error('❌ Error fetching build log:', err.response?.data || err.message);
+    return 'Kunne ikke hente build-logg.';
+  }
 }
 
 /** Rate-limit-safe ChatGPT call */
@@ -130,41 +97,28 @@ async function safeCompletion(opts, retries = 3) {
   try {
     return await openai.chat.completions.create(opts);
   } catch (err) {
-    if (retries && err instanceof OpenAI.errors.RateLimitError) {
-      await new Promise((r) => setTimeout(r, 15_000));
+    if (retries && err.code === 'rate_limit_exceeded') {
+      await new Promise(r => setTimeout(r, 15_000));
       return safeCompletion(opts, retries - 1);
     }
     throw err;
   }
 }
 
-/** Fetch the latest deployment ID */
-async function fetchLatestDeployId() {
-  try {
-    const { data } = await vercel.get('/v9/now/deployments', {
-      params: { projectId: VERCEL_PROJECT, limit: 1 },
-    });
-    return data?.deployments?.[0]?.uid ?? null;
-  } catch (err) {
-    console.error('Error fetching latest deploy ID:', err.message);
-    return null;
-  }
-}
-
 // ─────────────── MAIN ───────────────
 (async () => {
-  /* 1) Snapshot of the repo (max 50 files) */
+  // 1) Snapshot repo (max 50 files to control token usage)
   const repoFilesArr = await readFileTree('.', 50);
-  const repoFiles = Object.fromEntries(repoFilesArr.map((f) => [f.path, f.content]));
+  const repoFiles = Object.fromEntries(repoFilesArr.map(f => [f.path, f.content]));
 
-  /* 2) Latest deploy ID + build log */
+  // 2) Latest deploy ID + build log
   const lastDeployId = await fetchLatestDeployId();
   const buildLog = await fetchBuildLog(lastDeployId);
 
   console.log('📝 lastDeployId:', lastDeployId);
-  console.log('🔍 buildLog-preview:', buildLog.slice(0, 400)); // First 400 characters
+  console.log('🔍 buildLog-preview:', buildLog.slice(0, 400));
 
-  /* 3) Prompt to GPT-4o-mini */
+  // 3) Prompt to GPT
   const systemPrompt = `
 Du er en autonom utvikler for et Next.js PIM-prosjekt.
 Du skal:
@@ -179,8 +133,8 @@ Returnér KUN gyldig JSON:
 
   const userPrompt = JSON.stringify({ files: repoFiles, buildLog });
 
-  if (userPrompt.length / 3.5 > 150_000) {
-    console.error('❌ Prompt too large – reduce number of files in readFileTree.');
+  if (encode(userPrompt).length > 150_000) {
+    console.error('❌ Prompt too large – reduce files in readFileTree.');
     process.exit(1);
   }
 
@@ -190,11 +144,11 @@ Returnér KUN gyldig JSON:
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
+      { role: 'user', content: userPrompt }
+    ]
   });
 
-  /* 4) Parse & validate */
+  // 4) Parse & validate
   let payload;
   try {
     payload = JSON.parse(aiRes.choices[0].message.content);
@@ -212,19 +166,19 @@ Returnér KUN gyldig JSON:
     process.exit(0);
   }
 
-  /* 5) Write files, commit & push */
+  // 5) Write files, commit & push
   writeFiles(payload.files);
   const status = await git.status();
   console.log('🗂️ Git status before commit:', status);
 
-  // If nothing to commit, skip push
   if (status.modified.length === 0 && status.created.length === 0 && status.deleted.length === 0) {
     console.log('🟡 No changes – skipping commit/push.');
     process.exit(0);
   }
+
   await git.addConfig('user.name', 'AI Dev Agent');
   await git.addConfig('user.email', 'ai-dev-agent@example.com');
-  await git.add('-A');
+  await git.add(Object.keys(payload.files));
   await git.commit(payload.commitMessage);
 
   const repoSlug = TARGET_REPO || process.env.GITHUB_REPOSITORY;
@@ -233,7 +187,7 @@ Returnér KUN gyldig JSON:
   await git.remote([
     'set-url',
     'origin',
-    `https://x-access-token:${pushToken}@github.com/${repoSlug}.git`,
+    `https://x-access-token:${pushToken}@github.com/${repoSlug}.git`
   ]);
   await git.push('origin', TARGET_BRANCH);
 
