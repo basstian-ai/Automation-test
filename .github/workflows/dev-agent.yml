@@ -18,27 +18,27 @@ jobs:
       PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
 
     steps:
-      # 1) Check out this repo (Automation-test) into ./agent
+      # 1) Checkout Automation-test (contains ai-iter-agent.js)
       - uses: actions/checkout@v4
         with:
-          path: agent
+          path: automation
 
-      # 2) Check out target PIM repo into ./target
+      # 2) Checkout PIM repo into /home/runner/work/Automation-test/target
       - uses: actions/checkout@v4
         with:
           repository: ${{ env.TARGET_REPO }}
           token: ${{ secrets.PAT_TOKEN }}
           path: target
 
-      # 3) Install agent deps
-      - name: Install agent deps
+      # 3) Install deps for AI agent
+      - name: Install AI agent deps
         run: npm ci
-        working-directory: agent
+        working-directory: automation
 
-      # 4) Run AI Dev Agent (auto-apply mode)
+      # 4) Run AI agent from root of Automation-test repo
       - name: Run AI Dev Agent
         run: NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" node ai-iter-agent.js
-        working-directory: agent
+        working-directory: automation
         env:
           TARGET_REPO: ${{ env.TARGET_REPO }}
           TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
