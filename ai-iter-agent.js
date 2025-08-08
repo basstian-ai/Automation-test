@@ -12,16 +12,13 @@ import { spawnSync } from 'child_process';
 
 // ─────────────── ENV ───────────────
 const {
-  // Git / repo
   PAT_TOKEN,
   GITHUB_TOKEN,
   TARGET_REPO,
   TARGET_BRANCH = 'main',
 
-  // OpenAI
   OPENAI_API_KEY,
 
-  // Vercel
   VERCEL_TOKEN,
   VERCEL_TEAM_ID,
   VERCEL_PROJECT
@@ -32,11 +29,9 @@ const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
 const vercel = axios.create({
   baseURL: 'https://api.vercel.com',
-  headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
-  params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
+  headers: { Authorization: `Bearer ${VERCEL_TOKEN}` }
 });
 
-// ─────────────── Utils ───────────────
 function writeFiles(fileMap) {
   for (const [file, content] of Object.entries(fileMap)) {
     const full = path.join(process.cwd(), file);
@@ -50,36 +45,21 @@ const approxTokens = (s) => Math.ceil((s?.length || 0) / 4);
 // ─────────────── Vercel helpers ───────────────
 async function fetchLatestDeployment() {
   if (!VERCEL_PROJECT) {
-    console.error('❌ Missing VERCEL_PROJECT.');
+    console.error('❌ Missing VERCEL_PROJECT (prj_xxx).');
     return null;
   }
   try {
     const res = await vercel.get('/v6/deployments', {
-      params: { projectId: VERCEL_PROJECT, limit: 1 }
+      params: { projectId: VERCEL_PROJECT, limit: 1, ...(VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}) }
     });
     const deployments = res.data?.deployments || [];
     if (!deployments.length) return null;
     const d = deployments[0];
-    return { id: d.uid, url: d.url, readyState: d.readyState };
+    return { id: d.uid, readyState: d.readyState, url: d.url };
   } catch (err) {
-    console.error('❌ Error fetching latest deployment:', err.response?.status, err.response?.data);
+    console.error('❌ Error fetching latest deployment:', err.response?.status, err.response?.data || err.message);
     return null;
   }
-}
-
-async function waitForTerminalState(deployId, { timeoutMs = 180_000, pollMs = 3_000 } = {}) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const r = await vercel.get(`/v6/deployments/${deployId}`, {
-        params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {},
-      });
-      const rs = (r.data?.readyState || '').toUpperCase();
-      if (!['BUILDING', 'QUEUED', 'INITIALIZING'].includes(rs)) return rs;
-    } catch {}
-    await new Promise(r => setTimeout(r, pollMs));
-  }
-  return 'TIMEOUT';
 }
 
 async function fetchBuildLog(deployId, deployUrl) {
@@ -87,49 +67,52 @@ async function fetchBuildLog(deployId, deployUrl) {
   const chunks = [];
   const push = (label, text) => { if (text?.trim()) chunks.push(`\n===== ${label} =====\n${text.trim()}`); };
   const stitchEvents = (arr) => (Array.isArray(arr) ? arr : []).filter(e => e?.payload?.text).map(e => e.payload.text).join('\n');
+  const team = VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {};
 
   // v13 events
   try {
-    const r = await vercel.get(`/v13/deployments/${deployId}/events`, { params: { limit: 2000 } });
+    const r = await vercel.get(`/v13/deployments/${deployId}/events`, { params: { ...team, limit: 2000 } });
     const data = Array.isArray(r.data) ? r.data : r.data?.events || [];
     const txt = stitchEvents(data);
     if (txt) push('v13 /deployments/:id/events', txt);
-  } catch (err) {
-    console.warn('⚠️ v13 /events failed', err.response?.status);
-  }
+  } catch (err) { console.warn('⚠️ v13 /events failed', err.response?.status); }
 
   // v6 events
   if (!chunks.length) {
     try {
-      const r = await vercel.get(`/v6/deployments/${deployId}/events`, { params: { limit: 2000 } });
+      const r = await vercel.get(`/v6/deployments/${deployId}/events`, { params: { ...team, limit: 2000 } });
       const data = Array.isArray(r.data) ? r.data : r.data?.events || [];
       const txt = stitchEvents(data);
       if (txt) push('v6 /deployments/:id/events', txt);
-    } catch (err) {
-      console.warn('⚠️ v6 /events failed', err.response?.status);
-    }
+    } catch (err) { console.warn('⚠️ v6 /events failed', err.response?.status); }
   }
 
-  // builds logs
+  // per-build logs
   if (!chunks.length) {
     try {
-      const buildsRes = await vercel.get(`/v13/deployments/${deployId}/builds`);
+      const buildsRes = await vercel.get(`/v13/deployments/${deployId}/builds`, { params: team });
       const builds = Array.isArray(buildsRes.data) ? buildsRes.data : buildsRes.data?.builds || [];
       for (const b of builds) {
         const buildId = b.id || b.uid;
         if (!buildId) continue;
+
         try {
-          const rLogs = await vercel.get(`/v13/builds/${buildId}/logs`);
+          const rLogs = await vercel.get(`/v13/builds/${buildId}/logs`, { params: team });
           let txt = '';
           if (typeof rLogs.data === 'string') txt = rLogs.data;
           else if (Array.isArray(rLogs.data)) txt = rLogs.data.join('\n');
           else if (Array.isArray(rLogs.data?.logs)) txt = rLogs.data.logs.join('\n');
           if (txt) push(`v13 /builds/${buildId}/logs`, txt);
-        } catch {}
+        } catch (err) { console.warn(`⚠️ v13 /builds/${buildId}/logs failed`, err.response?.status); }
+
+        try {
+          const rEv = await vercel.get(`/v13/builds/${buildId}/events`, { params: { ...team, limit: 2000 } });
+          const data = Array.isArray(rEv.data) ? rEv.data : rEv.data?.events || [];
+          const txt = stitchEvents(data);
+          if (txt) push(`v13 /builds/${buildId}/events`, txt);
+        } catch (err) { console.warn(`⚠️ v13 /builds/${buildId}/events failed`, err.response?.status); }
       }
-    } catch (err) {
-      console.warn('⚠️ /builds failed', err.response?.status);
-    }
+    } catch (err) { console.warn('⚠️ /deployments/:id/builds failed', err.response?.status); }
   }
 
   // CLI fallback
@@ -141,12 +124,10 @@ async function fetchBuildLog(deployId, deployUrl) {
         '--logs', '--token', VERCEL_TOKEN, '--no-color', '--yes'
       ];
       if (VERCEL_TEAM_ID) args.push('--scope', VERCEL_TEAM_ID);
+
       const res = spawnSync('npx', args, { encoding: 'utf-8' });
       const out = ((res.stdout || '') + (res.stderr || '')).trim();
-      if (out) {
-        const m = out.match(/Build Logs\s*\n[-=]+\n([\s\S]*)$/i);
-        push('cli vercel inspect --logs', (m ? m[1] : out));
-      }
+      if (out) push('cli vercel inspect --logs', out);
     } catch (e) {
       console.warn('⚠️ CLI fallback failed', e.message);
     }
@@ -163,8 +144,11 @@ function detectBuildFailed(readyState, buildLog) {
     if (['READY', 'SUCCESS'].includes(rs)) return false;
   }
   const log = (buildLog || '').toLowerCase();
-  const redSignals = ['build failed', 'error: command "npm run build"', 'failed with exit code', 'exit code 1', 'vercel build failed', 'module not found'];
-  const greenSignals = ['build completed', 'build succeeded', 'compiled successfully', 'ready! deployed to'];
+  const redSignals = [
+    'build failed', 'error: command "npm run build" exited with', 'failed with exit code',
+    'exit code 1', 'vercel build failed', 'command failed', 'error  in', 'module not found'
+  ];
+  const greenSignals = ['build completed', 'compiled successfully', 'ready! deployed to'];
   const redHit = redSignals.some(s => log.includes(s));
   const greenHit = greenSignals.some(s => log.includes(s));
   if (redHit && !greenHit) return true;
@@ -189,38 +173,48 @@ async function safeCompletion(opts, retries = 3) {
   const repoFiles = Object.fromEntries(repoFilesArr.map(f => [f.path, f.content]));
 
   const latest = await fetchLatestDeployment();
-  if (latest?.id && ['BUILDING', 'QUEUED', 'INITIALIZING'].includes(String(latest.readyState).toUpperCase())) {
-    const finalState = await waitForTerminalState(latest.id);
-    console.log('⏳ waited for terminal state →', finalState);
-    latest.readyState = finalState;
+  const lastDeployId = latest?.id || null;
+  const readyState = latest?.readyState || null;
+
+  let buildLog = await fetchBuildLog(lastDeployId, latest?.url);
+  if (!buildLog || /Ingen build-logger funnet/i.test(buildLog)) {
+    for (let i = 0; i < 3; i++) {
+      await new Promise(r => setTimeout(r, 4000 * (i + 1)));
+      buildLog = await fetchBuildLog(lastDeployId, latest?.url);
+      if (buildLog && !/Ingen build-logger funnet/i.test(buildLog)) break;
+    }
   }
 
-  const buildLog = await fetchBuildLog(latest?.id, latest?.url);
-  const buildFailed = detectBuildFailed(latest?.readyState, buildLog);
+  const buildFailed = detectBuildFailed(readyState, buildLog);
 
-  console.log('📝 lastDeployId:', latest?.id, 'readyState:', latest?.readyState, 'buildFailed:', buildFailed);
-  console.log('🔍 buildLog-preview:', (buildLog || '').slice(0, 400));
+  console.log('📝 lastDeployId:', lastDeployId, 'readyState:', readyState, 'buildFailed:', buildFailed);
+  console.log('🔍 buildLog-preview:', (buildLog || '').slice(-800));
 
   const modeText = buildFailed
-    ? `Bygget er RØDT. Finn årsaken i buildLog og rett feilen.`
-    : `Bygget er GRØNT. Implementer en liten forbedring.`;
+    ? `Bygget er RØDT. Finn årsaken i buildLog og rett feilen. Prioriter små, sikre endringer.`
+    : `Bygget er GRØNT. Implementer en liten, trygg forbedring.`;
 
   const systemPrompt = `
 Du er en autonom utvikler for et Next.js PIM-prosjekt.
 ${modeText}
-- Endringer skal være små, trygge.
+
+Krav:
+- Endringer skal være små, atomiske og trygge.
 - Forklar kort hva du endrer i "commitMessage".
 - Ikke endre lockfiles manuelt.
+- Kjør type-/lint-fiks ved behov.
+
 Returnér KUN gyldig JSON:
 {
   "files": { "<filsti>": "<innhold>" },
   "commitMessage": "<kort beskrivelse>"
 }`.trim();
 
-  const userPayload = { files: repoFiles, buildLog, lastDeployId: latest?.id, readyState: latest?.readyState, buildFailed };
+  const userPayload = { files: repoFiles, buildLog, lastDeployId, readyState, buildFailed };
   const userPrompt = JSON.stringify(userPayload);
-  if (approxTokens(systemPrompt) + approxTokens(userPrompt) > 150_000) {
-    console.error('❌ Prompt too large.');
+  const tokenEstimate = approxTokens(systemPrompt) + approxTokens(userPrompt);
+  if (tokenEstimate > 150_000) {
+    console.error('❌ Prompt too large – reduce files in readFileTree.');
     process.exit(1);
   }
 
@@ -253,7 +247,6 @@ Returnér KUN gyldig JSON:
   writeFiles(payload.files);
   const status = await git.status();
   console.log('🗂️ Git status before commit:', status);
-
   if (!status.modified.length && !status.created.length && !status.deleted.length) {
     console.log('🟡 No changes – skipping commit/push.');
     process.exit(0);
