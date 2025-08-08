@@ -1,69 +1,39 @@
-name: AI Dev Agent
+name: Dev Agent
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *" # every 30 minutes; tweak as you like
-
-permissions:
-  contents: write
+    - cron: "*/15 * * * *" # Every 15 minutes
 
 jobs:
-  iter:
+  run-agent:
     runs-on: ubuntu-latest
-    env:
-      TARGET_REPO: basstian-ai/simple-pim-1754492683911
-      TARGET_BRANCH: main
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
-      VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
-      PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
-
     steps:
-      # Checkout THIS automation repo into ./automation
-      - uses: actions/checkout@v4
+      - name: Checkout Automation Repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          path: automation
-          fetch-depth: 0
+          node-version: 20
 
-      # Clone TARGET repo CLEANLY into ./target (no nested git in automation repo)
-      - name: Clone target repo
-        run: |
-          rm -rf target
-          git clone https://${{ secrets.PAT_TOKEN }}@github.com/${{ env.TARGET_REPO }}.git target
-          cd target
-          git checkout ${{ env.TARGET_BRANCH }}
-          git config user.name "AI Dev Agent"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      # Install deps for the agent (in automation/)
-      - name: Install agent deps
-        run: npm ci || npm i
+      - name: Install dependencies
+        run: npm ci || npm install
         working-directory: automation
 
-      # Run the agent FROM INSIDE target/, calling the agent file in ../automation
-      - name: Run AI Dev Agent
-        working-directory: target
+      - name: Checkout Target Repo
+        run: |
+          git clone https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ secrets.TARGET_REPO }} target
+          cd target
+          git checkout ${{ secrets.TARGET_BRANCH }}
+
+      - name: Run AI Iteration Agent
+        run: NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" node automation/ai-iter-agent.cjs
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
-          VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
-          TARGET_REPO:     ${{ env.TARGET_REPO }}
-          TARGET_BRANCH:   ${{ env.TARGET_BRANCH }}
-          PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
-        run: NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" node ../automation/ai-iter-agent.cjsrun: |
-          
-
-      # Commit & push (only if there are actual changes)
-      - name: Commit and push changes
-        working-directory: target
-        run: |
-          git add .
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "AI iteration update"
-            git push https://${{ secrets.PAT_TOKEN }}@github.com/${{ env.TARGET_REPO }}.git ${{ env.TARGET_BRANCH }}
-          fi
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
+          TARGET_REPO: ${{ secrets.TARGET_REPO }}
+          TARGET_BRANCH: ${{ secrets.TARGET_BRANCH }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
