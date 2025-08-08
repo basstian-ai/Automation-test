@@ -1,6 +1,6 @@
 /**
  * ai-iter-agent.js
- * Autonomous Dev Flow for PIM System
+ * Autonomous Dev Flow for PIM System — with local build verification
  */
 
 import fs from 'fs';
@@ -14,7 +14,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
-const VERCEL_PROJECT = process.env.VERCEL_PROJECT; // from your workflow env
+const VERCEL_PROJECT = process.env.VERCEL_PROJECT;
 
 if (!VERCEL_TOKEN || !VERCEL_TEAM_ID || !VERCEL_PROJECT) {
   console.error('Missing required Vercel env vars');
@@ -29,8 +29,15 @@ function run(cmd, cwd = PIM_REPO_DIR) {
   return execSync(cmd, { cwd, stdio: 'pipe' }).toString().trim();
 }
 
+function safeRun(cmd, cwd = PIM_REPO_DIR) {
+  try {
+    return run(cmd, cwd);
+  } catch (err) {
+    return err.stdout?.toString() || err.message || 'Unknown error';
+  }
+}
+
 async function fetchLatestBuildLog() {
-  // 1) Get latest deployment
   const depRes = await fetch(
     `https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT}&teamId=${VERCEL_TEAM_ID}&limit=1`,
     { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
@@ -43,7 +50,6 @@ async function fetchLatestBuildLog() {
   const deployId = deployment.uid;
   const state = deployment.state;
 
-  // 2) Get build logs (stdout + stderr)
   const logRes = await fetch(
     `https://api.vercel.com/v3/deployments/${deployId}/events?teamId=${VERCEL_TEAM_ID}`,
     { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
@@ -136,6 +142,18 @@ async function applyCodeDiff(aiOutput) {
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
     fs.writeFileSync(absPath, content, 'utf-8');
     console.log(`Updated: ${filePath}`);
+  }
+
+  console.log('🛠 Running local npm install...');
+  safeRun('npm install');
+
+  console.log('🧪 Verifying local build...');
+  const buildResult = safeRun('npm run build');
+
+  if (buildResult.toLowerCase().includes('error') || buildResult.toLowerCase().includes('failed')) {
+    console.error('❌ Local build failed. Not pushing changes.');
+    console.log(buildResult);
+    return;
   }
 
   run('git config user.email "ci-bot@example.com"');
