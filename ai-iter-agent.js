@@ -69,9 +69,9 @@ Rules:
 - Overwrite the necessary files completely with final working code.
 `;
 
-  const files = listFilesRecursive("target");
+  const files = listFilesRecursive("../target");
   const content = files
-    .map(f => `// FILE: ${f}\n${fs.readFileSync(f, "utf8")}`)
+    .map(f => `// FILE: ${path.relative("..", f)}\n${fs.readFileSync(f, "utf8")}`)
     .join("\n\n");
 
   const userPrompt = `
@@ -100,13 +100,14 @@ function applyAIChanges(aiOutput) {
   for (const part of parts) {
     const [filename, ...rest] = part.split("\n");
     const content = rest.join("\n");
-    fs.writeFileSync(filename.trim(), content, "utf8");
-    console.log(`✅ Updated ${filename.trim()}`);
+    const fullPath = path.resolve("..", filename.trim());
+    fs.writeFileSync(fullPath, content, "utf8");
+    console.log(`✅ Updated ${fullPath}`);
   }
 }
 
 async function main() {
-  const targetDir = path.resolve("target");
+  const targetDir = path.resolve("../target");
   process.chdir(targetDir);
 
   console.log("🔄 Pulling latest PIM repo...");
