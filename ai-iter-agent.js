@@ -1,141 +1,162 @@
+/**
+ * ai-iter-agent.js
+ * Autonomous Dev Flow for PIM System
+ */
+
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import fetch from 'node-fetch';
 import OpenAI from 'openai';
-import dotenv from 'dotenv';
-dotenv.config();
+import fetch from 'node-fetch';
 
+const PIM_REPO_DIR = path.resolve('../target'); // matches your workflow
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// SETTINGS
-const PIM_REPO_DIR = '../simple-pim-1754492683911';
-const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID;
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
+const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
+const VERCEL_PROJECT = process.env.VERCEL_PROJECT; // from your workflow env
 
-// Persistent product vision for the AI
-const PIM_PROMPT = `
-You are building a modern Product Information Management (PIM) system using Next.js 10 and best practices.
+if (!VERCEL_TOKEN || !VERCEL_TEAM_ID || !VERCEL_PROJECT) {
+  console.error('Missing required Vercel env vars');
+  process.exit(1);
+}
 
-The goal: Iteratively add the most valuable, production-ready features such a PIM should have, keeping the app always deployable.
-Follow these principles:
-- Clean, maintainable code with clear separation of concerns
-- Prioritize features that unlock new capabilities for users:
-  * Product CRUD (create, read, update, delete)
-  * Category and taxonomy management
-  * Bulk import/export (CSV/Excel)
-  * Media asset management
-  * User roles & permissions
-  * API endpoints for integration with e-commerce, ERP, etc.
-  * Search, filtering, and sorting for large product catalogs
-  * Dashboard with KPIs
-- Implement minimal viable versions first, then enhance iteratively
-- Use modern UI patterns and responsive design
-- Avoid breaking changes; every commit must result in a deployable build
-- Keep dependencies up-to-date and secure
-`;
-
-// Run shell commands and capture output
-function runCmd(cmd, cwd = PIM_REPO_DIR) {
+// -----------------
+// Helpers
+// -----------------
+function run(cmd, cwd = PIM_REPO_DIR) {
+  console.log(`\n$ ${cmd}`);
   return execSync(cmd, { cwd, stdio: 'pipe' }).toString().trim();
 }
 
-// Fetch latest Vercel deployment and logs
-async function getLatestDeploymentLogs() {
-  const depRes = await fetch(`https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&limit=1`, {
-    headers: { Authorization: `Bearer ${VERCEL_TOKEN}` }
-  });
+async function fetchLatestBuildLog() {
+  // 1) Get latest deployment
+  const depRes = await fetch(
+    `https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT}&teamId=${VERCEL_TEAM_ID}&limit=1`,
+    { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
+  );
   const depData = await depRes.json();
-  if (!depData.deployments?.length) throw new Error('No deployments found');
-
-  const latest = depData.deployments[0];
-  const depId = latest.uid;
-  const readyState = latest.readyState;
-
-  const logRes = await fetch(`https://api.vercel.com/v13/deployments/${depId}/events`, {
-    headers: { Authorization: `Bearer ${VERCEL_TOKEN}` }
-  });
-  const logData = await logRes.text();
-
-  return { depId, readyState, logData };
-}
-
-// Use OpenAI to fix build errors
-async function fixBuildErrors(logs) {
-  console.log('🚨 Build failed — sending logs to AI for fix...');
-  const codeFiles = getAllCodeFiles();
-
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: 'You are an AI software engineer that fixes build errors in JavaScript/TypeScript/Next.js projects.' },
-      { role: 'user', content: `Here are the latest build logs:\n\n${logs}\n\nHere is the current codebase:\n${codeFiles}\n\nFix the errors so that the app builds successfully without removing existing features.` }
-    ]
-  });
-
-  applyPatch(completion.choices[0].message.content);
-}
-
-// Use OpenAI to add next PIM feature
-async function addNextFeature() {
-  console.log('✅ Build passed — generating next PIM feature...');
-  const codeFiles = getAllCodeFiles();
-
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: 'You are an AI software engineer building a production-ready PIM system.' },
-      { role: 'user', content: `${PIM_PROMPT}\n\nCurrent codebase:\n${codeFiles}\n\nImplement the next high-value feature.` }
-    ]
-  });
-
-  applyPatch(completion.choices[0].message.content);
-}
-
-// Read all JS/TS/TSX files in PIM repo
-function getAllCodeFiles() {
-  const files = [];
-  function walk(dir) {
-    for (const file of fs.readdirSync(dir)) {
-      const fullPath = path.join(dir, file);
-      if (fs.statSync(fullPath).isDirectory()) {
-        walk(fullPath);
-      } else if (/\.(js|ts|tsx)$/.test(file) && fs.statSync(fullPath).size < 20000) {
-        files.push(`--- ${fullPath} ---\n${fs.readFileSync(fullPath, 'utf8')}`);
-      }
-    }
+  if (!depData.deployments || depData.deployments.length === 0) {
+    throw new Error('No deployments found for project');
   }
-  walk(PIM_REPO_DIR);
-  return files.join('\n\n');
+  const deployment = depData.deployments[0];
+  const deployId = deployment.uid;
+  const state = deployment.state;
+
+  // 2) Get build logs (stdout + stderr)
+  const logRes = await fetch(
+    `https://api.vercel.com/v3/deployments/${deployId}/events?teamId=${VERCEL_TEAM_ID}`,
+    { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
+  );
+  const logData = await logRes.json();
+  const logs = JSON.stringify(logData, null, 2);
+
+  return { logs, state, deployId };
 }
 
-// Apply AI patch to repo
-function applyPatch(patchContent) {
-  fs.writeFileSync(path.join(PIM_REPO_DIR, 'ai_patch.txt'), patchContent);
-  runCmd('git pull');
-  // You could improve this by actually parsing diff/patch and writing to files
-  runCmd('git add .');
-  runCmd('git commit -m "AI iteration update" || echo "No changes to commit"');
-  runCmd('git push');
+async function applyAIFix(buildLogs) {
+  const prompt = `
+You are an autonomous senior software engineer.
+You are working inside a Next.js 10 PIM (Product Information Management) application.
+
+The latest Vercel build has failed. The following build logs are provided:
+
+${buildLogs}
+
+Instructions:
+- Identify the root cause of the failure.
+- Propose and implement the minimal code change(s) needed to fix the error.
+- Do not remove existing features unless required to fix the build.
+- Ensure 'npm run build' will succeed locally after your changes.
+- Provide only the updated file contents, each starting with: FILE_PATH: <path from repo root>
+`;
+
+  const resp = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0,
+  });
+
+  await applyCodeDiff(resp.choices[0].message.content);
 }
 
-// MAIN
+async function developNextFeature() {
+  const featurePrompt = `
+You are building a modern Product Information Management (PIM) system
+using Next.js 10 and best practices in software engineering.
+
+The application must always be deployable. When the build is green,
+you will add the next most valuable, production-ready feature that such a PIM should have.
+
+Guidelines:
+- Implement features in small, working increments.
+- Prioritize: Product CRUD, Category management, Bulk import/export, Media asset handling,
+  User roles & permissions, API integration endpoints, Search/filtering/sorting, Dashboard with KPIs.
+- Use clean, maintainable, well-documented code.
+- Ensure 'npm run build' passes after your changes.
+
+Return only updated/added files in the following format:
+FILE_PATH: <path>
+<file contents>
+`;
+
+  const resp = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: featurePrompt }],
+    temperature: 0.7,
+  });
+
+  await applyCodeDiff(resp.choices[0].message.content);
+}
+
+async function applyCodeDiff(aiOutput) {
+  const fileRegex = /^FILE_PATH:\s*(.+)$/gm;
+  let match;
+  const files = [];
+
+  while ((match = fileRegex.exec(aiOutput)) !== null) {
+    const filePath = match[1].trim();
+    const startIndex = match.index + match[0].length;
+    const nextMatch = fileRegex.exec(aiOutput);
+    const endIndex = nextMatch ? nextMatch.index : aiOutput.length;
+    const content = aiOutput.substring(startIndex, endIndex).trim();
+
+    files.push({ filePath, content });
+    if (nextMatch) fileRegex.lastIndex = nextMatch.index;
+  }
+
+  if (files.length === 0) {
+    console.error('No files found in AI output.');
+    console.log(aiOutput);
+    return;
+  }
+
+  for (const { filePath, content } of files) {
+    const absPath = path.join(PIM_REPO_DIR, filePath);
+    fs.mkdirSync(path.dirname(absPath), { recursive: true });
+    fs.writeFileSync(absPath, content, 'utf-8');
+    console.log(`Updated: ${filePath}`);
+  }
+
+  run('git config user.email "ci-bot@example.com"');
+  run('git config user.name "CI Bot"');
+  run('git add .');
+  run(`git commit -m "AI iteration: ${new Date().toISOString()}" || echo "No changes to commit"`);
+  run(`git push origin ${process.env.TARGET_BRANCH || 'main'}`);
+}
+
+// -----------------
+// Main loop
+// -----------------
 (async () => {
-  try {
-    // Step 1: Pull latest
-    runCmd('git pull');
+  console.log('🔄 Fetching latest Vercel build logs...');
+  const { logs, state } = await fetchLatestBuildLog();
 
-    // Step 2: Read latest Vercel logs
-    const { readyState, logData } = await getLatestDeploymentLogs();
-
-    if (readyState === 'ERROR') {
-      await fixBuildErrors(logData);
-    } else if (readyState === 'READY') {
-      await addNextFeature();
-    } else {
-      console.log(`ℹ️ Build state: ${readyState} — no action taken.`);
-    }
-  } catch (err) {
-    console.error('❌ Agent failed:', err);
+  if (state !== 'READY') {
+    console.log('❌ Build failed — applying AI fix...');
+    await applyAIFix(logs);
+  } else {
+    console.log('✅ Build passed — developing next PIM feature...');
+    await developNextFeature();
   }
 })();
