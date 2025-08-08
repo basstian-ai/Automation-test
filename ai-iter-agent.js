@@ -8,6 +8,7 @@ import simpleGit from 'simple-git';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
+import { spawnSync } from 'child_process';
 
 // ─────────────── ENV ───────────────
 const {
@@ -22,7 +23,7 @@ const {
 
   // Vercel
   VERCEL_TOKEN,
-  VERCEL_TEAM_ID,             // optional (required if project is under a team)
+  VERCEL_TEAM_ID,             // optional
   VERCEL_PROJECT              // required: projectId like prj_xxx
 } = process.env;
 
@@ -32,12 +33,12 @@ const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 // ─────────────── Vercel client ───────────────
 const vercel = axios.create({
   baseURL: 'https://api.vercel.com',
-  headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
+  headers: {
+    Authorization: `Bearer ${VERCEL_TOKEN}`,
+    Accept: 'application/json'
+  },
   params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}
 });
-
-// helper: always include default client params (like teamId) on requests
-const qp = (extra = {}) => ({ ...(vercel.defaults.params || {}), ...extra });
 
 // ─────────────── Utils ───────────────
 function writeFiles(fileMap) {
@@ -53,7 +54,7 @@ const approxTokens = (s) => Math.ceil((s?.length || 0) / 4);
 
 // ─────────────── Vercel helpers ───────────────
 
-/** Get latest deployment for project; returns { id, readyState } */
+/** Get latest deployment for project; returns { id, readyState, url } */
 async function fetchLatestDeployment() {
   if (!VERCEL_PROJECT) {
     console.error('❌ Missing VERCEL_PROJECT (prj_xxx).');
@@ -62,7 +63,10 @@ async function fetchLatestDeployment() {
 
   try {
     const res = await vercel.get('/v6/deployments', {
-      params: qp({ projectId: VERCEL_PROJECT, limit: 1 })
+      params: {
+        projectId: VERCEL_PROJECT,
+        limit: 1
+      }
     });
 
     const deployments = res.data?.deployments || [];
@@ -72,7 +76,7 @@ async function fetchLatestDeployment() {
     }
 
     const d = deployments[0];
-    return { id: d.uid, readyState: d.readyState }; // e.g. READY, ERROR, BUILDING
+    return { id: d.uid, readyState: d.readyState, url: d.url };
   } catch (err) {
     const status = err.response?.status;
     const data = err.response?.data;
@@ -87,14 +91,14 @@ async function fetchLatestDeployment() {
   }
 }
 
-/** Fetch build log text for a deployment by trying multiple official paths. */
-async function fetchBuildLog(deployId) {
+/** Fetch build log text for a deployment by trying multiple official paths + CLI fallback. */
+async function fetchBuildLog(deployId, deployUrl) {
   if (!deployId) return 'Ingen forrige deploy.';
 
   const chunks = [];
   const push = (label, text) => {
-    if (text && String(text).trim()) {
-      chunks.push(`\n===== ${label} =====\n${String(text).trim()}`);
+    if (text && text.trim()) {
+      chunks.push(`\n===== ${label} =====\n${text.trim()}`);
     }
   };
 
@@ -105,10 +109,10 @@ async function fetchBuildLog(deployId) {
       .map((e) => e.payload.text)
       .join('\n');
 
-  // 1) v13 deployment events (preferred)
+  // 1) v13 events (preferred)
   try {
     const r = await vercel.get(`/v13/deployments/${deployId}/events`, {
-      params: qp({ limit: 2000 })
+      params: { limit: 2000, ...(VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}) },
     });
     const data = Array.isArray(r.data) ? r.data : r.data?.events || [];
     const txt = stitchEvents(data);
@@ -125,11 +129,11 @@ async function fetchBuildLog(deployId) {
     });
   }
 
-  // 2) v6 deployment events (fallback)
+  // 2) v6 events (fallback)
   if (chunks.length === 0) {
     try {
       const r = await vercel.get(`/v6/deployments/${deployId}/events`, {
-        params: qp({ limit: 2000 })
+        params: { limit: 2000, ...(VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}) },
       });
       const data = Array.isArray(r.data) ? r.data : r.data?.events || [];
       const txt = stitchEvents(data);
@@ -147,11 +151,11 @@ async function fetchBuildLog(deployId) {
     }
   }
 
-  // 3) Per-build logs (some orgs/projects only expose logs here)
+  // 3) Per-build logs nested under the deployment
   if (chunks.length === 0) {
     try {
       const buildsRes = await vercel.get(`/v13/deployments/${deployId}/builds`, {
-        params: qp()
+        params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {},
       });
       const builds = Array.isArray(buildsRes.data) ? buildsRes.data : buildsRes.data?.builds || [];
       if (!builds.length) {
@@ -162,43 +166,43 @@ async function fetchBuildLog(deployId) {
         const buildId = b.id || b.uid || b.buildId;
         if (!buildId) continue;
 
-        // Try /builds/:id/logs
+        // /deployments/:id/builds/:buildId/logs
         try {
-          const rLogs = await vercel.get(`/v13/builds/${buildId}/logs`, {
-            params: qp()
+          const rLogs = await vercel.get(`/v13/deployments/${deployId}/builds/${buildId}/logs`, {
+            params: VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {},
           });
           let txt = '';
           if (typeof rLogs.data === 'string') txt = rLogs.data;
           else if (Array.isArray(rLogs.data)) txt = rLogs.data.join('\n');
           else if (Array.isArray(rLogs.data?.logs)) txt = rLogs.data.logs.join('\n');
 
-          if (txt && txt.trim()) {
-            push(`v13 /builds/${buildId}/logs`, txt);
+          if (txt.trim()) {
+            push(`v13 /deployments/${deployId}/builds/${buildId}/logs`, txt);
           } else {
-            console.warn(`⚠️ v13 /builds/${buildId}/logs had no text`);
+            console.warn(`⚠️ nested /logs had no text for build ${buildId}`);
           }
         } catch (err) {
-          console.warn(`⚠️ v13 /builds/${buildId}/logs failed`, {
+          console.warn(`⚠️ v13 /deployments/${deployId}/builds/${buildId}/logs failed`, {
             status: err.response?.status,
             code: err.response?.data?.code,
             message: err.response?.data?.message || err.message,
           });
         }
 
-        // Try /builds/:id/events
+        // /deployments/:id/builds/:buildId/events
         try {
-          const rEv = await vercel.get(`/v13/builds/${buildId}/events`, {
-            params: qp({ limit: 2000 })
+          const rEv = await vercel.get(`/v13/deployments/${deployId}/builds/${buildId}/events`, {
+            params: { limit: 2000, ...(VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}) },
           });
           const data = Array.isArray(rEv.data) ? rEv.data : rEv.data?.events || [];
           const txt = stitchEvents(data);
           if (txt.trim()) {
-            push(`v13 /builds/${buildId}/events`, txt);
+            push(`v13 /deployments/${deployId}/builds/${buildId}/events`, txt);
           } else {
-            console.warn(`⚠️ v13 /builds/${buildId}/events returned no payload.text`);
+            console.warn(`⚠️ nested /events returned no payload.text for build ${buildId}`);
           }
         } catch (err) {
-          console.warn(`⚠️ v13 /builds/${buildId}/events failed`, {
+          console.warn(`⚠️ v13 /deployments/${deployId}/builds/${buildId}/events failed`, {
             status: err.response?.status,
             code: err.response?.data?.code,
             message: err.response?.data?.message || err.message,
@@ -214,24 +218,51 @@ async function fetchBuildLog(deployId) {
     }
   }
 
+  // 4) CLI fallback (often works even when API endpoints are picky)
+  if (chunks.length === 0 && deployUrl) {
+    try {
+      const args = [
+        'vercel@latest',
+        'logs',
+        deployUrl.startsWith('http') ? deployUrl : `https://${deployUrl}`,
+        '--token', VERCEL_TOKEN,
+        '--all',
+        '--no-color'
+      ];
+      if (VERCEL_TEAM_ID) {
+        args.push('--scope', VERCEL_TEAM_ID);
+      }
+      const res = spawnSync('npx', args, { encoding: 'utf-8' });
+      if (res.error) {
+        console.warn('⚠️ CLI logs spawn error:', res.error?.message);
+      } else {
+        const out = (res.stdout || '') + (res.stderr || '');
+        if (out.trim()) push('cli vercel logs', out);
+      }
+    } catch (e) {
+      console.warn('⚠️ CLI fallback failed:', e?.message);
+    }
+  }
+
   const out = chunks.join('\n').trim();
   if (!out) {
     console.warn('⚠️ No build logs found from any path; returning placeholder.');
     return 'Ingen build-logger funnet.';
   }
-  console.log('🔍 buildLog len =', out.length);
   // keep last 8k chars for token sanity
   return out.slice(-8000);
 }
 
 /** Decide if build failed using readyState first, then log heuristics */
 function detectBuildFailed(readyState, buildLog) {
+  // Trust the platform state first if present
   if (readyState) {
     const rs = String(readyState).toUpperCase();
     if (['ERROR', 'FAILED', 'CANCELED'].includes(rs)) return true;
     if (['READY', 'SUCCESS'].includes(rs)) return false;
   }
 
+  // Heuristics on logs as fallback
   const log = (buildLog || '').toLowerCase();
   const redSignals = [
     'build failed',
@@ -244,6 +275,8 @@ function detectBuildFailed(readyState, buildLog) {
     'module not found',
     'tsc found',
     'eslint found',
+    'failed to compile',
+    'build error occurred'
   ];
 
   const greenSignals = [
@@ -252,6 +285,7 @@ function detectBuildFailed(readyState, buildLog) {
     'compiled successfully',
     'ready! deployed to',
     'deployment completed',
+    'build completed in'
   ];
 
   const redHit = redSignals.some(s => log.includes(s));
@@ -259,7 +293,9 @@ function detectBuildFailed(readyState, buildLog) {
 
   if (redHit && !greenHit) return true;
   if (greenHit && !redHit) return false;
-  return false; // ambiguous → treat as green only if readyState said so
+
+  // Ambiguous? Default to "green" so we don’t block improvements forever.
+  return false;
 }
 
 // ─────────────── OpenAI helpers ───────────────
@@ -285,8 +321,9 @@ async function safeCompletion(opts, retries = 3) {
   const latest = await fetchLatestDeployment();
   const lastDeployId = latest?.id || null;
   const readyState = latest?.readyState || null;
-  const buildLog = await fetchBuildLog(lastDeployId);
+  const deployUrl = latest?.url || null;
 
+  const buildLog = await fetchBuildLog(lastDeployId, deployUrl);
   const buildFailed = detectBuildFailed(readyState, buildLog);
 
   console.log('📝 lastDeployId:', lastDeployId, 'readyState:', readyState, 'buildFailed:', buildFailed);
@@ -294,7 +331,7 @@ async function safeCompletion(opts, retries = 3) {
 
   // 3) Tailored system prompt
   const modeText = buildFailed
-    ? `Bygget er RØDT. Finn årsaken i buildLog og rett feilen. Prioriter små, sikre endringer.`
+    ? `Bygget er RØDT. Finn årsaken i buildLog og rett feilen. Prioriter å gjøre det minimal-invasivt (små, sikre endringer).`
     : `Bygget er GRØNT. Implementer en liten, inkrementell forbedring i PIM-systemet (kodekvalitet, tilgjengelighet, DX, tests, eller en liten UI/UX-polish).`;
 
   const systemPrompt = `
@@ -304,8 +341,8 @@ ${modeText}
 Krav:
 - Endringer skal være små, atomiske og trygge.
 - Forklar kort hva du endrer i "commitMessage".
-- Ikke modifiser lockfiles manuelt.
-- Kjør type-/lint-fiks i koden du endrer ved behov.
+- Ikke modifiser låste filer (lockfiles) manuelt.
+- Kjør type-/lint-fiks (ved behov) i koden du endrer.
 
 Returnér KUN gyldig JSON:
 {
@@ -313,7 +350,7 @@ Returnér KUN gyldig JSON:
   "commitMessage": "<kort beskrivelse>"
 }`.trim();
 
-  const userPayload = { files: repoFiles, buildLog, lastDeployId, readyState, buildFailed };
+  const userPayload = { files: repoFiles, buildLog, lastDeployId, readyState, buildFailed, deployUrl };
   const userPrompt = JSON.stringify(userPayload);
 
   const tokenEstimate = approxTokens(systemPrompt) + approxTokens(userPrompt);
