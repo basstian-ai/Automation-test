@@ -1,175 +1,127 @@
 #!/usr/bin/env node
-/**
- * Self-iterating AI agent for autonomous dev flow
- * Senior Architect edition – resilient & production-ready
- */
-
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 const fetch = require("node-fetch");
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
-const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
-const VERCEL_PROJECT = process.env.VERCEL_PROJECT;
-const TARGET_REPO = process.env.TARGET_REPO;
-const TARGET_BRANCH = process.env.TARGET_BRANCH || "main";
-const PAT_TOKEN = process.env.PAT_TOKEN;
+const {
+  OPENAI_API_KEY,
+  VERCEL_TOKEN,
+  VERCEL_TEAM_ID,
+  VERCEL_PROJECT,
+  TARGET_BRANCH,
+} = process.env;
 
-if (!OPENAI_API_KEY || !VERCEL_TOKEN || !VERCEL_PROJECT || !TARGET_REPO || !PAT_TOKEN) {
-  console.error("❌ Missing required environment variables.");
-  process.exit(1);
-}
+const targetDir = path.join(process.cwd(), "target");
+const logFilePath = path.join(targetDir, "vercel_build.log");
 
-console.log(`📂 CWD: ${process.cwd()}`);
-console.log(`🎯 Target: ${TARGET_REPO} @ ${TARGET_BRANCH}`);
+async function fetchVercelLogs() {
+  console.log("🔄 Fetching Vercel build logs...");
 
-// ------------------- Utilities -------------------
-function run(cmd, opts = {}) {
-  console.log(`$ ${cmd}`);
-  return execSync(cmd, { stdio: "inherit", ...opts });
-}
-
-function readFileSafe(filePath) {
-  try {
-    return fs.readFileSync(filePath, "utf-8");
-  } catch {
-    return null;
-  }
-}
-
-// ------------------- Package JSON Repair -------------------
-function repairPackageJson() {
-  const pkgPath = path.join(process.cwd(), "package.json");
-  const content = readFileSafe(pkgPath);
-  if (!content) return;
-
-  try {
-    JSON.parse(content);
-  } catch (err) {
-    console.warn("⚠️ package.json is invalid JSON – attempting fix...");
-    const fixed = content
-      .replace(/\/\/.*$/gm, "") // remove comments
-      .replace(/,\s*}/g, "}")
-      .replace(/,\s*]/g, "]");
-    try {
-      JSON.parse(fixed);
-      fs.writeFileSync(pkgPath, fixed);
-      console.log("✅ package.json fixed.");
-    } catch (e) {
-      console.error("❌ Could not auto-fix package.json", e);
+  // 1. Get latest deployment
+  const deployList = await fetch(
+    `https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT}&teamId=${VERCEL_TEAM_ID}&limit=1`,
+    {
+      headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
     }
+  ).then((res) => res.json());
+
+  if (!deployList.deployments || !deployList.deployments.length) {
+    throw new Error("No deployments found.");
   }
+  const deployId = deployList.deployments[0].uid;
+
+  // 2. Get events/logs for that deployment
+  const events = await fetch(
+    `https://api.vercel.com/v3/deployments/${deployId}/events?teamId=${VERCEL_TEAM_ID}`,
+    {
+      headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
+    }
+  ).then((res) => res.json());
+
+  const logText = events.map((e) => e.payload?.text || "").join("\n");
+  fs.writeFileSync(logFilePath, logText);
+  console.log(`📝 Logs saved to ${logFilePath}`);
+
+  return logText;
 }
 
-// ------------------- Lock File Repair -------------------
-function repairLockFileIfNeeded() {
-  try {
-    run("npm ci");
-    return;
-  } catch {
-    console.warn("⚠️ npm ci failed — regenerating lockfile...");
-    fs.rmSync("package-lock.json", { force: true });
-    run("npm install");
-    run("npm audit fix --force || true");
-    run("git add package-lock.json");
-    run(`git commit -m "chore: regenerate lock file" || true`);
-  }
-}
-
-// ------------------- Fetch Vercel State -------------------
-async function getVercelState() {
-  const url = `https://api.vercel.com/v13/projects/${VERCEL_PROJECT}/deployments?teamId=${VERCEL_TEAM_ID}&limit=1`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
-  });
-  const data = await res.json();
-  if (!data.deployments?.length) {
-    console.error("❌ No deployments found.");
+async function run() {
+  // Ensure target repo exists
+  if (!fs.existsSync(targetDir)) {
+    console.error("❌ Target directory not found.");
     process.exit(1);
   }
-  const state = data.deployments[0].readyState;
-  console.log(`🔍 Vercel state: ${state}`);
-  return state;
-}
 
-// ------------------- AI Patch Generation -------------------
-async function generateAIPatch(mode, logs) {
+  // Get latest build logs
+  const buildLogs = await fetchVercelLogs();
+
+  // Build AI prompt
   const prompt = `
-You are an expert developer.
-The project build logs show: ${logs}
+You are an AI developer. The goal is to make the Vercel build green.
 
-Mode: ${mode}
+Repository path: ${targetDir}
+Branch: ${TARGET_BRANCH}
 
-If mode=FIX: generate a git diff that fixes the issue.
-If mode=FEATURE: improve code by adding small enhancements.
+Vercel build logs:
+\`\`\`
+${buildLogs}
+\`\`\`
 
-Return only a valid git unified diff.
+Task:
+1. Identify the cause of the build failure from logs.
+2. Modify the code in the target repo to fix the issue.
+3. If build is already green, improve existing features.
+
+Output ONLY the 'git diff' patch.
 `;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  console.log("🤖 Sending prompt to OpenAI...");
+  const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY}`,
       "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
     }),
-  });
+  }).then((res) => res.json());
 
-  const data = await res.json();
-  const diff = data.choices?.[0]?.message?.content;
-  if (!diff || !diff.includes("diff --git")) {
-    throw new Error("AI did not return a valid diff.");
-  }
-  return diff;
-}
-
-function applyPatch(diff) {
-  fs.writeFileSync("patch.diff", diff);
-  try {
-    run("git apply --whitespace=fix patch.diff");
-    console.log("✅ Patch applied.");
-  } catch {
-    console.warn("⚠️ Patch failed – forcing apply with 3-way merge...");
-    run("git apply --3way --whitespace=fix patch.diff || true");
-  }
-}
-
-// ------------------- Main Flow -------------------
-(async function main() {
-  // Step 1: Ensure clean working dir
-  run("git reset --hard");
-  run(`git checkout ${TARGET_BRANCH}`);
-  run("git pull");
-
-  // Step 2: Repair package.json & lock file
-  repairPackageJson();
-  repairLockFileIfNeeded();
-
-  // Step 3: Determine mode
-  const state = await getVercelState();
-  const mode = state === "ERROR" ? "FIX" : "FEATURE";
-
-  // Step 4: Fetch logs (optional: implement full fetch from Vercel)
-  const logs = state === "ERROR" ? "Build failed logs here" : "Build successful";
-
-  // Step 5: Generate & apply AI patch
-  try {
-    const diff = await generateAIPatch(mode, logs);
-    applyPatch(diff);
-  } catch (err) {
-    console.error("❌ AI patch generation failed:", err);
+  const patch = aiResponse.choices?.[0]?.message?.content;
+  if (!patch) {
+    console.error("❌ No patch returned from AI.");
     process.exit(1);
   }
 
-  // Step 6: Commit & push
-  run("git add .");
-  run(`git commit -m "AI ${mode} update" || true`);
-  run(`git push https://x-access-token:${PAT_TOKEN}@github.com/${TARGET_REPO}.git ${TARGET_BRANCH}`);
+  // Apply patch
+  fs.writeFileSync(path.join(process.cwd(), "ai_patch.diff"), patch);
+  try {
+    execSync("git apply --check ai_patch.diff", { cwd: targetDir });
+    execSync("git apply ai_patch.diff", { cwd: targetDir });
+    console.log("✅ Patch applied.");
+  } catch (err) {
+    console.error("❌ Patch failed to apply:", err.message);
+    process.exit(1);
+  }
 
-  console.log("🚀 Changes pushed.");
-})();
+  // Commit & push
+  try {
+    execSync("git config user.name 'AI Bot'", { cwd: targetDir });
+    execSync("git config user.email 'ai-bot@example.com'", { cwd: targetDir });
+    execSync("git add .", { cwd: targetDir });
+    execSync(`git commit -m "AI: ${new Date().toISOString()}"`, {
+      cwd: targetDir,
+    });
+    execSync(`git push origin ${TARGET_BRANCH}`, { cwd: targetDir });
+    console.log("📤 Changes pushed.");
+  } catch {
+    console.log("ℹ️ Nothing to commit.");
+  }
+}
+
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
