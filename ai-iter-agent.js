@@ -1,130 +1,150 @@
-// ai-iter-agent.js
+#!/usr/bin/env node
 import fs from "fs";
 import { execSync } from "child_process";
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const TARGET_REPO = process.env.TARGET_REPO;
-const TARGET_BRANCH = process.env.TARGET_BRANCH || "main";
-const PAT = process.env.PAT_TOKEN;
-
-// Run shell commands
-function run(cmd, options = {}) {
-  console.log(`\n$ ${cmd}`);
-  return execSync(cmd, { stdio: "pipe", encoding: "utf-8", ...options }).trim();
+// tiny helper to run shell
+function sh(cmd, opts = {}) {
+  console.log(`$ ${cmd}`);
+  return execSync(cmd, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...opts }).toString();
 }
 
-// Validate patch from AI
-function extractValidDiff(patchText) {
-  const startIndex = patchText.indexOf("diff --git");
-  if (startIndex === -1) return null;
-  const cleanPatch = patchText.slice(startIndex).trim();
+const env = process.env;
+const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
-  // Ensure it's at least one file diff
-  if (!/^diff --git/m.test(cleanPatch)) return null;
-  return cleanPatch;
-}
-
-// Get latest Vercel build logs
-async function fetchBuildLogs() {
-  console.log("🔄 Fetching build logs...");
+async function fetchVercelLogs() {
+  console.log("🔄 Fetching Vercel build logs...");
   try {
-    const res = await fetch(
-      `https://api.vercel.com/v6/deployments?projectId=${process.env.VERCEL_PROJECT}&teamId=${process.env.VERCEL_TEAM_ID}`,
-      { headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}` } }
-    );
-    const data = await res.json();
-    if (!data.deployments?.length) return null;
+    const list = sh(`curl -s -H "Authorization: Bearer ${env.VERCEL_TOKEN}" "https://api.vercel.com/v6/deployments?projectId=${env.VERCEL_PROJECT}&teamId=${env.VERCEL_TEAM_ID}&limit=1"`);
+    const json = JSON.parse(list);
+    const dep = json.deployments?.[0];
+    if (!dep) return { state: "unknown", logs: "" };
 
-    const latest = data.deployments[0];
-    const logsRes = await fetch(
-      `https://api.vercel.com/v3/deployments/${latest.uid}/events?teamId=${process.env.VERCEL_TEAM_ID}`,
-      { headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}` } }
-    );
-    const logs = await logsRes.text();
-    return logs;
+    const state = dep.readyState || dep.state || "unknown";
+    const events = sh(`curl -s -H "Authorization: Bearer ${env.VERCEL_TOKEN}" "https://api.vercel.com/v3/deployments/${dep.uid}/events?teamId=${env.VERCEL_TEAM_ID}"`);
+    return { state, logs: events.slice(0, 30000) }; // guard against token bloat
   } catch (e) {
-    console.error("⚠️ Failed to fetch build logs:", e.message);
-    return null;
+    console.log("⚠️ Vercel logs fetch failed:", e.message);
+    return { state: "unknown", logs: "" };
   }
 }
 
-// Decide mode: FIX or IMPROVE
-function decideMode(logs) {
-  if (!logs) return "IMPROVE";
-  return logs.includes("BUILD_ERROR") || logs.includes("Error") ? "FIX" : "IMPROVE";
+function repoContext() {
+  // keep context small-ish to avoid token spikes
+  const files = sh(`git ls-files`).split("\n").slice(0, 400).join("\n"); // cap to 400 files
+  const lastCommit = sh(`git log -1 --pretty=%B`).trim();
+  return { files, lastCommit };
 }
 
-// Ask AI for next patch
-async function askAI(mode, logs) {
-  console.log("🧠 Asking AI for next iteration...");
-  const prompt = `
-You are an autonomous software engineer improving a modern PIM system.
-Repository: ${TARGET_REPO}
-Current mode: ${mode}
-Build logs:
-${logs || "No build logs"}
-
-Rules:
-- Output ONLY a valid unified diff patch.
-- Start with "diff --git" — no explanations, no markdown, no backticks.
-- If mode=FIX: focus only on fixing build/run errors.
-- If mode=IMPROVE: add next best feature for a modern PIM (CRUD products, categories, attributes, search, bulk import, API docs, etc.).
-- Always keep the app deployable.
-`;
-  const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content: prompt }],
-  });
-  return res.choices[0].message.content.trim();
+function extractCleanDiff(text) {
+  const i = text.indexOf("diff --git");
+  if (i < 0) return null;
+  // strip any backticks or markdown fence junk
+  let patch = text.slice(i).replace(/```/g, "").trim();
+  // quick sanity check: must contain at least one file header
+  if (!/^diff --git .+/m.test(patch)) return null;
+  return patch;
 }
 
-// Apply patch and commit
-function applyPatch(patch) {
-  fs.writeFileSync("patch.diff", patch);
+function tryApplyPatch(patchText) {
+  fs.writeFileSync("ai_patch.diff", patchText);
   try {
-    run("git apply patch.diff");
-    run('git config user.email "bot@example.com"');
-    run('git config user.name "AI Dev Agent"');
-    run("git add .");
-    const status = run("git status --porcelain");
-    if (!status) {
-      console.log("ℹ️ No changes to commit.");
-      return false;
-    }
-    run('git commit -m "AI iteration update"');
+    sh("git apply --check ai_patch.diff", { stdio: "inherit" });
+  } catch {
+    return false;
+  }
+  try {
+    sh("git apply ai_patch.diff", { stdio: "inherit" });
     return true;
-  } catch (e) {
-    console.error("❌ Failed to apply patch:", e.message);
+  } catch {
     return false;
   }
 }
 
-// Push changes using PAT
-function pushChanges() {
-  const pushUrl = `https://${PAT}@github.com/${TARGET_REPO}.git`;
-  run(`git push ${pushUrl} ${TARGET_BRANCH}`);
+async function askAI(mode, logs, ctx) {
+  const system = `You are an autonomous software engineer improving a modern PIM (Next.js) codebase.
+Rules:
+- If build is failing (mode=FIX): produce the minimal changes to make the build succeed on Vercel.
+- If build is passing (mode=IMPROVE): implement a small, valuable PIM improvement (e.g., fix warnings, add missing deps, small feature, tighten types, improve API route).
+- Output ONLY a valid unified git diff that applies with \`git apply\`.
+- No explanations, no markdown, no backticks.
+- Start with "diff --git".
+- Keep diffs small but complete.`;
+
+  const user = `Mode: ${mode}
+Build logs (possibly truncated):
+${logs || "(none)"}
+
+Repository files (first ~400):
+${ctx.files}
+
+Last commit message:
+${ctx.lastCommit}
+
+Produce a unified diff to either fix the build or implement a small improvement (ensure repo remains deployable).`;
+
+  const res = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.1,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user }
+    ]
+  });
+
+  return res.choices?.[0]?.message?.content || "";
 }
 
-(async () => {
-  // Fetch logs + decide mode
-  const logs = await fetchBuildLogs();
-  const mode = decideMode(logs);
-  console.log(`🔍 Mode: ${mode}`);
+async function main() {
+  // 1) Ensure node modules exist in target
+  try { sh("npm ci || npm i"); } catch {}
 
-  // Ask AI for patch
-  const aiOutput = await askAI(mode, logs);
-  const cleanDiff = extractValidDiff(aiOutput);
+  // 2) Get vercel status & mode
+  const { state, logs } = await fetchVercelLogs();
+  const mode = /ERROR|FAILED|ERROR_BUILD|BUILD_ERROR/i.test(state + " " + logs) ? "FIX" : "IMPROVE";
+  console.log(`🔍 Mode: ${mode} (Vercel state: ${state})`);
 
-  if (!cleanDiff) {
-    console.error("⚠️ AI did not return a valid diff. Skipping this iteration.");
+  // 3) Repo context
+  const ctx = repoContext();
+
+  // 4) Ask AI for a patch with retries
+  let patch = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    console.log(`🤖 Generating patch (attempt ${attempt})...`);
+    const out = await askAI(mode, logs, ctx);
+    const clean = extractCleanDiff(out || "");
+    if (!clean) {
+      console.log("⚠️ AI did not return a valid unified diff. Retrying…");
+      continue;
+    }
+    if (tryApplyPatch(clean)) {
+      patch = clean;
+      break;
+    } else {
+      console.log("⚠️ Patch failed to apply. Retrying…");
+    }
+  }
+
+  if (!patch) {
+    console.log("⏭️ Skipping: no valid patch after 3 attempts.");
     return;
   }
 
-  // Apply + commit + push
-  if (applyPatch(cleanDiff)) {
-    pushChanges();
-    console.log("✅ Changes pushed");
+  // 5) Commit & push via PAT (avoid github-actions[bot] 403)
+  sh('git config user.name "AI Dev Agent"');
+  sh('git config user.email "github-actions[bot]@users.noreply.github.com"');
+  const hasChanges = sh("git status --porcelain");
+  if (!hasChanges) {
+    console.log("ℹ️ No changes to commit after applying patch.");
+    return;
   }
-})();
+  sh('git commit -m "AI iteration update"');
+  const pushUrl = `https://${env.PAT_TOKEN}@github.com/${env.TARGET_REPO}.git`;
+  sh(`git push ${pushUrl} ${env.TARGET_BRANCH}`);
+  console.log("✅ Changes pushed");
+}
+
+main().catch((e) => {
+  console.error("Fatal agent error:", e.message);
+  process.exit(1);
+});
