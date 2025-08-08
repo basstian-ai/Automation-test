@@ -1,9 +1,9 @@
 name: AI Iteration Agent
 
 on:
-  workflow_dispatch: # run manually
+  workflow_dispatch:
   schedule:
-    - cron: "0 * * * *" # every hour
+    - cron: "0 * * * *"
 
 jobs:
   ai-iter-agent:
@@ -15,12 +15,13 @@ jobs:
           repository: basstian-ai/Automation-test
           ref: main
           token: ${{ secrets.PAT_TOKEN }}
+          path: automation
 
       - name: Checkout target repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.TARGET_REPO }}
-          ref: ${{ env.TARGET_BRANCH }}
+          repository: basstian-ai/simple-pim-1754492683911
+          ref: main
           token: ${{ secrets.PAT_TOKEN }}
           path: target
 
@@ -29,10 +30,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies for automation
+      - name: Install dependencies
         run: npm install
+        working-directory: automation
 
-      - name: Set up Git identity for bot commits
+      - name: Configure Git identity (for commits in target repo)
         run: |
           git config --global user.name "AI Iteration Bot"
           git config --global user.email "bot@example.com"
@@ -43,12 +45,16 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
           VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
-          TARGET_REPO: ${{ env.TARGET_REPO }}
-          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
+          TARGET_REPO: basstian-ai/simple-pim-1754492683911
+          TARGET_BRANCH: main
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
+          cd automation
           NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" node ai-iter-agent.js
 
-env:
-  TARGET_REPO: basstian-ai/simple-pim-1754492683911
-  TARGET_BRANCH: main
+      - name: Push changes in target repo
+        run: |
+          cd target
+          git add .
+          git commit -m "AI iteration update" || echo "No changes to commit"
+          git push origin main
