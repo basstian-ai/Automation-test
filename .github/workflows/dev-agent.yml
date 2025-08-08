@@ -39,6 +39,5 @@ jobs:
           TARGET_BRANCH: ${{ secrets.TARGET_BRANCH }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
-          cd target
           NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" \
           node ../automation/ai-iter-agent.cjs
