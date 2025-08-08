@@ -1,49 +1,54 @@
-name: AI Dev Agent
+name: AI Iteration Agent
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
+  workflow_dispatch: # run manually
+  schedule:
+    - cron: "0 * * * *" # every hour
 
 jobs:
-  iter:
+  ai-iter-agent:
     runs-on: ubuntu-latest
-    env:
-      TARGET_REPO: basstian-ai/simple-pim-1754492683911
-      TARGET_BRANCH: main
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
-      VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
-      PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
-
     steps:
-      # 1) Checkout Automation-test (contains ai-iter-agent.js)
-      - uses: actions/checkout@v4
+      - name: Checkout automation repo
+        uses: actions/checkout@v4
         with:
-          path: automation
+          repository: basstian-ai/Automation-test
+          ref: main
+          token: ${{ secrets.PAT_TOKEN }}
 
-      # 2) Checkout PIM repo into /home/runner/work/Automation-test/target
-      - uses: actions/checkout@v4
+      - name: Checkout target repo
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.TARGET_REPO }}
+          ref: ${{ env.TARGET_BRANCH }}
           token: ${{ secrets.PAT_TOKEN }}
           path: target
 
-      # 3) Install deps for AI agent
-      - name: Install AI agent deps
-        run: npm ci
-        working-directory: automation
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      # 4) Run AI agent from root of Automation-test repo
-      - name: Run AI Dev Agent
-        run: NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" node ai-iter-agent.js
-        working-directory: automation
+      - name: Install dependencies for automation
+        run: npm install
+
+      - name: Set up Git identity for bot commits
+        run: |
+          git config --global user.name "AI Iteration Bot"
+          git config --global user.email "bot@example.com"
+
+      - name: Run AI Iteration Agent
         env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
           TARGET_REPO: ${{ env.TARGET_REPO }}
           TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
-          VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
-          PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" node ai-iter-agent.js
+
+env:
+  TARGET_REPO: basstian-ai/simple-pim-1754492683911
+  TARGET_BRANCH: main
