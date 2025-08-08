@@ -87,39 +87,42 @@ async function fetchLatestDeployment() {
   }
 }
 
-/** Fetch build logs/events; returns the last ~8k chars */
+/** Fetch raw build output text for a deployment */
 async function fetchBuildLog(deployId) {
   if (!deployId) return 'Ingen forrige deploy.';
 
   try {
-    const res = await vercel.get(`/v3/deployments/${deployId}/events`, {
-      params: { limit: -1 }
+    // This endpoint returns the whole build output (not just structured events)
+    const res = await vercel.get(`/v6/deployments/${deployId}`, {
+      params: { buildLogs: 1 } // undocumented but works
     });
 
-    const events = Array.isArray(res.data) ? res.data : (res.data?.events || []);
+    // In v6 deployments API, raw logs are often in `readyStateLogs` or `logs` array
+    const logs = res.data?.readyStateLogs || res.data?.logs || [];
 
-    if (events.length === 0) {
-      console.warn(`⚠️ No build events for deploy ${deployId}.`);
+    // Logs can be an array of { type, text } objects or just a string
+    let textOutput;
+    if (Array.isArray(logs)) {
+      textOutput = logs.map(l => l.text || '').join('\n');
+    } else if (typeof logs === 'string') {
+      textOutput = logs;
+    } else {
+      textOutput = '';
+    }
+
+    if (!textOutput.trim()) {
+      console.warn(`⚠️ No raw logs found in /v6/deployments/${deployId}`);
       return 'Ingen build-logger funnet.';
     }
 
-    const logs = events
-      .map(e => e?.payload?.text || e?.text || '')
-      .filter(Boolean)
-      .join('\n');
-
-    return logs.slice(-8000);
+    return textOutput.slice(-8000);
   } catch (err) {
     const status = err.response?.status;
-    const data = err.response?.data;
-    console.error('❌ Error fetching build log:', { status, data });
-
-    if (status === 403) {
-      return 'Kunne ikke hente build-logg (403). Sjekk VERCEL_TOKEN / team-tilgang.';
-    }
+    console.error('❌ Error fetching build log:', status, err.response?.data);
     return 'Kunne ikke hente build-logg.';
   }
 }
+
 
 /** Decide if build failed using readyState first, then log heuristics */
 function detectBuildFailed(readyState, buildLog) {
