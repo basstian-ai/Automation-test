@@ -12,47 +12,47 @@ jobs:
       TARGET_REPO: basstian-ai/simple-pim-1754492683911
       TARGET_BRANCH: main
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-      VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
+      VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
+      PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
 
     steps:
-      # 1) Checkout automation repo (this repo)
+      # 1) Check out automation repo (this repo)
       - uses: actions/checkout@v4
-        with:
-          path: automation
 
-      # 2) Checkout target PIM repo
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ env.TARGET_REPO }}
-          token: ${{ secrets.PAT_TOKEN }}
-          ref: ${{ env.TARGET_BRANCH }}
-          path: target
+      # 2) Clone target repo fresh into ./target
+      - name: Clone target repo
+        run: |
+          rm -rf target
+          git clone https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ env.TARGET_REPO }} target
+          cd target
+          git checkout ${{ env.TARGET_BRANCH }}
 
-      # 3) Install automation repo dependencies
-      - name: Install automation dependencies
+      # 3) Install deps for automation agent
+      - name: Install agent dependencies
         run: npm ci
-        working-directory: automation
 
-      # 4) Run AI Dev Agent inside target repo
-      - name: Run AI Dev Agent in target repo
-        working-directory: target
+      # 4) Run the AI iteration agent inside target folder
+      - name: Run AI Dev Agent
         run: |
-          NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" \
-          node ../automation/ai-iter-agent.js
+          cd target
+          NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" node ../ai-iter-agent.js
+        env:
+          TARGET_REPO: ${{ env.TARGET_REPO }}
+          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
+          VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
+          PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
 
-      # 5) Commit & push if changes
-      - name: Commit and push changes
-        working-directory: target
+      # 5) Commit & push results
+      - name: Commit & Push changes
         run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
+          cd target
+          git config user.name "AI Iteration Bot"
+          git config user.email "bot@example.com"
           git add .
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "AI iteration update"
-            git push origin ${{ env.TARGET_BRANCH }}
-          fi
+          git commit --allow-empty -m "AI iteration update [skip ci]"
+          git push origin ${{ env.TARGET_BRANCH }}
