@@ -9,8 +9,7 @@ const {
   VERCEL_TOKEN,
   VERCEL_TEAM_ID,
   VERCEL_PROJECT,
-  TARGET_BRANCH,
-  PAT_TOKEN
+  TARGET_BRANCH
 } = process.env;
 
 if (!OPENAI_API_KEY || !VERCEL_TOKEN) {
@@ -20,7 +19,7 @@ if (!OPENAI_API_KEY || !VERCEL_TOKEN) {
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-async function run(cmd, opts = {}) {
+function run(cmd, opts = {}) {
   console.log(`$ ${cmd}`);
   return execSync(cmd, { stdio: "pipe", encoding: "utf-8", ...opts });
 }
@@ -44,41 +43,6 @@ async function fetchVercelLogs() {
   return { state: latest.state, logs };
 }
 
-async function getAIUpdate({ logs, buildOk }) {
-  const systemPrompt = `
-You are an autonomous developer maintaining a Product Information Management (PIM) system.
-Rules:
-- If buildOk=false: Find and fix the cause using the logs + current codebase.
-- If buildOk=true: Implement the next most valuable modern PIM feature following best practices.
-- Only commit working, deployable code.
-- PIM features can include: advanced search, product variants, bulk editing, category management, integrations, image handling, etc.
-- Keep changes minimal if fixing; be more ambitious if adding features.
-`;
-
-  const files = listFilesRecursive(".");
-  const content = files
-    .map(f => `// FILE: ${f}\n${fs.readFileSync(f, "utf8")}`)
-    .join("\n\n");
-
-  const userPrompt = `
-Build status: ${buildOk ? "GREEN" : "RED"}
-Latest Vercel logs:\n${logs}
-
-Current codebase:\n${content}
-`;
-
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4.1",
-    temperature: 0.2,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ]
-  });
-
-  return resp.choices[0].message.content;
-}
-
 function listFilesRecursive(dir) {
   let results = [];
   fs.readdirSync(dir).forEach(file => {
@@ -94,14 +58,63 @@ function listFilesRecursive(dir) {
   return results;
 }
 
+async function getAIUpdate({ logs, buildOk }) {
+  const systemPrompt = `
+You are an autonomous developer for a Product Information Management (PIM) system.
+
+Rules:
+- If buildOk=false: identify and fix the cause using logs + codebase.
+- If buildOk=true: implement the next high-value feature for a modern PIM system.
+- Only produce deployable code — no pseudocode, no TODOs.
+- Overwrite the necessary files completely with final working code.
+`;
+
+  const files = listFilesRecursive("target");
+  const content = files
+    .map(f => `// FILE: ${f}\n${fs.readFileSync(f, "utf8")}`)
+    .join("\n\n");
+
+  const userPrompt = `
+Build status: ${buildOk ? "GREEN" : "RED"}
+Latest Vercel logs:\n${logs}
+
+Current codebase:\n${content}
+
+Return only valid file contents with the same // FILE: markers for direct overwrite.
+`;
+
+  const resp = await openai.chat.completions.create({
+    model: "gpt-4.1",
+    temperature: 0.2,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ]
+  });
+
+  return resp.choices[0].message.content;
+}
+
+function applyAIChanges(aiOutput) {
+  const parts = aiOutput.split("// FILE: ").slice(1);
+  for (const part of parts) {
+    const [filename, ...rest] = part.split("\n");
+    const content = rest.join("\n");
+    fs.writeFileSync(filename.trim(), content, "utf8");
+    console.log(`✅ Updated ${filename.trim()}`);
+  }
+}
+
 async function main() {
-  console.log("🔄 Pulling latest PIM repo code...");
+  const targetDir = path.resolve("target");
+  process.chdir(targetDir);
+
+  console.log("🔄 Pulling latest PIM repo...");
   run(`git pull origin ${TARGET_BRANCH}`);
 
   const { state, logs } = await fetchVercelLogs();
   console.log(`📦 Latest deployment state: ${state}`);
 
-  console.log("🧪 Running local build check...");
   let buildOk = true;
   try {
     run("npm install");
@@ -111,12 +124,7 @@ async function main() {
   }
 
   const aiPatch = await getAIUpdate({ logs, buildOk });
-  console.log("🤖 AI suggested update:\n", aiPatch);
-
-  fs.writeFileSync("AI_PATCH.txt", aiPatch);
-
-  // Apply patch manually here (AI returns full file changes or diffs)
-  // This assumes AI outputs full new files — you'll need a parser if diff-based
+  applyAIChanges(aiPatch);
 
   run(`git config user.name "AI Dev Agent"`);
   run(`git config user.email "ai-agent@example.com"`);
