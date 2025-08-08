@@ -1,9 +1,9 @@
 name: AI Iteration Agent
 
 on:
-  workflow_dispatch:   # manual run
+  workflow_dispatch:   # Manual run
   schedule:
-    - cron: "*/15 * * * *" # every 15 minutes
+    - cron: "0 * * * *" # Every hour
 
 jobs:
   ai-iteration:
@@ -11,21 +11,16 @@ jobs:
     steps:
       - name: Checkout automation repo
         uses: actions/checkout@v4
-
-      - name: Checkout target repo
-        uses: actions/checkout@v4
         with:
-          repository: ${{ env.TARGET_REPO }}
-          token: ${{ secrets.PAT_TOKEN }}
-          path: target
-          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
-      - name: Install automation deps
+      - name: Install dependencies for automation
         run: npm install
         working-directory: automation
 
@@ -39,5 +34,17 @@ jobs:
           TARGET_BRANCH: ${{ secrets.TARGET_BRANCH }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
+          mkdir -p target
           NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" \
-          node ../automation/ai-iter-agent.cjs
+          node automation/ai-iter-agent.cjs
+
+      - name: Commit backlog changes (if any)
+        run: |
+          cd target
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain backlog.md)" ]; then
+            git add backlog.md
+            git commit -m "Update backlog.md [skip ci]" || echo "No backlog changes"
+            git push origin ${{ secrets.TARGET_BRANCH }}
+          fi
