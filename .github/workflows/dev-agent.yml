@@ -53,9 +53,8 @@ jobs:
           TARGET_REPO:     ${{ env.TARGET_REPO }}
           TARGET_BRANCH:   ${{ env.TARGET_BRANCH }}
           PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
-        run: |
-          NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" \
-          node ../automation/ai-iter-agent.js
+        run: NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" node ../automation/ai-iter-agent.cjsrun: |
+          
 
       # Commit & push (only if there are actual changes)
       - name: Commit and push changes
