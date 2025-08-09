@@ -1,28 +1,26 @@
-name: AI Iterative Dev Agent
+name: AI Iteration Agent
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 * * * *" # Every hour
+    - cron: "0 * * * *"
 
 jobs:
-  ai-iter-agent:
+  iterate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     env:
-      # ====== Required configuration ======
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-      VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }} # Can be projectId or slug
+      VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
       TARGET_REPO: basstian-ai/simple-pim-1754492683911
       TARGET_BRANCH: main
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
 
     steps:
-      - name: Checkout automation repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Checkout target repo
         uses: actions/checkout@v4
@@ -32,26 +30,17 @@ jobs:
           path: target
           ref: ${{ env.TARGET_BRANCH }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: 20
+          cache: npm
 
-      - name: Install deps for automation
+      - name: Install automation deps
         run: npm ci
 
-      - name: Install deps for target repo
+      - name: Install target deps
         working-directory: target
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci || npm install
-          else
-            npm install
-          fi
+        run: npm ci || npm install
 
       - name: Run AI Iteration Agent
-        run: |
-          mkdir -p target
-          NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" \
-          node automation/ai-iter-agent.cjs
+        run: NODE_OPTIONS="--max-old-space-size=8192" node automation/ai-iter-agent.mjs
