@@ -1,50 +1,57 @@
-name: AI Iteration Agent
+name: AI Iterative Dev Agent
 
 on:
-  workflow_dispatch:   # Manual run
+  workflow_dispatch:
   schedule:
     - cron: "0 * * * *" # Every hour
 
 jobs:
-  ai-iteration:
+  ai-iter-agent:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # ====== Required configuration ======
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+      VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }} # Can be projectId or slug
+      TARGET_REPO: basstian-ai/simple-pim-1754492683911
+      TARGET_BRANCH: main
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+
     steps:
       - name: Checkout automation repo
         uses: actions/checkout@v4
+
+      - name: Checkout target repo
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          repository: ${{ env.TARGET_REPO }}
+          token: ${{ env.PAT_TOKEN }}
+          path: target
+          ref: ${{ env.TARGET_BRANCH }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
-      - name: Install dependencies for automation
-        run: npm install
-        working-directory: automation
+      - name: Install deps for automation
+        run: npm ci
+
+      - name: Install deps for target repo
+        working-directory: target
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci || npm install
+          else
+            npm install
+          fi
 
       - name: Run AI Iteration Agent
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-          VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
-          TARGET_REPO: ${{ secrets.TARGET_REPO }}
-          TARGET_BRANCH: ${{ secrets.TARGET_BRANCH }}
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           mkdir -p target
           NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" \
           node automation/ai-iter-agent.cjs
-
-      - name: Commit backlog changes (if any)
-        run: |
-          cd target
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git status --porcelain backlog.md)" ]; then
-            git add backlog.md
-            git commit -m "Update backlog.md [skip ci]" || echo "No backlog changes"
-            git push origin ${{ secrets.TARGET_BRANCH }}
-          fi
