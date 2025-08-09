@@ -277,6 +277,7 @@ function decideMode(buildLog, runtimeLog, depState) {
  - Mode=UPGRADE: incrementally migrate the codebase and dependencies toward Next.js 14 while keeping the app functional, tackling meaningful chunks each step.
  - Prefer UNIFIED DIFF. If unsure or file context may be stale, provide "files" with full contents.
  - live site is here: https://simple-pim-1754492683911.vercel.app .
+ - Include a concise commit_message summarizing the specific fix or feature implemented.
  - Always return valid JSON only.`;
 
   const user =
