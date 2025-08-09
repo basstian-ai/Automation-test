@@ -5,6 +5,7 @@
  * files[]-only request (full file bodies), then build-gate and push.
  *
  * Model update: default model -> gpt-5 (override with OPENAI_MODEL or AI_MODEL).
+ * Compatibility: for gpt-5, omit temperature (model only supports default).
  */
 
 const { execSync } = require("child_process");
@@ -19,7 +20,7 @@ const {
   VERCEL_PROJECT, // project name or prj_ id
   TARGET_REPO = "basstian-ai/simple-pim-1754492683911",
   TARGET_BRANCH = "main",
-  // NOTE: default model now gpt-5; OPENAI_MODEL or AI_MODEL can override
+  // Default model now gpt-5; OPENAI_MODEL or AI_MODEL can override
   AI_MODEL = process.env.OPENAI_MODEL || process.env.AI_MODEL || "gpt-5",
   AGENT_MAX_PROMPT_CHARS = parseInt(process.env.AGENT_MAX_PROMPT_CHARS || "45000", 10),
   AGENT_RETRY = parseInt(process.env.AGENT_RETRY || "3", 10),
@@ -131,25 +132,54 @@ function runtimeLogsCLI(url) {
 
 // ---------- AI ----------
 async function askAI(system, user) {
-  const body = {
+  const baseBody = {
     model: AI_MODEL,
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
     response_format: { type: "json_object" },
-    temperature: 0.2,
+    // temperature may not be supported for all models (e.g., gpt-5). We add it only if allowed.
   };
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const j = await res.json();
-  if (!res.ok) throw new Error(j?.error?.message || `OpenAI ${res.status}`);
-  const raw = j.choices?.[0]?.message?.content?.trim();
-  if (!raw) throw new Error("Empty AI content");
-  let parsed;
-  try { parsed = JSON.parse(raw); } catch { throw new Error("AI did not return valid JSON"); }
-  safeWrite(`${TARGET_DIR}/ai_response.json`, JSON.stringify(parsed, null, 2));
-  return parsed;
+
+  const isGpt5 = /^gpt-5($|[-_])/i.test(AI_MODEL);
+  const candidateBodies = [];
+
+  // If not gpt-5, try with temperature first (more deterministic).
+  if (!isGpt5) {
+    candidateBodies.push({ ...baseBody, temperature: 0.2 });
+  }
+  // Always add a fallback without temperature (works for all models).
+  candidateBodies.push({ ...baseBody });
+
+  let lastErr;
+  for (const body of candidateBodies) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      let j;
+      try { j = JSON.parse(text); } catch { throw new Error(`OpenAI ${res.status}: ${text.slice(0, 200)}`); }
+      if (!res.ok) {
+        const msg = j?.error?.message || `OpenAI ${res.status}`;
+        // If error mentions temperature not supported, continue to next body
+        if (/temperature/i.test(msg) && /not support|Only the default/.test(msg)) {
+          lastErr = new Error(msg);
+          continue;
+        }
+        throw new Error(msg);
+      }
+      const raw = j.choices?.[0]?.message?.content?.trim();
+      if (!raw) throw new Error("Empty AI content");
+      let parsed;
+      try { parsed = JSON.parse(raw); } catch { throw new Error("AI did not return valid JSON"); }
+      safeWrite(`${TARGET_DIR}/ai_response.json`, JSON.stringify(parsed, null, 2));
+      return parsed;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("OpenAI request failed");
 }
 
 // ---------- patch apply ----------
@@ -276,7 +306,7 @@ ${snippets.map(s => `--- ${s.path}\n${s.snippet}`).join("\n\n")}`;
     applied = applyFiles(ai.files);
   }
 
-  // NEW: if still not applied, do an immediate files[] retry
+  // If still not applied, do an immediate files[] retry
   if (!applied) {
     log("⚠️ patch not applicable — retrying with files[] only");
     const userRetry =
