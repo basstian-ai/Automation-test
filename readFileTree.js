@@ -1,10 +1,17 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-const IGNORED_DIRS = ['node_modules', '.git', '.next', '.vercel', '.vscode'];
-const IGNORED_FILES = ['package-lock.json', '.DS_Store'];
+const DEFAULT_IGNORED_DIRS = ['node_modules', '.git', '.next', '.vercel', '.vscode'];
+const DEFAULT_IGNORED_FILES = ['package-lock.json', '.DS_Store'];
 
-export async function readFileTree(dir = '.', maxFiles = 50) {
+export async function readFileTree(
+  dir = '.',
+  {
+    maxFiles = 50,
+    ignoredDirs = DEFAULT_IGNORED_DIRS,
+    ignoredFiles = DEFAULT_IGNORED_FILES,
+  } = {},
+) {
   const result = [];
 
   async function walk(currentPath) {
@@ -15,8 +22,8 @@ export async function readFileTree(dir = '.', maxFiles = 50) {
 
       // Skip ignored directories or files
       if (
-        IGNORED_DIRS.includes(entry.name) ||
-        IGNORED_FILES.includes(entry.name)
+        ignoredDirs.includes(entry.name) ||
+        ignoredFiles.includes(entry.name)
       ) {
         continue;
       }
