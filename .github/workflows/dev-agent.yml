@@ -3,24 +3,25 @@ name: AI Iteration Agent
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "*/30 * * * *"  # every 30 minutes
 
 jobs:
-  iterate:
+  iter:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-      VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT }}
       TARGET_REPO: basstian-ai/simple-pim-1754492683911
       TARGET_BRANCH: main
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
+      VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
+      PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout automation repo
+        uses: actions/checkout@v4
 
       - name: Checkout target repo
         uses: actions/checkout@v4
@@ -30,17 +31,14 @@ jobs:
           path: target
           ref: ${{ env.TARGET_BRANCH }}
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
       - name: Install automation deps
-        run: npm ci
+        run: npm ci || npm i
 
-      - name: Install target deps
-        working-directory: target
-        run: npm ci || npm install
-
-      - name: Run AI Iteration Agent
-        run: NODE_OPTIONS="--max-old-space-size=8192" node automation/ai-iter-agent.mjs
+      - name: Run AI iteration agent
+        run: NODE_OPTIONS="--max-old-space-size=8192" node automation/ai-iter-agent.cjs
