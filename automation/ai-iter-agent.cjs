@@ -1,188 +1,142 @@
 #!/usr/bin/env node
 
-const fs = require("fs");
-const path = require("path");
-const { execSync } = require("child_process");
-const fetch = require("node-fetch");
+import fetch from "node-fetch";
+import fs from "fs";
+import path from "path";
+import { execSync } from "child_process";
 
-// ---- ENV ----
+// ==== ENV VARS ====
 const {
   OPENAI_API_KEY,
   VERCEL_TOKEN,
   VERCEL_TEAM_ID,
   VERCEL_PROJECT,
   TARGET_REPO,
-  TARGET_BRANCH = "main",
+  TARGET_BRANCH,
   PAT_TOKEN
 } = process.env;
 
-if (!OPENAI_API_KEY || !VERCEL_TOKEN || !TARGET_REPO || !PAT_TOKEN) {
-  console.error("❌ Missing required environment variables.");
-  process.exit(1);
+// ==== PRE-FLIGHT CHECKS ====
+function assertEnv(name, value) {
+  if (!value || value.trim() === "") {
+    console.error(`❌ ERROR: Missing required env var: ${name}`);
+    process.exit(1);
+  }
 }
 
-const rootDir = process.cwd();
-const targetDir = path.join(rootDir, "target");
-const backlogPath = path.join(targetDir, "backlog.md");
+[
+  "OPENAI_API_KEY",
+  "VERCEL_TOKEN",
+  "VERCEL_TEAM_ID",
+  "VERCEL_PROJECT",
+  "TARGET_REPO",
+  "TARGET_BRANCH",
+  "PAT_TOKEN"
+].forEach((name) => assertEnv(name, process.env[name]));
 
-// -----------------------------
-// 1. Ensure target repo
-// -----------------------------
-if (!fs.existsSync(targetDir)) {
-  console.log(`📦 Cloning target repo ${TARGET_REPO}...`);
-  execSync(
-    `git clone https://${PAT_TOKEN}@github.com/${TARGET_REPO}.git ${targetDir}`,
-    { stdio: "inherit" }
-  );
-} else {
-  console.log(`📂 Pulling latest changes from ${TARGET_REPO}...`);
-  execSync(`git -C ${targetDir} fetch origin ${TARGET_BRANCH}`, { stdio: "inherit" });
-  execSync(`git -C ${targetDir} checkout ${TARGET_BRANCH}`, { stdio: "inherit" });
-  execSync(`git -C ${targetDir} pull origin ${TARGET_BRANCH}`, { stdio: "inherit" });
+console.log(`🎯 Target repo: ${TARGET_REPO} @ ${TARGET_BRANCH}`);
+
+// ==== HELPERS ====
+function run(cmd, opts = {}) {
+  console.log(`$ ${cmd}`);
+  return execSync(cmd, { stdio: "pipe", encoding: "utf8", ...opts }).trim();
 }
 
-// -----------------------------
-// 2. Fetch Vercel build status + logs
-// -----------------------------
+// ==== FETCH LATEST VERCEL DEPLOY ====
 async function getVercelBuildStatus() {
-  console.log("🔄 Fetching Vercel build logs...");
-  const url = `https://api.vercel.com/v13/deployments?projectId=${VERCEL_PROJECT}&teamId=${VERCEL_TEAM_ID}&limit=1`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${VERCEL_TOKEN}` }
-  });
-  if (!res.ok) throw new Error(`Failed to fetch deployments: ${res.status}`);
+  // Prefer projectId param, fallback to project slug param
+  const urls = [
+    `https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT}&teamId=${VERCEL_TEAM_ID}&limit=1`,
+    `https://api.vercel.com/v6/deployments?project=${VERCEL_PROJECT}&teamId=${VERCEL_TEAM_ID}&limit=1`
+  ];
 
-  const data = await res.json();
-  if (!data.deployments?.length) return { state: "UNKNOWN", logs: "" };
-
-  const deployment = data.deployments[0];
-  const logUrl = `https://api.vercel.com/v2/deployments/${deployment.uid}/events?teamId=${VERCEL_TEAM_ID}`;
-  const logsRes = await fetch(logUrl, {
-    headers: { Authorization: `Bearer ${VERCEL_TOKEN}` }
-  });
-  const logsText = await logsRes.text();
-
-  fs.writeFileSync(path.join(targetDir, "vercel_build.log"), logsText, "utf8");
-  return { state: deployment.state.toUpperCase(), logs: logsText };
-}
-
-// -----------------------------
-// 3. Backlog handling
-// -----------------------------
-async function ensureBacklog() {
-  if (!fs.existsSync(backlogPath) || fs.readFileSync(backlogPath, "utf8").trim() === "") {
-    console.log("📝 Backlog missing — generating...");
-    const prompt = `
-Generate a markdown backlog of the next 5 best-practice features to add
-to a modern PIM (Product Information Management) system. 
-Number them 1–5, short descriptions, each on one line.
-Avoid things already standard in most starter templates.
-`;
-    const backlog = await callOpenAI(prompt);
-    fs.writeFileSync(backlogPath, backlog, "utf8");
+  for (const url of urls) {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${VERCEL_TOKEN}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.deployments?.length) {
+        const latest = data.deployments[0];
+        return { state: latest.state.toUpperCase(), id: latest.uid };
+      }
+    }
   }
+  throw new Error("❌ Failed to fetch Vercel deployments with provided credentials.");
 }
 
-function getNextBacklogItem() {
-  const lines = fs.readFileSync(backlogPath, "utf8").split("\n").filter(l => l.trim());
-  if (!lines.length) return null;
-  return lines[0];
-}
-
-function removeBacklogItem(item) {
-  const lines = fs.readFileSync(backlogPath, "utf8").split("\n").filter(l => l.trim() && l.trim() !== item.trim());
-  fs.writeFileSync(backlogPath, lines.join("\n"), "utf8");
-}
-
-// -----------------------------
-// 4. AI calls
-// -----------------------------
-async function callOpenAI(prompt) {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0
-    })
-  });
-  if (!res.ok) throw new Error(`OpenAI request failed: ${res.status}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content?.trim();
-}
-
-async function generatePatch(mode, logs, backlogItem) {
-  console.log(`🤖 Generating patch in mode: ${mode}...`);
-  let prompt = "";
-
-  if (mode === "FIX") {
-    prompt = `
-You are an autonomous AI developer. 
-The Vercel build failed. Fix the problem based on these logs:
-${logs}
-Output ONLY a valid unified git diff/patch.
-`;
-  } else {
-    prompt = `
-You are an autonomous AI developer.
-The build is green. Implement the next backlog feature for a modern PIM system:
-"${backlogItem}"
-Follow best practices. Do not break the build.
-Output ONLY a valid unified git diff/patch.
-`;
-  }
-  const patch = await callOpenAI(prompt);
-  if (!patch.startsWith("diff")) throw new Error("Invalid patch output from AI");
-  return patch;
-}
-
-// -----------------------------
-// 5. Apply + push
-// -----------------------------
-function applyPatch(patch) {
-  const patchPath = path.join(targetDir, "ai_patch.diff");
-  fs.writeFileSync(patchPath, patch, "utf8");
-  execSync(`git apply --check ai_patch.diff`, { cwd: targetDir, stdio: "inherit" });
-  execSync(`git apply ai_patch.diff`, { cwd: targetDir, stdio: "inherit" });
-}
-
-function pushChanges() {
-  execSync("git add .", { cwd: targetDir });
-  execSync(`git commit -m "AI iteration update" || echo "No changes"`, { cwd: targetDir, stdio: "inherit" });
-  execSync(`git push origin ${TARGET_BRANCH}`, { cwd: targetDir, stdio: "inherit" });
-}
-
-// -----------------------------
-// MAIN
-// -----------------------------
+// ==== MAIN LOOP ====
 (async () => {
   try {
-    const { state, logs } = await getVercelBuildStatus();
-    const mode = state === "ERROR" ? "FIX" : "IMPROVE";
+    // Ensure repo is up-to-date
+    console.log("📂 Pulling latest changes...");
+    run(`git fetch origin ${TARGET_BRANCH}`);
+    run(`git checkout ${TARGET_BRANCH}`);
+    run(`git reset --hard origin/${TARGET_BRANCH}`);
 
-    if (mode === "IMPROVE") {
-      await ensureBacklog();
-      const nextItem = getNextBacklogItem();
-      if (!nextItem) {
-        console.log("✅ Backlog empty, nothing to improve.");
-        return;
-      }
-      const patch = await generatePatch(mode, logs, nextItem);
-      applyPatch(patch);
-      removeBacklogItem(nextItem);
-    } else {
-      const patch = await generatePatch(mode, logs, null);
-      applyPatch(patch);
+    // Check Vercel build status
+    console.log("🔄 Fetching Vercel build logs...");
+    const { state, id } = await getVercelBuildStatus();
+    console.log(`🔍 Mode: ${state === "ERROR" ? "FIX" : "IMPROVE"} (Vercel state: ${state})`);
+
+    // Build AI prompt
+    const logsPath = path.join(process.cwd(), "vercel_build.log");
+    const logsRes = await fetch(`https://api.vercel.com/v2/deployments/${id}/events`, {
+      headers: { Authorization: `Bearer ${VERCEL_TOKEN}` }
+    });
+    const logsData = await logsRes.json();
+    fs.writeFileSync(logsPath, JSON.stringify(logsData, null, 2));
+
+    const prompt = `
+      You are an autonomous dev agent.
+      The current build status is: ${state}.
+      If status=ERROR, fix the build. If status=READY, improve code with a useful enhancement.
+      Here are the latest build logs:\n${JSON.stringify(logsData)}
+    `;
+
+    // Call OpenAI
+    console.log("🤖 Sending prompt to OpenAI...");
+    const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0
+      })
+    });
+
+    const aiData = await aiRes.json();
+    const patchContent = aiData.choices?.[0]?.message?.content?.trim();
+    if (!patchContent || !patchContent.includes("diff")) {
+      console.log("⚠️ AI did not return a valid diff.");
+      process.exit(0);
     }
 
-    pushChanges();
-    console.log("🚀 Iteration complete.");
+    fs.writeFileSync("ai_patch.diff", patchContent);
+
+    // Apply patch
+    try {
+      run("git apply --check ai_patch.diff");
+      run("git apply ai_patch.diff");
+    } catch (err) {
+      console.error("⚠️ Patch failed to apply directly, trying 'patch' command...");
+      run("patch -p1 < ai_patch.diff");
+    }
+
+    // Commit & push
+    run(`git config user.name "ai-bot"`);
+    run(`git config user.email "ai-bot@users.noreply.github.com"`);
+    run(`git add .`);
+    run(`git commit -m "AI iteration: ${new Date().toISOString()}" || echo "No changes to commit"`);
+    run(`git push origin ${TARGET_BRANCH}`);
+
+    console.log("✅ Changes pushed");
   } catch (err) {
-    console.error("❌ ERROR:", err);
+    console.error(`❌ ERROR: ${err.message}`);
     process.exit(1);
   }
 })();
