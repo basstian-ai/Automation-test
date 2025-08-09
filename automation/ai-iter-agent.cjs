@@ -236,6 +236,7 @@ function decideMode(buildLog, runtimeLog, depState) {
 - Mode=FIX: minimal safe change to make build/runtime green. If "Module not found: 'isomorphic-unfetch'", either add the dep or refactor to native fetch that works in Next 10. No comments in package.json.
 - Mode=FEATURE: small, shippable PIM improvement (e.g., admin gui, APIs, AI-features, list view polish, basic variant fields, attribute groups) with at least one small test.
 - Prefer UNIFIED DIFF. If unsure or file context may be stale, provide "files" with full contents.
+- live site is here: https://simple-pim-1754492683911.vercel.app .
 - Always return valid JSON only.`;
 
   const user =
