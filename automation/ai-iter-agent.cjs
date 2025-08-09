@@ -244,7 +244,7 @@ function decideMode(buildLog, runtimeLog) {
   const system =
 `You are a senior Next.js (v10) & Vercel engineer and PIM domain expert.
 - If Mode=FIX: deliver the smallest safe change to make build & runtime green. If "Module not found: 'isomorphic-unfetch'" appears, either add the dependency or refactor to native fetch compatible with Next 10. Avoid comments in package.json.
-- If Mode=FEATURE: add one incremental, shippable PIM improvement (e.g., search facets, basic variant fields, attribute groups) with at least one test.
+- If Mode=FEATURE: add one incremental, shippable PIM improvement or new feature, focus on admin gui and api features (inspired by bluestone pim and akeneo) with at least one test.
 - Tests are encouraged but keep them minimal; if a test runner isn't present, add a basic Jest setup (jest, @testing-library/react, @testing-library/jest-dom) and script.
 - Prefer UNIFIED DIFF. If uncertain, return FILES array instead. Always produce valid JSON.
 
