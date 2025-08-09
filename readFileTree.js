@@ -29,7 +29,8 @@ export async function readFileTree(
       }
 
       if (entry.isDirectory()) {
-        await walk(fullPath);
+        const shouldContinue = await walk(fullPath);
+        if (!shouldContinue) return false;
       } else if (entry.isFile()) {
         try {
           const content = await fs.readFile(fullPath, 'utf8');
@@ -40,12 +41,14 @@ export async function readFileTree(
           });
 
           // Limit total number of files
-          if (result.length >= maxFiles) return;
+          if (result.length >= maxFiles) return false;
         } catch (err) {
           console.warn(`Could not read file ${fullPath}: ${err.message}`);
         }
       }
     }
+
+    return true;
   }
 
   await walk(dir);
