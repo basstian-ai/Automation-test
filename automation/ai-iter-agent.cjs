@@ -371,13 +371,27 @@ ${repoListing}`;
     ai = ai2;
   }
 
-    const defaultMsg = mode === "FIX"
-      ? "fix: build/runtime repair"
+    const type = mode === "FIX"
+      ? "fix"
       : mode === "UPGRADE"
-        ? "chore: Next.js upgrade"
-        : "feat: PIM improvement + test";
-    const msg = (ai.commit_message || defaultMsg).replace(/"/g, '\\"');
-  run(`git -C ${TARGET_DIR} add -A`);
+        ? "chore"
+        : "feat";
+
+    run(`git -C ${TARGET_DIR} add -A`);
+
+    let msg = ai.commit_message;
+    if (!msg) {
+      const filesChanged = run(`git -C ${TARGET_DIR} diff --cached --name-only`).trim().split("\n").filter(Boolean);
+      if (filesChanged.length) {
+        const first = filesChanged[0];
+        const extra = filesChanged.length > 1 ? ` +${filesChanged.length - 1} more` : "";
+        msg = `${type}: update ${first}${extra}`;
+      } else {
+        msg = `${type}: update`;
+      }
+    }
+
+    msg = msg.replace(/"/g, '\\"');
   run(`git -C ${TARGET_DIR} commit -m "${msg}"`);
   run(`git -C ${TARGET_DIR} push origin ${TARGET_BRANCH}`);
   log("✅ Changes pushed.");
