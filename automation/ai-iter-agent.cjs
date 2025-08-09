@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /* automation/ai-iter-agent.cjs
- * Self-iterating AI dev loop for Next.js (Next 10) on Vercel.
+ * Self-iterating AI dev loop for Next.js on Vercel.
  * Minor update: when the AI patch is “not applicable”, we auto-retry with a
  * files[]-only request (full file bodies), then build-gate and push.
  *
  * Model update: default model -> gpt-5 (override with OPENAI_MODEL or AI_MODEL).
  * Compatibility: for gpt-5, omit temperature (model only supports default).
+ *
+ * New: optional UPGRADE mode for migrating the target app toward modern
+ * Next.js versions (e.g., 14).
  */
 
 const { execSync } = require("child_process");
@@ -24,6 +27,7 @@ const {
   AI_MODEL = process.env.OPENAI_MODEL || process.env.AI_MODEL || "gpt-5",
   AGENT_MAX_PROMPT_CHARS = parseInt(process.env.AGENT_MAX_PROMPT_CHARS || "45000", 10),
   AGENT_RETRY = parseInt(process.env.AGENT_RETRY || "3", 10),
+  AGENT_MODE,
 } = process.env;
 
 if (!OPENAI_API_KEY) die("Missing OPENAI_API_KEY");
@@ -219,6 +223,7 @@ function localBuild() {
 
 // ---------- mode decision ----------
 function decideMode(buildLog, runtimeLog, depState) {
+  if (AGENT_MODE) return AGENT_MODE.toUpperCase();
   if ((depState || "").toUpperCase() === "READY") return "FEATURE";
   const red = `${buildLog}\n${runtimeLog}`.toLowerCase();
   const needles = [
@@ -266,11 +271,12 @@ function decideMode(buildLog, runtimeLog, depState) {
 
   const system =
 `You are a senior Next.js (v10) + Vercel engineer and PIM domain expert.
-- Mode=FIX: minimal safe change to make build/runtime green. If "Module not found: 'isomorphic-unfetch'", either add the dep or refactor to native fetch that works in Next 10. No comments in package.json.
-- Mode=FEATURE: small, shippable PIM improvement (e.g., admin gui, APIs, AI-features, list view polish, basic variant fields, attribute groups) with at least one small test.
-- Prefer UNIFIED DIFF. If unsure or file context may be stale, provide "files" with full contents.
-- live site is here: https://simple-pim-1754492683911.vercel.app .
-- Always return valid JSON only.`;
+ - Mode=FIX: minimal safe change to make build/runtime green. If "Module not found: 'isomorphic-unfetch'", either add the dep or refactor to native fetch that works in Next 10. No comments in package.json.
+ - Mode=FEATURE: small, shippable PIM improvement (e.g., admin gui, APIs, AI-features, list view polish, basic variant fields, attribute groups) with at least one small test.
+ - Mode=UPGRADE: incrementally migrate the codebase and dependencies toward Next.js 14 while keeping the app functional.
+ - Prefer UNIFIED DIFF. If unsure or file context may be stale, provide "files" with full contents.
+ - live site is here: https://simple-pim-1754492683911.vercel.app .
+ - Always return valid JSON only.`;
 
   const user =
 `Context:
@@ -363,7 +369,12 @@ ${repoListing}`;
     ai = ai2;
   }
 
-  const msg = (ai.commit_message || (mode === "FIX" ? "fix: build/runtime repair" : "feat: PIM improvement + test")).replace(/"/g, '\\"');
+    const defaultMsg = mode === "FIX"
+      ? "fix: build/runtime repair"
+      : mode === "UPGRADE"
+        ? "chore: Next.js upgrade"
+        : "feat: PIM improvement + test";
+    const msg = (ai.commit_message || defaultMsg).replace(/"/g, '\\"');
   run(`git -C ${TARGET_DIR} add -A`);
   run(`git -C ${TARGET_DIR} commit -m "${msg}"`);
   run(`git -C ${TARGET_DIR} push origin ${TARGET_BRANCH}`);
