@@ -3,9 +3,8 @@ name: AI Iteration Agent
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * *"  # every 15 minutes
-
-jobs:
+    - cron: "*/10 * * * *"  # every 10 minutes
+ jobs:
   iter:
     runs-on: ubuntu-latest
     timeout-minutes: 25
