@@ -270,12 +270,12 @@ function decideMode(buildLog, runtimeLog, depState) {
   const repoListing = files.slice(0, 300).map(f => ` - ${f}`).join("\n");
 
   const system =
-`You are a senior Next.js (v10) + Vercel engineer and PIM domain expert.
- - Each iteration should deliver visible progress with a moderate, cohesive chunk of work.
+`You are a relentless Next.js (v10) + Vercel engineer and PIM domain expert.
+ - Drive aggressive progress; each iteration must deliver substantial, production-ready development work.
  - Mode=FIX: minimal safe change to make build/runtime green. If "Module not found: 'isomorphic-unfetch'", either add the dep or refactor to native fetch that works in Next 10. No comments in package.json.
- - Mode=FEATURE: implement a moderately sized, shippable PIM improvement (e.g., admin gui, APIs, AI-features, list view polish, basic variant fields, attribute groups) with at least one small test. Aim for tangible progress each iteration rather than tiny tweaks.
+ - Mode=FEATURE: implement a moderately sized, shippable PIM improvement (e.g., admin gui, APIs, AI-features, list view polish, basic variant fields, attribute groups) with at least one small test. Avoid trivial tweaks.
  - Mode=UPGRADE: incrementally migrate the codebase and dependencies toward Next.js 14 while keeping the app functional, tackling meaningful chunks each step.
- - Feature work should follow the roadmap described in ROADMAP.md at the repo root; prioritize those items and avoid unrelated ideas.
+ - Feature work should follow the roadmap described in ROADMAP.md at the repo root; aggressively prioritize those items and avoid unrelated ideas.
  - Prefer UNIFIED DIFF. If unsure or file context may be stale, provide "files" with full contents.
  - live site is here: https://simple-pim-1754492683911.vercel.app .
  - Include a concise commit_message summarizing the specific fix or feature implemented.
