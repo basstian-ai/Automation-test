@@ -129,20 +129,49 @@ function parseChunkPaths(chunk) {
 }
 
 function applyChunk(repoDir, tmpName) {
-  const modes = [
-    'git apply --check -p1',
-    'git apply --check',
-    'git apply --check -p0',
+  const variants = [
+    // try without 3-way first
+    ['git apply --check -p1', 'git apply -p1 --whitespace=fix'],
+    ['git apply --check',     'git apply --whitespace=fix'],
+    ['git apply --check -p0', 'git apply -p0 --whitespace=fix'],
+    // then try 3-way
+    ['git apply --check -p1', 'git apply -p1 --index -3 --whitespace=fix'],
+    ['git apply --check',     'git apply --index -3 --whitespace=fix'],
+    ['git apply --check -p0', 'git apply -p0 --index -3 --whitespace=fix'],
   ];
-  for (const m of modes) {
+  for (const [checkCmd, applyCmd] of variants) {
     try {
-      run(`${m} ${tmpName}`, { cwd: repoDir });
-      const apply = m.replace(' --check', '') + ' --index -3 --whitespace=fix';
-      run(`${apply} ${tmpName}`, { cwd: repoDir });
+      run(`${checkCmd} ${tmpName}`, { cwd: repoDir });
+      run(`${applyCmd} ${tmpName}`, { cwd: repoDir });
       return true;
-    } catch (_) { /* try next */ }
+    } catch (_) {}
   }
   return false;
+}
+function extractAddedContentFromChunk(chunk) {
+  const out = [];
+  let inHunk = false;
+  for (const line of chunk.split('\n')) {
+    if (line.startsWith('@@')) { inHunk = true; continue; }
+    if (!inHunk) continue;
+    if (line.startsWith('+') && !line.startsWith('+++ ')) out.push(line.slice(1));
+  }
+  return out.join('\n') + (out.length ? '\n' : '');
+}
+
+function reconstructNewFileFromChunk(chunk) {
+  // For modify hunks: keep context (' ' prefix) and additions ('+'), drop deletions ('-')
+  const out = [];
+  let inHunk = false;
+  for (const line of chunk.split('\n')) {
+    if (line.startsWith('@@')) { inHunk = true; continue; }
+    if (!inHunk) continue;
+    if (line.startsWith('+++ ') || line.startsWith('--- ')) continue;
+    if (line.startsWith('-')) continue;
+    if (line.startsWith('+')) { out.push(line.slice(1)); continue; }
+    if (line.startsWith(' ')) { out.push(line.slice(1)); continue; }
+  }
+  return out.join('\n') + (out.length ? '\n' : '');
 }
 
 /** ---------- Heuristic fallbacks when git apply fails ---------- */
@@ -173,33 +202,43 @@ function rewriteDefaultSlugifyImports(absPath) {
   return false;
 }
 
-function fallbackApply(repoDir, { a, b, type }) {
+function fallbackApply(repoDir, { a, b, type, chunk }) {
   try {
     if (type === 'delete' && a) {
       const abs = path.join(repoDir, a);
-      if (fs.existsSync(abs)) {
-        fs.rmSync(abs, { force: true });
+      if (fs.existsSync(abs)) { fs.rmSync(abs, { force: true }); return true; }
+      return false;
+    }
+    if (type === 'add' && b) {
+      const abs = path.join(repoDir, b);
+      if (!fs.existsSync(abs)) {
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, extractAddedContentFromChunk(chunk), 'utf8');
         return true;
       }
       return false;
     }
-
-    if (type === 'modify') {
-      // Heuristics for the slugify pattern seen in logs/diffs
-      if (a && /\/lib\/slugify\.(js|ts)$/.test(a)) {
+    if (type === 'modify' && a) {
+      // Try known heuristics first
+      if (/\/lib\/slugify\.(js|ts)$/.test(a)) {
         const abs = path.join(repoDir, a);
         return ensureDefaultExportSlugify(abs);
       }
-      if (a && /\/pages\/.*\.(js|jsx|ts|tsx)$/.test(a)) {
+      if (/\/pages\/.*\.(js|jsx|ts|tsx)$/.test(a)) {
         const abs = path.join(repoDir, a);
-        return rewriteDefaultSlugifyImports(abs);
+        if (rewriteDefaultSlugifyImports(abs)) return true;
+      }
+      // As a last resort, reconstruct the new file from the diff and overwrite
+      const abs = path.join(repoDir, a);
+      if (fs.existsSync(abs)) {
+        const nextText = reconstructNewFileFromChunk(chunk);
+        if (nextText.trim().length > 0) {
+          fs.writeFileSync(abs, nextText, 'utf8');
+          return true;
+        }
       }
     }
-
-    // We could add more heuristics here as needed
-  } catch (_) {
-    // swallow and report false
-  }
+  } catch (_) {}
   return false;
 }
 
@@ -259,7 +298,7 @@ function applyUnifiedDiff(diffText, repoDir) {
     }
 
     // Heuristic fallback
-    const didHeuristic = fallbackApply(repoDir, { a, b, type });
+    const didHeuristic = fallbackApply(repoDir, { a, b, type, chunk });
     if (didHeuristic) {
       applied++;
       heuristic.push({ i, reason: 'heuristic-applied', path: a || b, type });
