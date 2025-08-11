@@ -18,10 +18,10 @@ jobs:
       VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
       PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
       OPENAI_MODEL: gpt-5-mini
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT }}
-  GH_PUSH_TOKEN: ${{ secrets.PAT_TOKEN }}   # <-- fine-grained PAT with write to simple-pim repo
-  GIT_USER_NAME: basstian-ai
-  GIT_USER_EMAIL: basstian-ai@users.noreply.github.com
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT }}
+      GH_PUSH_TOKEN: ${{ secrets.PAT_TOKEN }}   # <-- fine-grained PAT with write to simple-pim repo
+      GIT_USER_NAME: basstian-ai
+      GIT_USER_EMAIL: basstian-ai@users.noreply.github.com
 
 
     steps:
