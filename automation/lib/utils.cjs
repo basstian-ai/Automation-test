@@ -20,7 +20,7 @@ function pickPackageManager(repoDir) {
 function tryLocalBuild(repoDir) {
   const pm = pickPackageManager(repoDir);
 
-  // Ensure Node child processes (npm/yarn/pnpm/next) get the legacy provider
+  // Keep Node 20 + older webpack happy in CI.
   const env = {
     ...process.env,
     NODE_OPTIONS: [process.env.NODE_OPTIONS, '--openssl-legacy-provider'].filter(Boolean).join(' ')
@@ -47,17 +47,15 @@ function sanitizeDiff(raw) {
   s = s.replace(/^\uFEFF/, ''); // BOM
   s = s.replace(/\r/g, '');     // CRLF → LF
 
-  // Remove fenced code blocks (e.g., ```diff ... ```)
+  // Strip code fences & "*** Begin/End Patch" wrappers
   s = s.replace(/^\s*```[^\n]*\n[\s\S]*?\n```/gm, '');
-
-  // Remove "*** Begin/End Patch" wrappers
   s = s.replace(/^\s*\*{3}.*?End Patch\s*$/gms, '');
 
-  // Keep only from the FIRST "diff --git" ...
+  // Keep only from the FIRST "diff --git"
   const first = s.indexOf('diff --git ');
   if (first >= 0) s = s.slice(first);
 
-  // ... and drop anything after known non-diff sections
+  // Cut anything after typical non-diff sections
   const cutMarks = [
     '\n# TEST PLAN',
     '\n#TEST PLAN',
@@ -75,12 +73,10 @@ function sanitizeDiff(raw) {
   }
   s = s.slice(0, cutPos);
 
-  // Fast-fail if no unified diff remains
   if (!s.includes('diff --git ')) {
     throw new Error('Sanitized output did not contain a unified git diff.');
   }
 
-  // Ensure trailing newline
   if (!s.endsWith('\n')) s += '\n';
   return s;
 }
@@ -110,7 +106,7 @@ function splitDiffIntoFiles(sanitized) {
 }
 
 function parseChunkPaths(chunk) {
-  // Extract a/b paths from "diff --git a/... b/..." header
+  // Extract a/b paths from "diff --git a/... b/..."
   const m = chunk.match(/^diff --git a\/(.+?) b\/(.+?)$/m);
   if (!m) return { a: null, b: null, type: 'unknown' };
   const a = m[1];
@@ -129,11 +125,11 @@ function parseChunkPaths(chunk) {
 
 function applyChunk(repoDir, tmpName) {
   const variants = [
-    // try without 3-way first (better for brand-new files)
+    // Try without 3-way first (better for brand-new files)
     ['git apply --check -p1', 'git apply -p1 --whitespace=fix'],
     ['git apply --check',     'git apply --whitespace=fix'],
     ['git apply --check -p0', 'git apply -p0 --whitespace=fix'],
-    // then try 3-way merge
+    // Then try 3-way merge
     ['git apply --check -p1', 'git apply -p1 --index -3 --whitespace=fix'],
     ['git apply --check',     'git apply --index -3 --whitespace=fix'],
     ['git apply --check -p0', 'git apply -p0 --index -3 --whitespace=fix'],
@@ -159,35 +155,42 @@ function extractAddedContentFromChunk(chunk) {
   return out.join('\n') + (out.length ? '\n' : '');
 }
 
+// Robust to minimal diffs (no @@ hunks). If hunks exist, keep context+adds; else collect all '+' lines.
 function reconstructNewFileFromChunk(chunk) {
   const lines = chunk.split('\n');
-  const out = [];
+
+  // Normal case with hunks
+  const withHunks = [];
   let inHunk = false;
+  let sawHunk = false;
 
   for (const line of lines) {
-    if (line.startsWith('@@')) { inHunk = true; continue; }
+    if (line.startsWith('@@')) { inHunk = true; sawHunk = true; continue; }
     if (!inHunk) continue;
     if (line.startsWith('+++ ') || line.startsWith('--- ')) continue;
     if (line.startsWith('-')) continue;
-    if (line.startsWith('+')) { out.push(line.slice(1)); continue; }
-    if (line.startsWith(' ')) { out.push(line.slice(1)); continue; }
+    if (line.startsWith('+')) { withHunks.push(line.slice(1)); continue; }
+    if (line.startsWith(' ')) { withHunks.push(line.slice(1)); continue; }
+  }
+  if (sawHunk && withHunks.length > 0) {
+    return withHunks.join('\n') + '\n';
   }
 
-  // If no @@ hunks or nothing accumulated, fall back to plus-only lines
-  if (!inHunk || out.length === 0) {
-    const plusOnly = [];
-    let seenHeaders = false;
-    for (const line of lines) {
-      if (line.startsWith('+++ ') || line.startsWith('--- ')) { seenHeaders = true; continue; }
-      if (!seenHeaders) continue;
-      if (line.startsWith('+') && !line.startsWith('+++ ')) {
-        plusOnly.push(line.slice(1));
-      }
-    }
-    if (plusOnly.length > 0) return plusOnly.join('\n') + '\n';
+  // Minimal diffs: no hunks; gather '+' lines after headers
+  const plusOnly = [];
+  let seenHeaders = false;
+  for (const line of lines) {
+    if (line.startsWith('diff --git ') || line.startsWith('index ')) continue;
+    if (line.startsWith('new file mode ') || line.startsWith('deleted file mode ')) continue;
+    if (line.startsWith('--- ') || line.startsWith('+++ ')) { seenHeaders = true; continue; }
+    if (!seenHeaders) continue;
+    if (line.startsWith('+') && !line.startsWith('+++ ')) plusOnly.push(line.slice(1));
+  }
+  if (plusOnly.length > 0) {
+    return plusOnly.join('\n') + '\n';
   }
 
-  return out.join('\n') + (out.length ? '\n' : '');
+  return '';
 }
 
 /** ---------- Heuristic fallbacks when git apply fails ---------- */
@@ -226,7 +229,8 @@ function fallbackApply(repoDir, { a, b, type, chunk }) {
       const abs = path.join(repoDir, b);
       if (!fs.existsSync(abs)) {
         fs.mkdirSync(path.dirname(abs), { recursive: true });
-        fs.writeFileSync(abs, extractAddedContentFromChunk(chunk), 'utf8');
+        const content = extractAddedContentFromChunk(chunk) || reconstructNewFileFromChunk(chunk);
+        fs.writeFileSync(abs, content, 'utf8');
         return true;
       }
       return false;
@@ -307,7 +311,6 @@ function applyUnifiedDiff(diffText, repoDir) {
 
     if (ok) {
       applied++;
-      // keep repo tree up to date
       if (type === 'delete' && a) treeSet.delete(a);
       if (type === 'add' && b) treeSet.add(b);
       continue;
@@ -357,6 +360,7 @@ function commitAndPush(message, repoDir) {
   try { run('git push', { cwd: repoDir }); } catch {}
 }
 
+/** ---------- Repo file helpers ---------- */
 function collectRepoFiles(repoDir, paths = []) {
   return paths.map(p => {
     const abs = path.join(repoDir, p);
@@ -380,8 +384,8 @@ function ensureDefaultExportSlugify(repoDir) {
 }
 
 function fixDuplicateApiRoutes(repoDir) {
-  // When both pages/api/<name>.js and pages/api/<name>/index.js exist, keep the index.js
-  const names = ['attribute-groups', 'attributes', 'products']; // extend if needed
+  // If both pages/api/<name>.js and pages/api/<name>/index.js exist, keep index.js
+  const names = ['attribute-groups', 'attributes', 'products'];
   const touched = [];
   for (const name of names) {
     const file = path.join(repoDir, `pages/api/${name}.js`);
@@ -398,15 +402,16 @@ function ensureHealthApiValid(repoDir) {
   const rel = 'pages/api/health.js';
   const abs = path.join(repoDir, rel);
   if (!fs.existsSync(abs)) return false;
-  // Canonical, syntactically-safe health endpoint
   const content = `export default function handler(req, res) {
   const version = process.env.npm_package_version || '0.0.0';
   return res.status(200).json({ ok: true, uptime: process.uptime(), version });
 }
 `;
-  // Only rewrite if file looks broken or empty
   const current = fs.readFileSync(abs, 'utf8');
-  const broken = /SyntaxError|<<<<<<<|>>>>>>>|^\s*$/m.test(current) || current.trim().endsWith('{') || current.includes('return res.status(200).json') === false;
+  const broken =
+    /SyntaxError|<<<<<<<|>>>>>>>|^\s*$/m.test(current) ||
+    current.trim().endsWith('{') ||
+    current.includes('return res.status(200).json') === false;
   if (broken) {
     fs.writeFileSync(abs, content, 'utf8');
     return true;
@@ -414,6 +419,7 @@ function ensureHealthApiValid(repoDir) {
   return false;
 }
 
+// Tiny helper some endpoints import; create it if missing to avoid build breaks
 function ensureWithTimeoutHelper(repoDir) {
   const dir = path.join(repoDir, 'lib/api');
   const file = path.join(dir, 'withTimeout.js');
