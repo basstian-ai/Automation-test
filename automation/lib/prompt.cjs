@@ -34,6 +34,9 @@ RULES
 
 OUTPUT (STRICT)
 1) Unified git diff (apply at repo root). Include file adds/deletes/renames.
+   - Output MUST be a raw unified git diff starting with lines like:
+     `diff --git a/<path> b/<path>`. Do NOT use code fences or "*** Begin Patch".
+
 2) Then append:
 \`\`\`
 # TEST PLAN
