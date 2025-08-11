@@ -272,7 +272,11 @@ function decideMode(buildLog, runtimeLog, depState) {
   let prevIssueNote = "";
   try {
     const prev = JSON.parse(readFileSync(`${TARGET_DIR}/vercel_build_issues.json`, "utf8"));
-    const prevLines = [...(prev.duplicates || []), ...(prev.importErrors || [])];
+    const prevLines = [];
+    if ((prev.errors || []).length) prevLines.push(`Errors:\n${prev.errors.join("\n")}`);
+    if ((prev.warnings || []).length) prevLines.push(`Warnings:\n${prev.warnings.join("\n")}`);
+    if ((prev.duplicates || []).length) prevLines.push(`Duplicates:\n${prev.duplicates.join("\n")}`);
+    if ((prev.importErrors || []).length) prevLines.push(`Import errors:\n${prev.importErrors.join("\n")}`);
     if (prevLines.length) prevIssueNote = prevLines.join("\n");
   } catch {}
 
@@ -323,6 +327,8 @@ function decideMode(buildLog, runtimeLog, depState) {
  - Return valid JSON containing a concise commit_message and either unified_diff or files[].`;
 
   const issueSummary = [];
+  if (buildIssues.errors.length) issueSummary.push(`Errors:\n${buildIssues.errors.join("\n")}`);
+  if (buildIssues.warnings.length) issueSummary.push(`Warnings:\n${buildIssues.warnings.join("\n")}`);
   if (buildIssues.duplicates.length) issueSummary.push(`Duplicates:\n${buildIssues.duplicates.join("\n")}`);
   if (buildIssues.importErrors.length) issueSummary.push(`Import errors:\n${buildIssues.importErrors.join("\n")}`);
   const parsedIssues = issueSummary.join("\n");
@@ -331,7 +337,7 @@ function decideMode(buildLog, runtimeLog, depState) {
 `Context:
 Mode: ${mode}
 Deployment: ${depMeta}
-${prevIssueNote ? `\nPrevious duplicates/import errors:\n${prevIssueNote}` : ""}
+${prevIssueNote ? `\nPrevious build issues:\n${prevIssueNote}` : ""}
 ${parsedIssues ? `\nParsed build issues:\n${parsedIssues}` : ""}
 
 Build log (trimmed):
