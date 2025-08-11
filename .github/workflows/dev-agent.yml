@@ -21,7 +21,7 @@ jobs:
   # --- Git push identity/auth ---
   GH_PUSH_TOKEN: ${{ secrets.PAT_TOKEN }}
   GIT_USER_NAME: basstian-ai
-  GIT_USER_EMAIL: 12345678+basstian-ai@users.noreply.github.com   # use your real no-reply
+  GIT_USER_EMAIL: 212385003+basstian-ai@users.noreply.github.com   # use your real no-reply
 
   # --- Target repo (owner/repo form) ---
   TARGET_REPO: basstian-ai/simple-pim-1754492683911
