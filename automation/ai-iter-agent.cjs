@@ -145,27 +145,25 @@ If no changes are needed, return a minimal valid diff that makes no changes.
   }
 
   // 4) Apply diff, try build
-  console.log('🩹 Applying patch from model...');
+ console.log('🩹 Applying patch from model...');
+try {
   applyUnifiedDiff(diff, repoDir);
-
-  let buildOK = false;
-  try {
-    console.log('🏗️  Building locally...');
-    tryLocalBuild(repoDir);
-    buildOK = true;
-  } catch (e) {
-    console.warn('First build failed, retrying once with fresh build logs...');
-    const localLogs = String(e?.stderr || e?.stdout || e?.message || e);
-    const retryPayload = { ...payload, trimmedLogs: `${trimmedLogs}\n\n==== LOCAL BUILD OUTPUT ====\n${localLogs.slice(-20000)}` };
-    const retryDiff = await callLLM({ system: SYSTEM_PROMPT, payload: retryPayload });
-    if (!retryDiff || !retryDiff.includes('diff --git')) {
-      console.error('Retry did not return a diff. Aborting.');
-      process.exit(1);
-    }
-    applyUnifiedDiff(retryDiff, repoDir);
-    tryLocalBuild(repoDir); // throws on failure
-    buildOK = true;
-  }
+} catch (e) {
+  console.warn('Patch apply failed, requesting a reformatted unified git diff...', e.message || e);
+  const reformPrompt = `
+Your previous output was not a valid unified git diff that "git apply" can apply.
+RESPONSE RULES:
+- Return ONLY a raw unified git diff starting with "diff --git a/<path> b/<path>".
+- Use LF newlines. Include both '--- a/<path>' and '+++ b/<path>' for each file and at least one '@@' hunk.
+- No code fences. No "*** Begin Patch".
+- Do not include any prose.
+`;
+  const retry = await callLLM({
+    system: SYSTEM_PROMPT + '\n' + reformPrompt,
+    payload: { ...payload, previousResponse: String(diff).slice(-20000) }
+  });
+  applyUnifiedDiff(retry, repoDir); // will throw if still invalid
+}
 
   // 5) Commit & push
   if (buildOK) {
