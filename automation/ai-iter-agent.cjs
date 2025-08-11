@@ -14,7 +14,7 @@ const { strategyFor } = require('./lib/strategies.cjs');
 const { tryLocalBuild, getRepoTree, collectRepoFiles, readRoadmap, applyUnifiedDiff, commitAndPush, pickPackageManager, run } = require('./lib/utils.cjs');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini';
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID;
 const TARGET_REPO_DIR = process.env.TARGET_REPO_DIR || path.resolve(process.cwd(), '..', 'simple-pim-1754492683911');
@@ -35,6 +35,9 @@ async function callLLM({ system, payload }) {
     body: JSON.stringify({
       model: OPENAI_MODEL,
       temperature: 0.2,
+      model: OPENAI_MODEL,
+      // NOTE: gpt-5 family does not support custom temperature values.
+      // Do NOT send temperature/top_p/etc. Keep defaults for determinism.
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: JSON.stringify(payload) }
