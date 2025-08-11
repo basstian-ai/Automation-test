@@ -315,16 +315,34 @@ ${snippets.map(s => `--- ${s.path}\n${s.snippet}`).join("\n\n")}`;
   if (!applied && Array.isArray(ai.files) && ai.files.length) {
     applied = applyFiles(ai.files);
   }
-
   // If still not applied, do an immediate files[] retry
   if (!applied) {
-    log("⚠️ patch not applicable — retrying with files[] only");
+    log('⚠️ patch not applicable — retrying with files[] only');
+    // Re-sync in case the target repo moved after our initial fetch
+    syncTarget();
+    const files2 = listFiles();
+    const snippets2 = readFew(files2, 28000);
+    const repoListing2 = files2.slice(0, 300).map(f => ` - ${f}`).join('\n');
     const userRetry =
-`Return ONLY "files" with full file contents (no unified_diff).
-Make the smallest correct change for Mode=${mode}.
-Build/runtime logs and repo listing are unchanged from previous message.`;
+`Context:
+Mode: ${mode}
+Deployment: ${depMeta}
+
+Build log (trimmed):
+${trim(buildLog, Math.floor(AGENT_MAX_PROMPT_CHARS * 0.45))}
+
+Runtime log (trimmed):
+${trim(runtimeLog, Math.floor(AGENT_MAX_PROMPT_CHARS * 0.2))}
+
+Repo files (partial):
+${repoListing2}
+
+Key file snippets:
+${snippets2.map(s => `--- ${s.path}\n${s.snippet}`).join('\n\n')}
+
+Return ONLY "files" with full file contents (no unified_diff).`;
     let ai2;
-    try { ai2 = await askAI(system + "\nReturn only files[].", userRetry); }
+    try { ai2 = await askAI(system + '\nReturn only files[].', userRetry); }
     catch (e) { return keepalive(`no-op: ${e.message}`); }
 
     if (Array.isArray(ai2.files) && ai2.files.length) {
@@ -332,6 +350,7 @@ Build/runtime logs and repo listing are unchanged from previous message.`;
       if (applied) ai = ai2; // use second commit message if present
     }
   }
+
 
   if (!applied) {
     safeWrite(`${TARGET_DIR}/ai_suggestion.md`, JSON.stringify(ai, null, 2));
