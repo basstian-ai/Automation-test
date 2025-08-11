@@ -17,7 +17,7 @@ jobs:
       VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
       VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
       PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
-      OPENAI_MODEL: gpt-5
+      OPENAI_MODEL: gpt-5-mini
 
     steps:
       - name: Checkout automation repo

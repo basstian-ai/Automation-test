@@ -133,6 +133,33 @@ function runtimeLogsCLI(url) {
   return r.out || "";
 }
 
+function parseBuildLog(log) {
+  const lines = (log || "").split("\n");
+  const warnings = [];
+  const errors = [];
+  const duplicates = [];
+  const importErrors = [];
+  for (const line of lines) {
+    const l = line.toLowerCase();
+    if (l.includes("warning")) warnings.push(line.trim());
+    if (l.includes("error")) errors.push(line.trim());
+    if (l.includes("duplicate")) duplicates.push(line.trim());
+    if (
+      l.includes("module not found") ||
+      l.includes("cannot find module") ||
+      l.includes("can't resolve") ||
+      (l.includes("import") && l.includes("error"))
+    ) importErrors.push(line.trim());
+  }
+  const uniq = arr => [...new Set(arr)];
+  return {
+    warnings: uniq(warnings),
+    errors: uniq(errors),
+    duplicates: uniq(duplicates),
+    importErrors: uniq(importErrors),
+  };
+}
+
 // ---------- AI ----------
 async function askAI(system, user) {
   const baseBody = {
@@ -242,6 +269,17 @@ function decideMode(buildLog, runtimeLog, depState) {
   log("\n=== Sync target repo ===\n");
   syncTarget();
 
+  let prevIssueNote = "";
+  try {
+    const prev = JSON.parse(readFileSync(`${TARGET_DIR}/vercel_build_issues.json`, "utf8"));
+    const prevLines = [];
+    if ((prev.errors || []).length) prevLines.push(`Errors:\n${prev.errors.join("\n")}`);
+    if ((prev.warnings || []).length) prevLines.push(`Warnings:\n${prev.warnings.join("\n")}`);
+    if ((prev.duplicates || []).length) prevLines.push(`Duplicates:\n${prev.duplicates.join("\n")}`);
+    if ((prev.importErrors || []).length) prevLines.push(`Import errors:\n${prev.importErrors.join("\n")}`);
+    if (prevLines.length) prevIssueNote = prevLines.join("\n");
+  } catch {}
+
   log("\n=== Fetch latest Vercel deployment & logs ===\n");
   let buildLog = "", runtimeLog = "", depMeta = "n/a", depState = "UNKNOWN";
   try {
@@ -264,6 +302,8 @@ function decideMode(buildLog, runtimeLog, depState) {
   }
   safeWrite(`${TARGET_DIR}/vercel_build.log`, buildLog || "(no build logs)");
   safeWrite(`${TARGET_DIR}/vercel_runtime.log`, runtimeLog || "(no runtime logs)");
+  const buildIssues = parseBuildLog(buildLog);
+  safeWrite(`${TARGET_DIR}/vercel_build_issues.json`, JSON.stringify(buildIssues, null, 2));
   log("📝 Build/runtime logs saved.");
 
   const mode = decideMode(buildLog, runtimeLog, depState);
@@ -286,10 +326,19 @@ function decideMode(buildLog, runtimeLog, depState) {
  - Live site: https://simple-pim-1754492683911.vercel.app.
  - Return valid JSON containing a concise commit_message and either unified_diff or files[].`;
 
+  const issueSummary = [];
+  if (buildIssues.errors.length) issueSummary.push(`Errors:\n${buildIssues.errors.join("\n")}`);
+  if (buildIssues.warnings.length) issueSummary.push(`Warnings:\n${buildIssues.warnings.join("\n")}`);
+  if (buildIssues.duplicates.length) issueSummary.push(`Duplicates:\n${buildIssues.duplicates.join("\n")}`);
+  if (buildIssues.importErrors.length) issueSummary.push(`Import errors:\n${buildIssues.importErrors.join("\n")}`);
+  const parsedIssues = issueSummary.join("\n");
+
   const user =
 `Context:
 Mode: ${mode}
 Deployment: ${depMeta}
+${prevIssueNote ? `\nPrevious build issues:\n${prevIssueNote}` : ""}
+${parsedIssues ? `\nParsed build issues:\n${parsedIssues}` : ""}
 
 Build log (trimmed):
 ${trim(buildLog, Math.floor(AGENT_MAX_PROMPT_CHARS * 0.45))}
