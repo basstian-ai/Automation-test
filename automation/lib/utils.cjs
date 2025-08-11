@@ -394,7 +394,30 @@ function ensureHealthApiValid(repoDir) {
   }
   return false;
 }
+// add somewhere above runPreBuildFixes:
+function ensureWithTimeoutHelper(repoDir) {
+  const dir = path.join(repoDir, 'lib/api');
+  const file = path.join(dir, 'withTimeout.js');
+  if (fs.existsSync(file)) return false;
 
+  fs.mkdirSync(dir, { recursive: true });
+  const content = `/**
+ * Wrap a promise with a timeout.
+ */
+export function withTimeout(promise, ms = 5000, message = 'Timeout') {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
+export default withTimeout;
+`;
+  fs.writeFileSync(file, content, 'utf8');
+  return true;
+}
 function runPreBuildFixes(repoDir) {
   const actions = [];
   if (ensureDefaultExportSlugify(repoDir)) actions.push('added default export shim to lib/slugify.js');
