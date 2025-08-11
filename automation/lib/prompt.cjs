@@ -33,10 +33,13 @@ RULES
 - Prefer TypeScript where already used; otherwise keep JS.
 
 OUTPUT (STRICT)
+OUTPUT (STRICT)
 1) Unified git diff (apply at repo root). Include file adds/deletes/renames.
    - Output MUST be a raw unified git diff starting with a line like:
      diff --git a/<path> b/<path>. Do NOT use code fences or "*** Begin Patch".
-2) Then append:
+   - Use LF newlines only.
+   - Each file hunk must include both '--- a/<path>' and '+++ b/<path>' and at least one '@@' section.
+2) Then append the TEST PLAN and CHANGES SUMMARY blocks as specified.
 \`\`\`
 # TEST PLAN
 - exact commands (install, build, lint, test)
