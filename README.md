@@ -63,3 +63,31 @@ Example with custom model:
 ```bash
 OPENAI_API_KEY=sk-... OPENAI_MODEL=gpt-4.1 node automation/ai-iter-agent.cjs
 ```
+
+## Environment Variables
+
+Required
+
+- `OPENAI_API_KEY` – OpenAI key used by the agent
+
+Recommended
+
+- `OPENAI_MODEL` – e.g. `gpt-4o-mini` (defaults to this)
+
+Vercel (for log ingestion)
+
+- `VERCEL_TOKEN` – Vercel token with read access
+- `VERCEL_PROJECT_ID` – Project ID of the PIM app
+
+Target repo (where diffs are applied)
+
+- `TARGET_REPO_DIR` – path to the PIM repo (default: `../simple-pim-1754492683911`)
+- `TARGET_REPO_GIT` – git URL used if the repo needs to be cloned (default: `https://github.com/basstian-ai/simple-pim-1754492683911`)
+
+The agent clones `TARGET_REPO_GIT` into `TARGET_REPO_DIR` if the directory is missing.
+
+### What the agent does
+1) Fetches latest Vercel **build + runtime** logs  
+2) Normalizes them into **issues**  
+3) Asks the model for a **unified diff** to **FIX** issues and then **IMPROVE** one roadmap item  
+4) Applies patch, builds locally (retry once if red), commits & pushes
