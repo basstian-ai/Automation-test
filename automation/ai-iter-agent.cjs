@@ -29,6 +29,10 @@ const {
   AGENT_MODE,
 } = process.env;
 
+if (!process.env.OPENAI_MODEL && !process.env.AI_MODEL) {
+  log(`Using default model ${AI_MODEL}; override by setting OPENAI_MODEL or AI_MODEL.`);
+}
+
 if (!OPENAI_API_KEY) die("Missing OPENAI_API_KEY");
 
 const ROOT = process.cwd();
