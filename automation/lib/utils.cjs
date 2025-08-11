@@ -317,6 +317,62 @@ function readRoadmap(repoDir) {
   const alt = path.join(repoDir, 'ROADMAP.md');
   if (fs.existsSync(alt)) return fs.readFileSync(alt, 'utf8');
   return '# Roadmap\n\n(No roadmap.md found)';
+}function ensureDefaultExportSlugify(repoDir) {
+  const abs = path.join(repoDir, 'lib/slugify.js');
+  if (!fs.existsSync(abs)) return false;
+  let txt = fs.readFileSync(abs, 'utf8');
+  if (/export\s+default\s+slugify\s*;?/.test(txt)) return false; // already has default
+  const needsNL = txt.length && !txt.endsWith('\n');
+  txt += (needsNL ? '\n' : '') + '\n// default export shim for consumers using default import\nexport default slugify;\n';
+  fs.writeFileSync(abs, txt, 'utf8');
+  return true;
+}
+
+function fixDuplicateApiRoutes(repoDir) {
+  // When both pages/api/<name>.js and pages/api/<name>/index.js exist, keep the index.js
+  const names = ['attribute-groups', 'attributes', 'products']; // extend if needed
+  const touched = [];
+  for (const name of names) {
+    const file = path.join(repoDir, `pages/api/${name}.js`);
+    const idx  = path.join(repoDir, `pages/api/${name}/index.js`);
+    if (fs.existsSync(file) && fs.existsSync(idx)) {
+      fs.rmSync(file, { force: true });
+      touched.push(`deleted duplicate pages/api/${name}.js (kept /${name}/index.js)`);
+    }
+  }
+  return touched;
+}
+
+function ensureHealthApiValid(repoDir) {
+  const rel = 'pages/api/health.js';
+  const abs = path.join(repoDir, rel);
+  if (!fs.existsSync(abs)) return false;
+  // Canonical, syntactically-safe health endpoint
+  const content = `export default function handler(req, res) {
+  const version = process.env.npm_package_version || '0.0.0';
+  return res.status(200).json({ ok: true, uptime: process.uptime(), version });
+}
+`;
+  // Only rewrite if file looks broken or empty
+  const current = fs.readFileSync(abs, 'utf8');
+  const broken = /SyntaxError|<<<<<<<|>>>>>>>|^\s*$/m.test(current) || current.trim().endsWith('{') || current.includes('return res.status(200).json') === false;
+  if (broken) {
+    fs.writeFileSync(abs, content, 'utf8');
+    return true;
+  }
+  return false;
+}
+
+function runPreBuildFixes(repoDir) {
+  const actions = [];
+  if (ensureDefaultExportSlugify(repoDir)) actions.push('added default export shim to lib/slugify.js');
+  actions.push(...fixDuplicateApiRoutes(repoDir));
+  if (ensureHealthApiValid(repoDir)) actions.push('rewrote pages/api/health.js to a safe handler');
+  if (actions.length) {
+    console.log('🔧 Pre-build fixes:', actions);
+  } else {
+    console.log('🔧 Pre-build fixes: none needed');
+  }
 }
 
 module.exports = {
@@ -328,4 +384,7 @@ module.exports = {
   readRoadmap,
   pickPackageManager,
   applyUnifiedDiff,
+  runPreBuildFixes,          // <-- add this
 };
+
+
