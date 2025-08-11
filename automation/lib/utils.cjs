@@ -17,15 +17,22 @@ function pickPackageManager(repoDir) {
 
 function tryLocalBuild(repoDir) {
   const pm = pickPackageManager(repoDir);
+
+  // Ensure Node child processes (npm/yarn/pnpm/next) get the legacy provider
+  const env = {
+    ...process.env,
+    NODE_OPTIONS: [process.env.NODE_OPTIONS, '--openssl-legacy-provider'].filter(Boolean).join(' ')
+  };
+
   if (pm === 'npm') {
-    run('npm ci', { cwd: repoDir });
-    run('npx next build', { cwd: repoDir });
+    run('npm ci', { cwd: repoDir, env });
+    run('npx next build', { cwd: repoDir, env });
   } else if (pm === 'yarn') {
-    run('yarn install --frozen-lockfile', { cwd: repoDir });
-    run('yarn next build', { cwd: repoDir });
+    run('yarn install --frozen-lockfile', { cwd: repoDir, env });
+    run('yarn next build', { cwd: repoDir, env });
   } else {
-    run('pnpm install --frozen-lockfile', { cwd: repoDir });
-    run('pnpm next build', { cwd: repoDir });
+    run('pnpm install --frozen-lockfile', { cwd: repoDir, env });
+    run('pnpm next build', { cwd: repoDir, env });
   }
 }
 
