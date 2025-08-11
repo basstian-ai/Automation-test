@@ -98,8 +98,8 @@ function getRepoTreeSet(repoDir) {
 
 function splitDiffIntoFiles(sanitized) {
   // Split into per-file chunks (keep the "diff --git" marker with each)
-  // Ensure we don’t drop the very first chunk if it starts the file
-  const parts = sanitized.replace(/^diff --git /, '\n\0diff --git ').split(/\n(?=diff --git )/g);
+  const normalized = sanitized.replace(/^diff --git /, '\n\0diff --git ');
+  const parts = normalized.split(/\n(?=diff --git )/g);
   return parts.map(p => p.replace(/^\0/, '')).filter(Boolean);
 }
 
@@ -138,12 +138,71 @@ function applyChunk(repoDir, tmpName) {
   return false;
 }
 
+/** ---------- Heuristic fallbacks when git apply fails ---------- */
+
+function ensureDefaultExportSlugify(absPath) {
+  if (!fs.existsSync(absPath)) return false;
+  let txt = fs.readFileSync(absPath, 'utf8');
+  // If there is already a default export, nothing to do
+  if (/export\s+default\s+slugify\s*;?/m.test(txt)) return false;
+  // Add a small shim at the end
+  const needsNL = txt.length && !txt.endsWith('\n');
+  txt += (needsNL ? '\n' : '') + '\n// default export shim for consumers using default import\nexport default slugify;\n';
+  fs.writeFileSync(absPath, txt, 'utf8');
+  return true;
+}
+
+function rewriteDefaultSlugifyImports(absPath) {
+  if (!fs.existsSync(absPath)) return false;
+  if (!/\.(js|jsx|ts|tsx)$/.test(absPath)) return false;
+  let txt = fs.readFileSync(absPath, 'utf8');
+  const before = txt;
+  // Replace: import slugify from '.../slugify'
+  txt = txt.replace(/import\s+slugify\s+from\s+(['"][^'"]*\/slugify['"])\s*;?/g, 'import { slugify } from $1;');
+  if (txt !== before) {
+    fs.writeFileSync(absPath, txt, 'utf8');
+    return true;
+  }
+  return false;
+}
+
+function fallbackApply(repoDir, { a, b, type }) {
+  try {
+    if (type === 'delete' && a) {
+      const abs = path.join(repoDir, a);
+      if (fs.existsSync(abs)) {
+        fs.rmSync(abs, { force: true });
+        return true;
+      }
+      return false;
+    }
+
+    if (type === 'modify') {
+      // Heuristics for the slugify pattern seen in logs/diffs
+      if (a && /\/lib\/slugify\.(js|ts)$/.test(a)) {
+        const abs = path.join(repoDir, a);
+        return ensureDefaultExportSlugify(abs);
+      }
+      if (a && /\/pages\/.*\.(js|jsx|ts|tsx)$/.test(a)) {
+        const abs = path.join(repoDir, a);
+        return rewriteDefaultSlugifyImports(abs);
+      }
+    }
+
+    // We could add more heuristics here as needed
+  } catch (_) {
+    // swallow and report false
+  }
+  return false;
+}
+
 /**
  * Apply a unified diff robustly:
  * - sanitize
  * - split into per-file chunks
  * - skip chunks that target non-existent files (for modify/delete)
  * - try multiple -p modes per chunk
+ * - if apply fails, run heuristics (delete file / slugify fixes)
  * - succeed if at least one chunk applies
  */
 function applyUnifiedDiff(diffText, repoDir) {
@@ -153,6 +212,7 @@ function applyUnifiedDiff(diffText, repoDir) {
 
   let applied = 0;
   const skipped = [];
+  const heuristic = [];
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i].trim();
@@ -174,15 +234,33 @@ function applyUnifiedDiff(diffText, repoDir) {
     const tmp = path.join(repoDir, `.ai_patch_${i}.diff`);
     fs.writeFileSync(tmp, chunk + (chunk.endsWith('\n') ? '' : '\n'), 'utf8');
 
+    let ok = false;
     try {
-      if (applyChunk(repoDir, path.basename(tmp))) {
-        applied++;
-      } else {
-        skipped.push({ i, reason: 'git-apply-failed', path: a || b });
-      }
+      ok = applyChunk(repoDir, path.basename(tmp));
+    } catch (_) {
+      ok = false;
     } finally {
       try { fs.unlinkSync(tmp); } catch {}
     }
+
+    if (ok) {
+      applied++;
+      // keep repo tree up to date
+      if (type === 'delete' && a) treeSet.delete(a);
+      if (type === 'add' && b) treeSet.add(b);
+      continue;
+    }
+
+    // Heuristic fallback
+    const didHeuristic = fallbackApply(repoDir, { a, b, type });
+    if (didHeuristic) {
+      applied++;
+      heuristic.push({ i, reason: 'heuristic-applied', path: a || b, type });
+      if (type === 'delete' && a) treeSet.delete(a);
+      continue;
+    }
+
+    skipped.push({ i, reason: 'git-apply-failed', path: a || b });
   }
 
   if (applied === 0) {
@@ -193,6 +271,9 @@ function applyUnifiedDiff(diffText, repoDir) {
     );
   }
 
+  if (heuristic.length) {
+    console.log('ℹ️  Heuristic fixes applied:', heuristic);
+  }
   if (skipped.length) {
     console.log('ℹ️  Some chunks skipped:', skipped);
   }
