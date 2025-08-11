@@ -19,6 +19,8 @@ const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID;
 const TARGET_REPO_DIR = process.env.TARGET_REPO_DIR || path.resolve(process.cwd(), '..', 'simple-pim-1754492683911');
 const TARGET_REPO_GIT = process.env.TARGET_REPO_GIT || 'https://github.com/basstian-ai/simple-pim-1754492683911';
+const GH_PUSH_TOKEN = process.env.GH_PUSH_TOKEN || process.env.GITHUB_TOKEN; // prefer PAT
+
 
 if (!OPENAI_API_KEY) {
   console.error('Missing OPENAI_API_KEY');
@@ -79,16 +81,25 @@ function computeFilesToSend(repoDir, issues) {
 }
 
 async function main() {
-  const repoDir = TARGET_REPO_DIR;
-  console.log(`🏁 Target repo: ${repoDir}`);
-  if (!fs.existsSync(repoDir)) {
-    console.log(`🔁 Cloning target repo from ${TARGET_REPO_GIT}...`);
-    try { run(`git clone ${TARGET_REPO_GIT} "${repoDir}"`); } catch {}
-  }
-  if (!fs.existsSync(repoDir)) {
-    console.error(`Target repo dir does not exist: ${repoDir}`);
-    process.exit(1);
-  }
+const repoDir = TARGET_REPO_DIR;
+const authUrl = GH_PUSH_TOKEN
+  ? TARGET_REPO_GIT.replace('https://github.com/', `https://x-access-token:${GH_PUSH_TOKEN}@github.com/`)
+  : TARGET_REPO_GIT;
+
+console.log(`🏁 Target repo: ${repoDir}`);
+if (!fs.existsSync(repoDir)) {
+  console.log(`🔁 Cloning target repo from ${TARGET_REPO_GIT}...`);
+  try { run(`git clone "${authUrl}" "${repoDir}"`); } catch {}
+}
+if (!fs.existsSync(repoDir)) {
+  console.error(`Target repo dir does not exist: ${repoDir}`);
+  process.exit(1);
+}
+
+// Ensure remote uses token (even if it already existed)
+if (GH_PUSH_TOKEN) {
+  try { run(`git remote set-url origin "${authUrl}"`, { cwd: repoDir }); } catch {}
+}
   const frameworkVariant = fs.existsSync(path.join(repoDir, 'pages')) ? 'next-pages'
                            : fs.existsSync(path.join(repoDir, 'app')) ? 'next-app'
                            : 'unknown';
