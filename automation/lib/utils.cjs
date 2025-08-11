@@ -160,10 +160,11 @@ function extractAddedContentFromChunk(chunk) {
 }
 
 function reconstructNewFileFromChunk(chunk) {
-  // For modify hunks: keep context (' ') + additions ('+'), drop deletions ('-')
+  const lines = chunk.split('\n');
   const out = [];
   let inHunk = false;
-  for (const line of chunk.split('\n')) {
+
+  for (const line of lines) {
     if (line.startsWith('@@')) { inHunk = true; continue; }
     if (!inHunk) continue;
     if (line.startsWith('+++ ') || line.startsWith('--- ')) continue;
@@ -171,6 +172,21 @@ function reconstructNewFileFromChunk(chunk) {
     if (line.startsWith('+')) { out.push(line.slice(1)); continue; }
     if (line.startsWith(' ')) { out.push(line.slice(1)); continue; }
   }
+
+  // If no @@ hunks or nothing accumulated, fall back to plus-only lines
+  if (!inHunk || out.length === 0) {
+    const plusOnly = [];
+    let seenHeaders = false;
+    for (const line of lines) {
+      if (line.startsWith('+++ ') || line.startsWith('--- ')) { seenHeaders = true; continue; }
+      if (!seenHeaders) continue;
+      if (line.startsWith('+') && !line.startsWith('+++ ')) {
+        plusOnly.push(line.slice(1));
+      }
+    }
+    if (plusOnly.length > 0) return plusOnly.join('\n') + '\n';
+  }
+
   return out.join('\n') + (out.length ? '\n' : '');
 }
 
@@ -225,11 +241,14 @@ function fallbackApply(repoDir, { a, b, type, chunk }) {
         const abs = path.join(repoDir, a);
         if (rewriteDefaultSlugifyImports(abs)) return true;
       }
-      // Last resort: reconstruct “after” file from the diff and overwrite
+      // Last resort: reconstruct the "after" file from the diff and overwrite
       const abs = path.join(repoDir, a);
       if (fs.existsSync(abs)) {
-        const nextText = reconstructNewFileFromChunk(chunk);
-        if (nextText.trim().length > 0) {
+        let nextText = reconstructNewFileFromChunk(chunk);
+        if (!nextText || nextText.trim().length === 0) {
+          nextText = extractAddedContentFromChunk(chunk); // plus-only fallback
+        }
+        if (nextText && nextText.trim().length > 0) {
           fs.writeFileSync(abs, nextText, 'utf8');
           return true;
         }
@@ -418,6 +437,7 @@ export default withTimeout;
   fs.writeFileSync(file, content, 'utf8');
   return true;
 }
+
 function runPreBuildFixes(repoDir) {
   const actions = [];
   if (ensureWithTimeoutHelper(repoDir)) actions.push('created lib/api/withTimeout.js');
