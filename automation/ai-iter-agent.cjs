@@ -11,8 +11,7 @@ const { SYSTEM_PROMPT } = require('./lib/prompt.cjs');
 const { listDeployments, getBuildEvents, getRuntimeLogs, concatAndTrimLogs } = require('./lib/vercelLogs.cjs');
 const { extractIssuesFromLogs, filesFromIssues } = require('./lib/parseLogs.cjs');
 const { strategyFor } = require('./lib/strategies.cjs');
-const { tryLocalBuild, getRepoTree, collectRepoFiles, readRoadmap, applyUnifiedDiff, commitAndPush, pickPackageManager, run } = require('./lib/utils.cjs');
-
+const { tryLocalBuild, getRepoTree, collectRepoFiles, readRoadmap, applyUnifiedDiff, commitAndPush, pickPackageManager, run, runPreBuildFixes } = require('./lib/utils.cjs');
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini';
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
@@ -182,6 +181,9 @@ RESPONSE RULES:
   });
   applyUnifiedDiff(retry, repoDir); // will throw if still invalid
 }
+    // Run small deterministic fixes that we know are safe
+  runPreBuildFixes(repoDir);
+
     // 4.5) Verify build locally; on failure, feed logs back once and retry
   try {
     console.log('🏗️  Building locally...');
