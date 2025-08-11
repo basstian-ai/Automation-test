@@ -97,6 +97,9 @@ async function main() {
   // 1) Fetch vercel logs → issues
   const { trimmedLogs, issues } = await fetchVercelLogs();
   console.log(`ℹ️  Parsed ${issues.length} issue(s) from Vercel logs`);
+  if (issues.length === 0) {
+   console.log('ℹ️  No issues found → proceeding to implement ONE roadmap item.');
+ }
   const rules = issues.map(i => ({ file: i.file, rules: strategyFor(i) })).filter(r => r.rules.length);
 
   // 2) Build payload for the model
@@ -121,9 +124,23 @@ async function main() {
 
   // 3) Ask LLM for a unified diff (Fix→Improve)
   console.log('🧠 Calling LLM for unified diff...');
-  const diff = await callLLM({ system: SYSTEM_PROMPT, payload });
+  let diff = await callLLM({ system: SYSTEM_PROMPT, payload });
   if (!diff || !diff.includes('diff --git')) {
-    console.error('No unified diff returned. Full response:\n', diff);
+    console.warn('Got non-unified patch. Asking model to reformat to unified git diff only...');
+    const reformPrompt = `
+You previously returned a patch that was NOT a raw unified git diff.
+RESPONSE RULES:
+- Return ONLY a raw unified git diff starting with "diff --git".
+- No code fences, no "*** Begin Patch", no prose.
+If no changes are needed, return a minimal valid diff that makes no changes.
+`;
+    diff = await callLLM({
+      system: SYSTEM_PROMPT + '\n' + reformPrompt,
+      payload: { ...payload, previousResponse: String(diff).slice(-20000) } // give the model its last output to convert
+    });
+  }
+  if (!diff || !diff.includes('diff --git')) {
+    console.error('No unified diff returned after reformat attempt. Full response:\n', diff);
     process.exit(1);
   }
 
