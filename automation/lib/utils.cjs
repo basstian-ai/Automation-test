@@ -394,7 +394,7 @@ function ensureHealthApiValid(repoDir) {
   }
   return false;
 }
-// add somewhere above runPreBuildFixes:
+
 function ensureWithTimeoutHelper(repoDir) {
   const dir = path.join(repoDir, 'lib/api');
   const file = path.join(dir, 'withTimeout.js');
@@ -420,14 +420,11 @@ export default withTimeout;
 }
 function runPreBuildFixes(repoDir) {
   const actions = [];
+  if (ensureWithTimeoutHelper(repoDir)) actions.push('created lib/api/withTimeout.js');
   if (ensureDefaultExportSlugify(repoDir)) actions.push('added default export shim to lib/slugify.js');
   actions.push(...fixDuplicateApiRoutes(repoDir));
   if (ensureHealthApiValid(repoDir)) actions.push('rewrote pages/api/health.js to a safe handler');
-  if (actions.length) {
-    console.log('🔧 Pre-build fixes:', actions);
-  } else {
-    console.log('🔧 Pre-build fixes: none needed');
-  }
+  console.log('🔧 Pre-build fixes:', actions.length ? actions : 'none needed');
 }
 
 /** ---------- Exports ---------- */
