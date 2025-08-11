@@ -9,19 +9,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
-    env:
-      TARGET_REPO: basstian-ai/simple-pim-1754492683911
-      TARGET_BRANCH: main
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      VERCEL_TOKEN:    ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_TEAM_ID:  ${{ secrets.VERCEL_TEAM_ID }}
-      VERCEL_PROJECT:  ${{ secrets.VERCEL_PROJECT }}
-      PAT_TOKEN:       ${{ secrets.PAT_TOKEN }}
-      OPENAI_MODEL: gpt-5-mini
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT }}
-      GH_PUSH_TOKEN: ${{ secrets.PAT_TOKEN }}   # <-- fine-grained PAT with write to simple-pim repo
-      GIT_USER_NAME: basstian-ai
-      GIT_USER_EMAIL: basstian-ai@users.noreply.github.com
+  env:
+  # --- Model ---
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_MODEL: gpt-5-mini
+
+  # --- Vercel ---
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  # --- Git push identity/auth ---
+  GH_PUSH_TOKEN: ${{ secrets.PAT_TOKEN }}
+  GIT_USER_NAME: basstian-ai
+  GIT_USER_EMAIL: 12345678+basstian-ai@users.noreply.github.com   # use your real no-reply
+
+  # --- Target repo (owner/repo form) ---
+  TARGET_REPO: basstian-ai/simple-pim-1754492683911
+  # Where to clone the target repo (matches what your code expects)
+  TARGET_REPO_DIR: ${{ github.workspace }}/../simple-pim-1754492683911
+
 
 
     steps:
