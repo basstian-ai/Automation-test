@@ -34,10 +34,6 @@ async function callLLM({ system, payload }) {
     },
     body: JSON.stringify({
       model: OPENAI_MODEL,
-      temperature: 0.2,
-      model: OPENAI_MODEL,
-      // NOTE: gpt-5 family does not support custom temperature values.
-      // Do NOT send temperature/top_p/etc. Keep defaults for determinism.
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: JSON.stringify(payload) }
