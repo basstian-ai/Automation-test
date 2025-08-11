@@ -4,7 +4,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { getExportFacts } = require('./fileFacts.cjs');
 
-function run(cmd, opts={}) {
+function run(cmd, opts = {}) {
   return execSync(cmd, { stdio: 'inherit', ...opts });
 }
 
@@ -28,6 +28,8 @@ function tryLocalBuild(repoDir) {
     run('pnpm next build', { cwd: repoDir });
   }
 }
+
+/** ---------- Diff helpers ---------- */
 
 function sanitizeDiff(raw) {
   if (!raw) return '';
@@ -77,49 +79,6 @@ function sanitizeDiff(raw) {
   return s;
 }
 
-
-function tryApply(repoDir, diffPath) {
-  const modes = [
-    'git apply --check -p1',
-    'git apply --check',
-    'git apply --check -p0',
-  ];
-  for (const m of modes) {
-    try {
-      run(`${m} ${path.basename(diffPath)}`, { cwd: repoDir });
-      // If check passes, actually apply with same mode plus --index -3 --whitespace=fix
-      const apply = m.replace(' --check', '') + ' --index -3 --whitespace=fix';
-      run(`${apply} ${path.basename(diffPath)}`, { cwd: repoDir });
-      return true;
-    } catch (_) {
-      // try next mode
-    }
-  }
-  return false;
-}
-
-function applyUnifiedDiff(diffText, repoDir) {
-  const sanitized = sanitizeDiff(diffText);
-  const tmp = path.join(repoDir, '.ai_patch.diff');
-  fs.writeFileSync(tmp, sanitized, 'utf8');
-
-  try {
-    if (tryApply(repoDir, tmp)) return;
-    // If still failing, dump first lines for debugging and throw
-    const head = sanitized.split('\n').slice(0, 120).join('\n');
-    throw new Error(`git apply failed; diff head:\n${head}`);
-  } finally {
-    try { fs.unlinkSync(tmp); } catch {}
-  }
-}
-
-
-function commitAndPush(message, repoDir) {
-  run('git add -A', { cwd: repoDir });
-  try { run(`git diff --cached --quiet || git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: repoDir }); } catch {}
-  try { run('git push', { cwd: repoDir }); } catch {}
-}
-
 function getRepoTree(repoDir) {
   const out = [];
   (function walk(dir) {
@@ -133,7 +92,123 @@ function getRepoTree(repoDir) {
   return out;
 }
 
-function collectRepoFiles(repoDir, paths=[]) {
+function getRepoTreeSet(repoDir) {
+  return new Set(getRepoTree(repoDir));
+}
+
+function splitDiffIntoFiles(sanitized) {
+  // Split into per-file chunks (keep the "diff --git" marker with each)
+  // Ensure we don’t drop the very first chunk if it starts the file
+  const parts = sanitized.replace(/^diff --git /, '\n\0diff --git ').split(/\n(?=diff --git )/g);
+  return parts.map(p => p.replace(/^\0/, '')).filter(Boolean);
+}
+
+function parseChunkPaths(chunk) {
+  // Extract a/b paths from the "diff --git a/... b/..." header
+  const m = chunk.match(/^diff --git a\/(.+?) b\/(.+?)$/m);
+  if (!m) return { a: null, b: null, type: 'unknown' };
+  const a = m[1];
+  const b = m[2];
+
+  // Detect file action
+  const isDeleted = /(^|\n)deleted file mode /m.test(chunk) || /(^|\n)\+\+\+ \/dev\/null/m.test(chunk);
+  const isNew     = /(^|\n)new file mode /m.test(chunk) || /(^|\n)--- \/dev\/null/m.test(chunk);
+
+  let type = 'modify';
+  if (isDeleted) type = 'delete';
+  else if (isNew) type = 'add';
+
+  return { a, b, type };
+}
+
+function applyChunk(repoDir, tmpName) {
+  const modes = [
+    'git apply --check -p1',
+    'git apply --check',
+    'git apply --check -p0',
+  ];
+  for (const m of modes) {
+    try {
+      run(`${m} ${tmpName}`, { cwd: repoDir });
+      const apply = m.replace(' --check', '') + ' --index -3 --whitespace=fix';
+      run(`${apply} ${tmpName}`, { cwd: repoDir });
+      return true;
+    } catch (_) { /* try next */ }
+  }
+  return false;
+}
+
+/**
+ * Apply a unified diff robustly:
+ * - sanitize
+ * - split into per-file chunks
+ * - skip chunks that target non-existent files (for modify/delete)
+ * - try multiple -p modes per chunk
+ * - succeed if at least one chunk applies
+ */
+function applyUnifiedDiff(diffText, repoDir) {
+  const sanitized = sanitizeDiff(diffText);
+  const chunks = splitDiffIntoFiles(sanitized);
+  const treeSet = getRepoTreeSet(repoDir);
+
+  let applied = 0;
+  const skipped = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i].trim();
+    if (!chunk.startsWith('diff --git ')) continue;
+
+    const { a, b, type } = parseChunkPaths(chunk);
+
+    // Skip deletes/modifies for files that don't exist locally
+    if (type === 'delete' && a && !treeSet.has(a)) {
+      skipped.push({ i, reason: 'delete-nonexistent', path: a });
+      continue;
+    }
+    if (type === 'modify' && a && !treeSet.has(a)) {
+      skipped.push({ i, reason: 'modify-nonexistent', path: a });
+      continue;
+    }
+
+    // Write chunk to a temp file and try to apply
+    const tmp = path.join(repoDir, `.ai_patch_${i}.diff`);
+    fs.writeFileSync(tmp, chunk + (chunk.endsWith('\n') ? '' : '\n'), 'utf8');
+
+    try {
+      if (applyChunk(repoDir, path.basename(tmp))) {
+        applied++;
+      } else {
+        skipped.push({ i, reason: 'git-apply-failed', path: a || b });
+      }
+    } finally {
+      try { fs.unlinkSync(tmp); } catch {}
+    }
+  }
+
+  if (applied === 0) {
+    const head = sanitized.split('\n').slice(0, 120).join('\n');
+    throw new Error(
+      `No patch chunks applied. Skipped: ${JSON.stringify(skipped)}\n` +
+      `diff head:\n${head}`
+    );
+  }
+
+  if (skipped.length) {
+    console.log('ℹ️  Some chunks skipped:', skipped);
+  }
+}
+
+/** ---------- Repo helpers ---------- */
+
+function commitAndPush(message, repoDir) {
+  run('git add -A', { cwd: repoDir });
+  try {
+    run(`git diff --cached --quiet || git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: repoDir });
+  } catch {}
+  try { run('git push', { cwd: repoDir }); } catch {}
+}
+
+function collectRepoFiles(repoDir, paths = []) {
   return paths.map(p => {
     const abs = path.join(repoDir, p);
     const content = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
