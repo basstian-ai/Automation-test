@@ -29,19 +29,59 @@ function tryLocalBuild(repoDir) {
   }
 }
 
-function applyUnifiedDiff(diffText, repoDir) {
-  const tmp = path.join(repoDir, '.ai_patch.diff');
-  fs.writeFileSync(tmp, diffText, 'utf8');
-  try {
+function sanitizeDiff(raw) {
+  if (!raw) return '';
+  let s = String(raw);
+
+  // Strip code fences, "*** Begin/End Patch", and any leading prose before first "diff --git"
+  s = s.replace(/^\uFEFF/, '');               // remove BOM
+  s = s.replace(/\r/g, '');                    // force LF
+  s = s.replace(/^\s*```[\s\S]*?^```/gm, '');  // remove fenced blocks if any
+  s = s.replace(/^\s*\*{3}.*?End Patch\s*$/gms, ''); // remove *** Begin/End Patch blocks
+
+  const first = s.indexOf('diff --git ');
+  if (first > 0) s = s.slice(first);
+
+  // Ensure trailing newline
+  if (!s.endsWith('\n')) s += '\n';
+  return s;
+}
+
+function tryApply(repoDir, diffPath) {
+  const modes = [
+    'git apply --check -p1',
+    'git apply --check',
+    'git apply --check -p0',
+  ];
+  for (const m of modes) {
     try {
-      run('git apply --index -3 --whitespace=fix .ai_patch.diff', { cwd: repoDir });
-    } catch {
-      run('git apply --index -3 --whitespace=fix -p1 .ai_patch.diff', { cwd: repoDir });
+      run(`${m} ${path.basename(diffPath)}`, { cwd: repoDir });
+      // If check passes, actually apply with same mode plus --index -3 --whitespace=fix
+      const apply = m.replace(' --check', '') + ' --index -3 --whitespace=fix';
+      run(`${apply} ${path.basename(diffPath)}`, { cwd: repoDir });
+      return true;
+    } catch (_) {
+      // try next mode
     }
+  }
+  return false;
+}
+
+function applyUnifiedDiff(diffText, repoDir) {
+  const sanitized = sanitizeDiff(diffText);
+  const tmp = path.join(repoDir, '.ai_patch.diff');
+  fs.writeFileSync(tmp, sanitized, 'utf8');
+
+  try {
+    if (tryApply(repoDir, tmp)) return;
+    // If still failing, dump first lines for debugging and throw
+    const head = sanitized.split('\n').slice(0, 120).join('\n');
+    throw new Error(`git apply failed; diff head:\n${head}`);
   } finally {
     try { fs.unlinkSync(tmp); } catch {}
   }
 }
+
 
 function commitAndPush(message, repoDir) {
   run('git add -A', { cwd: repoDir });
