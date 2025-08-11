@@ -82,6 +82,9 @@ Vercel (for log ingestion)
 Target repo (where diffs are applied)
 
 - `TARGET_REPO_DIR` – path to the PIM repo (default: `../simple-pim-1754492683911`)
+- `TARGET_REPO_GIT` – git URL used if the repo needs to be cloned (default: `https://github.com/basstian-ai/simple-pim-1754492683911`)
+
+The agent clones `TARGET_REPO_GIT` into `TARGET_REPO_DIR` if the directory is missing.
 
 ### What the agent does
 1) Fetches latest Vercel **build + runtime** logs  

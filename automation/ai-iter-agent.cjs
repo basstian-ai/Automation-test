@@ -10,13 +10,15 @@ const path = require('path');
 const { SYSTEM_PROMPT } = require('./lib/prompt.cjs');
 const { listDeployments, getBuildEvents, getRuntimeLogs, concatAndTrimLogs } = require('./lib/vercelLogs.cjs');
 const { extractIssuesFromLogs, filesFromIssues } = require('./lib/parseLogs.cjs');
-const { tryLocalBuild, getRepoTree, collectRepoFiles, readRoadmap, applyUnifiedDiff, commitAndPush, pickPackageManager } = require('./lib/utils.cjs');
+const { strategyFor } = require('./lib/strategies.cjs');
+const { tryLocalBuild, getRepoTree, collectRepoFiles, readRoadmap, applyUnifiedDiff, commitAndPush, pickPackageManager, run } = require('./lib/utils.cjs');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID;
 const TARGET_REPO_DIR = process.env.TARGET_REPO_DIR || path.resolve(process.cwd(), '..', 'simple-pim-1754492683911');
+const TARGET_REPO_GIT = process.env.TARGET_REPO_GIT || 'https://github.com/basstian-ai/simple-pim-1754492683911';
 
 if (!OPENAI_API_KEY) {
   console.error('Missing OPENAI_API_KEY');
@@ -81,6 +83,10 @@ async function main() {
   const repoDir = TARGET_REPO_DIR;
   console.log(`🏁 Target repo: ${repoDir}`);
   if (!fs.existsSync(repoDir)) {
+    console.log(`🔁 Cloning target repo from ${TARGET_REPO_GIT}...`);
+    try { run(`git clone ${TARGET_REPO_GIT} "${repoDir}"`); } catch {}
+  }
+  if (!fs.existsSync(repoDir)) {
     console.error(`Target repo dir does not exist: ${repoDir}`);
     process.exit(1);
   }
@@ -92,6 +98,7 @@ async function main() {
   // 1) Fetch vercel logs → issues
   const { trimmedLogs, issues } = await fetchVercelLogs();
   console.log(`ℹ️  Parsed ${issues.length} issue(s) from Vercel logs`);
+  const rules = issues.map(i => ({ file: i.file, rules: strategyFor(i) })).filter(r => r.rules.length);
 
   // 2) Build payload for the model
   const repoTree = getRepoTree(repoDir);
@@ -101,6 +108,7 @@ async function main() {
 
   const payload = {
     issues,
+    rules,
     trimmedLogs,
     repoFiles,
     repoTree,

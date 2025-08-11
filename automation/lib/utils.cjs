@@ -33,7 +33,11 @@ function applyUnifiedDiff(diffText, repoDir) {
   const tmp = path.join(repoDir, '.ai_patch.diff');
   fs.writeFileSync(tmp, diffText, 'utf8');
   try {
-    run('git apply -p0 --whitespace=fix -3 .ai_patch.diff', { cwd: repoDir });
+    try {
+      run('git apply --index -3 --whitespace=fix .ai_patch.diff', { cwd: repoDir });
+    } catch {
+      run('git apply --index -3 --whitespace=fix -p1 .ai_patch.diff', { cwd: repoDir });
+    }
   } finally {
     try { fs.unlinkSync(tmp); } catch {}
   }
