@@ -215,7 +215,14 @@ function applyFiles(files) {
 
 // ---------- local build gate ----------
 function localBuild() {
-  const cmd = `cd ${TARGET_DIR} && (npm ci || npm i) && NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=4096" npm run build`;
+  const cmd = [
+    `cd ${TARGET_DIR}`,
+    `(npm ci || npm i)`,
+    // run unit tests before building; fail fast if tests are red
+    `NEXT_TELEMETRY_DISABLED=1 npm run test --silent`,
+    // then do a production build
+    `NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=4096" NEXT_TELEMETRY_DISABLED=1 npm run build`
+  ].join(' && ');
   const r = shTry(cmd);
   safeWrite(`${TARGET_DIR}/local_build.log`, r.out || "");
   return r.ok;
@@ -270,17 +277,15 @@ function decideMode(buildLog, runtimeLog, depState) {
   const repoListing = files.slice(0, 300).map(f => ` - ${f}`).join("\n");
 
   const system =
-`You are a relentless Next.js (v10) + Vercel engineer and PIM domain expert.
- - Drive aggressive progress; every iteration must ship meaningful, production-ready code.
- - Output only concrete code changes; avoid planning or commentary.
- - Follow ROADMAP.md and focus first on dashboard, admin interface, and rich sample product data.
- - Mode=FIX: minimal safe change to make build/runtime green. If "Module not found: 'isomorphic-unfetch'", either add the dep or refactor to native fetch that works in Next 10. No comments in package.json.
- - Mode=FEATURE: implement a moderately sized, shippable PIM improvement (e.g., admin gui, APIs, AI-features, list view polish, basic variant fields, attribute groups) with at least one small test. Avoid trivial tweaks.
- - Mode=UPGRADE: incrementally migrate the codebase and dependencies toward Next.js 14 while keeping the app functional, tackling meaningful chunks each step.
- - Prefer UNIFIED DIFF. If unsure or file context may be stale, provide "files" with full contents.
- - live site is here: https://simple-pim-1754492683911.vercel.app .
- - Include a concise commit_message summarizing the specific fix or feature implemented.
- - Always return valid JSON only.`;
+`You are a senior Next.js (v10) + Vercel engineer and PIM domain expert.
+- Mode=FIX: minimal safe change to make build/runtime green. If "Module not found: 'isomorphic-unfetch'", either add the dep or refactor to native fetch that works in Next 10. No comments in package.json.
+- Mode=FEATURE: small, shippable PIM improvement (e.g., admin gui, APIs, AI-features, list view polish, basic variant fields, attribute groups) with at least one small test.
+- Output format rules (STRICT):
+  1) Prefer a single valid UNIFIED DIFF that starts with "diff --git a/<path> b/<path>" and includes proper '--- a/…' and '+++ b/…' headers and '@@' hunks.
+  2) If you are not 100% sure the diff will apply, return ONLY "files": an array of objects { "path": "<relative path>", "content": "<entire file content>" } with full file bodies.
+  3) Never include both a partial diff and partial files simultaneously. No prose, no code fences. JSON only.
+- live site is here: https://simple-pim-1754492683911.vercel.app .
+- Always return valid JSON only.`;
 
   const user =
 `Context:
