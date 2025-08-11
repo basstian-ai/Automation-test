@@ -42,7 +42,7 @@ High-Level Workflow & Intent
 	•	Mode (FIX or FEATURE).
 	•	Logs (build/runtime trimmed).
 	•	Repo file list & key file snippets.
-	4.	Ask OpenAI model (now gpt-5) for a patch:
+	4.	Ask OpenAI model (now gpt-5-mini) for a patch:
 	•	Prefer unified_diff.
 	•	If diff fails → retry with files[] containing full file content.
 	5.	Apply changes:
