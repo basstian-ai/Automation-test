@@ -41,4 +41,6 @@ jobs:
         run: npm ci || npm i
 
       - name: Run AI iteration agent
-        run: NODE_OPTIONS="--max-old-space-size=8192" node automation/ai-iter-agent.cjs
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192 --openssl-legacy-provider
+        run: node automation/ai-iter-agent.cjs
