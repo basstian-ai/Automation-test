@@ -4,10 +4,12 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { getExportFacts } = require('./fileFacts.cjs');
 
+/** ---------- Shell helpers ---------- */
 function run(cmd, opts = {}) {
   return execSync(cmd, { stdio: 'inherit', ...opts });
 }
 
+/** ---------- Package manager & build ---------- */
 function pickPackageManager(repoDir) {
   const has = f => fs.existsSync(path.join(repoDir, f));
   if (has('pnpm-lock.yaml')) return 'pnpm';
@@ -37,7 +39,6 @@ function tryLocalBuild(repoDir) {
 }
 
 /** ---------- Diff helpers ---------- */
-
 function sanitizeDiff(raw) {
   if (!raw) return '';
   let s = String(raw);
@@ -47,8 +48,6 @@ function sanitizeDiff(raw) {
   s = s.replace(/\r/g, '');     // CRLF → LF
 
   // Remove fenced code blocks (e.g., ```diff ... ```)
-  // - language after ``` is optional
-  // - closing fence must be on its own line
   s = s.replace(/^\s*```[^\n]*\n[\s\S]*?\n```/gm, '');
 
   // Remove "*** Begin/End Patch" wrappers
@@ -111,7 +110,7 @@ function splitDiffIntoFiles(sanitized) {
 }
 
 function parseChunkPaths(chunk) {
-  // Extract a/b paths from the "diff --git a/... b/..." header
+  // Extract a/b paths from "diff --git a/... b/..." header
   const m = chunk.match(/^diff --git a\/(.+?) b\/(.+?)$/m);
   if (!m) return { a: null, b: null, type: 'unknown' };
   const a = m[1];
@@ -130,11 +129,11 @@ function parseChunkPaths(chunk) {
 
 function applyChunk(repoDir, tmpName) {
   const variants = [
-    // try without 3-way first
+    // try without 3-way first (better for brand-new files)
     ['git apply --check -p1', 'git apply -p1 --whitespace=fix'],
     ['git apply --check',     'git apply --whitespace=fix'],
     ['git apply --check -p0', 'git apply -p0 --whitespace=fix'],
-    // then try 3-way
+    // then try 3-way merge
     ['git apply --check -p1', 'git apply -p1 --index -3 --whitespace=fix'],
     ['git apply --check',     'git apply --index -3 --whitespace=fix'],
     ['git apply --check -p0', 'git apply -p0 --index -3 --whitespace=fix'],
@@ -148,6 +147,7 @@ function applyChunk(repoDir, tmpName) {
   }
   return false;
 }
+
 function extractAddedContentFromChunk(chunk) {
   const out = [];
   let inHunk = false;
@@ -160,7 +160,7 @@ function extractAddedContentFromChunk(chunk) {
 }
 
 function reconstructNewFileFromChunk(chunk) {
-  // For modify hunks: keep context (' ' prefix) and additions ('+'), drop deletions ('-')
+  // For modify hunks: keep context (' ') + additions ('+'), drop deletions ('-')
   const out = [];
   let inHunk = false;
   for (const line of chunk.split('\n')) {
@@ -175,13 +175,10 @@ function reconstructNewFileFromChunk(chunk) {
 }
 
 /** ---------- Heuristic fallbacks when git apply fails ---------- */
-
-function ensureDefaultExportSlugify(absPath) {
+function ensureDefaultExportSlugifyShim(absPath) {
   if (!fs.existsSync(absPath)) return false;
   let txt = fs.readFileSync(absPath, 'utf8');
-  // If there is already a default export, nothing to do
-  if (/export\s+default\s+slugify\s*;?/m.test(txt)) return false;
-  // Add a small shim at the end
+  if (/export\s+default\s+slugify\s*;?/m.test(txt)) return false; // already has default
   const needsNL = txt.length && !txt.endsWith('\n');
   txt += (needsNL ? '\n' : '') + '\n// default export shim for consumers using default import\nexport default slugify;\n';
   fs.writeFileSync(absPath, txt, 'utf8');
@@ -219,16 +216,16 @@ function fallbackApply(repoDir, { a, b, type, chunk }) {
       return false;
     }
     if (type === 'modify' && a) {
-      // Try known heuristics first
+      // Known heuristics first
       if (/\/lib\/slugify\.(js|ts)$/.test(a)) {
         const abs = path.join(repoDir, a);
-        return ensureDefaultExportSlugify(abs);
+        return ensureDefaultExportSlugifyShim(abs);
       }
       if (/\/pages\/.*\.(js|jsx|ts|tsx)$/.test(a)) {
         const abs = path.join(repoDir, a);
         if (rewriteDefaultSlugifyImports(abs)) return true;
       }
-      // As a last resort, reconstruct the new file from the diff and overwrite
+      // Last resort: reconstruct “after” file from the diff and overwrite
       const abs = path.join(repoDir, a);
       if (fs.existsSync(abs)) {
         const nextText = reconstructNewFileFromChunk(chunk);
@@ -248,7 +245,7 @@ function fallbackApply(repoDir, { a, b, type, chunk }) {
  * - split into per-file chunks
  * - skip chunks that target non-existent files (for modify/delete)
  * - try multiple -p modes per chunk
- * - if apply fails, run heuristics (delete file / slugify fixes)
+ * - if apply fails, run heuristics (add/delete/slugify/overwrite)
  * - succeed if at least one chunk applies
  */
 function applyUnifiedDiff(diffText, repoDir) {
@@ -303,6 +300,7 @@ function applyUnifiedDiff(diffText, repoDir) {
       applied++;
       heuristic.push({ i, reason: 'heuristic-applied', path: a || b, type });
       if (type === 'delete' && a) treeSet.delete(a);
+      if (type === 'add' && b) treeSet.add(b);
       continue;
     }
 
@@ -326,7 +324,6 @@ function applyUnifiedDiff(diffText, repoDir) {
 }
 
 /** ---------- Repo helpers ---------- */
-
 function commitAndPush(message, repoDir) {
   const name = process.env.GIT_USER_NAME || 'automation-bot';
   const email = process.env.GIT_USER_EMAIL || 'automation-bot@users.noreply.github.com';
@@ -340,7 +337,6 @@ function commitAndPush(message, repoDir) {
 
   try { run('git push', { cwd: repoDir }); } catch {}
 }
-
 
 function collectRepoFiles(repoDir, paths = []) {
   return paths.map(p => {
@@ -356,15 +352,12 @@ function readRoadmap(repoDir) {
   const alt = path.join(repoDir, 'ROADMAP.md');
   if (fs.existsSync(alt)) return fs.readFileSync(alt, 'utf8');
   return '# Roadmap\n\n(No roadmap.md found)';
-}function ensureDefaultExportSlugify(repoDir) {
+}
+
+/** ---------- Pre-build deterministic fixes ---------- */
+function ensureDefaultExportSlugify(repoDir) {
   const abs = path.join(repoDir, 'lib/slugify.js');
-  if (!fs.existsSync(abs)) return false;
-  let txt = fs.readFileSync(abs, 'utf8');
-  if (/export\s+default\s+slugify\s*;?/.test(txt)) return false; // already has default
-  const needsNL = txt.length && !txt.endsWith('\n');
-  txt += (needsNL ? '\n' : '') + '\n// default export shim for consumers using default import\nexport default slugify;\n';
-  fs.writeFileSync(abs, txt, 'utf8');
-  return true;
+  return ensureDefaultExportSlugifyShim(abs);
 }
 
 function fixDuplicateApiRoutes(repoDir) {
@@ -414,6 +407,7 @@ function runPreBuildFixes(repoDir) {
   }
 }
 
+/** ---------- Exports ---------- */
 module.exports = {
   run,
   tryLocalBuild,
@@ -423,7 +417,5 @@ module.exports = {
   readRoadmap,
   pickPackageManager,
   applyUnifiedDiff,
-  runPreBuildFixes,          // <-- add this
+  runPreBuildFixes,
 };
-
-
