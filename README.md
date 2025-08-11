@@ -50,3 +50,16 @@ High-Level Workflow & Intent
 	•	If build fails after patch, request AI to fix locally until green.
 	6.	Repeat on next scheduled run.
 
+
+⸻
+
+Environment Variables
+
+- `OPENAI_API_KEY` – OpenAI API key used for all requests.
+- `OPENAI_MODEL` or `AI_MODEL` – optional; overrides the default `gpt-5-mini` model.
+
+Example with custom model:
+
+```bash
+OPENAI_API_KEY=sk-... OPENAI_MODEL=gpt-4.1 node automation/ai-iter-agent.cjs
+```
