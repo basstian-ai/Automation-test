@@ -33,19 +33,50 @@ function sanitizeDiff(raw) {
   if (!raw) return '';
   let s = String(raw);
 
-  // Strip code fences, "*** Begin/End Patch", and any leading prose before first "diff --git"
-  s = s.replace(/^\uFEFF/, '');               // remove BOM
-  s = s.replace(/\r/g, '');                    // force LF
-  s = s.replace(/^\s*```[\s\S]*?^```/gm, '');  // remove fenced blocks if any
-  s = s.replace(/^\s*\*{3}.*?End Patch\s*$/gms, ''); // remove *** Begin/End Patch blocks
+  // Normalize
+  s = s.replace(/^\uFEFF/, ''); // BOM
+  s = s.replace(/\r/g, '');     // CRLF → LF
 
+  // Remove fenced code blocks (e.g., ```diff ... ```)
+  // - language after ``` is optional
+  // - closing fence must be on its own line
+  s = s.replace(/^\s*```[^\n]*\n[\s\S]*?\n```/gm, '');
+
+  // Remove "*** Begin/End Patch" wrappers
+  s = s.replace(/^\s*\*{3}.*?End Patch\s*$/gms, '');
+
+  // Keep only from the FIRST "diff --git" ...
   const first = s.indexOf('diff --git ');
-  if (first > 0) s = s.slice(first);
+  if (first >= 0) s = s.slice(first);
+
+  // ... and drop anything after known non-diff sections
+  const cutMarks = [
+    '\n# TEST PLAN',
+    '\n#TEST PLAN',
+    '\n# Changes Summary',
+    '\n# CHANGES SUMMARY',
+    '\n#Changes Summary',
+    '\n#CHANGES SUMMARY',
+    '\n*** End Patch',
+    '\n```'
+  ];
+  let cutPos = s.length;
+  for (const mark of cutMarks) {
+    const p = s.indexOf(mark);
+    if (p !== -1 && p < cutPos) cutPos = p;
+  }
+  s = s.slice(0, cutPos);
+
+  // Fast-fail if no unified diff remains
+  if (!s.includes('diff --git ')) {
+    throw new Error('Sanitized output did not contain a unified git diff.');
+  }
 
   // Ensure trailing newline
   if (!s.endsWith('\n')) s += '\n';
   return s;
 }
+
 
 function tryApply(repoDir, diffPath) {
   const modes = [
