@@ -6,7 +6,6 @@
  *
  * Model update: default model -> gpt-5-mini (override with OPENAI_MODEL or AI_MODEL).
  * Compatibility: for gpt-5 family (gpt-5 and gpt-5-mini), omit temperature (models only support default).
- *
  * New: optional UPGRADE mode for migrating the target app toward modern
  * Next.js versions (e.g., 14).
  */
@@ -140,7 +139,9 @@ async function askAI(system, user) {
     model: AI_MODEL,
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
     response_format: { type: "json_object" },
+
     // temperature may not be supported for all models (e.g., gpt-5 family). We add it only if allowed.
+
   };
 
   // gpt-5 and gpt-5-mini require the default temperature
@@ -149,6 +150,7 @@ async function askAI(system, user) {
 
   // If not gpt-5 family, try with temperature first (more deterministic).
   if (!isGpt5Family) {
+
     candidateBodies.push({ ...baseBody, temperature: 0.2 });
   }
   // Always add a fallback without temperature (works for all models).
