@@ -289,12 +289,19 @@ function applyUnifiedDiff(diffText, repoDir) {
 /** ---------- Repo helpers ---------- */
 
 function commitAndPush(message, repoDir) {
+  const name = process.env.GIT_USER_NAME || 'automation-bot';
+  const email = process.env.GIT_USER_EMAIL || 'automation-bot@users.noreply.github.com';
+  run(`git config user.name "${name}"`, { cwd: repoDir });
+  run(`git config user.email "${email}"`, { cwd: repoDir });
+
   run('git add -A', { cwd: repoDir });
   try {
     run(`git diff --cached --quiet || git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: repoDir });
   } catch {}
+
   try { run('git push', { cwd: repoDir }); } catch {}
 }
+
 
 function collectRepoFiles(repoDir, paths = []) {
   return paths.map(p => {
