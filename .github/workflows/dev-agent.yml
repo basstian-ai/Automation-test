@@ -3,43 +3,36 @@ name: AI Iteration Agent
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * *"  # every 15 minutes
+    - cron: "*/15 * * * *"  # every 15 minutes (default branch only)
+
 jobs:
   iter:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    concurrency:
+      group: ai-iteration-agent
+      cancel-in-progress: false
+    env:
+      # --- Model ---
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: gpt-5-mini
 
-  env:
-  # --- Model ---
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-  OPENAI_MODEL: gpt-5-mini
+      # --- Vercel ---
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-  # --- Vercel ---
-  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # --- Git push identity/auth ---
+      GH_PUSH_TOKEN: ${{ secrets.PAT_TOKEN }}   # fine-grained PAT with write to target repo
+      GIT_USER_NAME: basstian-ai
+      GIT_USER_EMAIL: 212385003+basstian-ai@users.noreply.github.com  # your verified no-reply
 
-  # --- Git push identity/auth ---
-  GH_PUSH_TOKEN: ${{ secrets.PAT_TOKEN }}
-  GIT_USER_NAME: basstian-ai
-  GIT_USER_EMAIL: 212385003+basstian-ai@users.noreply.github.com   # use your real no-reply
-
-  # --- Target repo (owner/repo form) ---
-  TARGET_REPO: basstian-ai/simple-pim-1754492683911
-  # Where to clone the target repo (matches what your code expects)
-  TARGET_REPO_DIR: ${{ github.workspace }}/../simple-pim-1754492683911
-
+      # --- Target repo ---
+      TARGET_REPO: basstian-ai/simple-pim-1754492683911
+      TARGET_REPO_DIR: ${{ github.workspace }}/../simple-pim-1754492683911
 
     steps:
       - name: Checkout automation repo
         uses: actions/checkout@v4
-
-      - name: Checkout target repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.TARGET_REPO }}
-          token: ${{ env.PAT_TOKEN }}
-          path: target
-          ref: ${{ env.TARGET_BRANCH }}
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
