@@ -215,7 +215,7 @@ function applyFiles(files) {
 
 // ---------- local build gate ----------
 function localBuild() {
-  const cmd = `cd ${TARGET_DIR} && (npm ci || npm i) && NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=4096" npm run build`;
+  const cmd = `cd ${TARGET_DIR} && (npm ci || npm i) && NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" npm run build`;
   const r = shTry(cmd);
   safeWrite(`${TARGET_DIR}/local_build.log`, r.out || "");
   return r.ok;
@@ -252,7 +252,7 @@ function decideMode(buildLog, runtimeLog, depState) {
       buildLog = await buildEvents(dep.uid || dep.id);
       runtimeLog = runtimeLogsCLI(dep.url);
     } else {
-      const tryLocal = shTry(`cd ${TARGET_DIR} && (npm ci || npm i) && NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=4096" npm run build`);
+      const tryLocal = shTry(`cd ${TARGET_DIR} && (npm ci || npm i) && NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=8192" npm run build`);
       buildLog = tryLocal.out || "";
       runtimeLog = "(no runtime logs)";
     }
