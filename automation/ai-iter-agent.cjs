@@ -4,7 +4,7 @@
  * Minor update: when the AI patch is “not applicable”, we auto-retry with a
  * files[]-only request (full file bodies), then build-gate and push.
  *
- * Model update: default model -> gpt-5 (override with OPENAI_MODEL or AI_MODEL).
+ * Model update: default model -> gpt-5-mini (override with OPENAI_MODEL or AI_MODEL).
  * Compatibility: for gpt-5 family (gpt-5 and gpt-5-mini), omit temperature (models only support default).
  *
  * New: optional UPGRADE mode for migrating the target app toward modern
@@ -23,8 +23,8 @@ const {
   VERCEL_PROJECT, // project name or prj_ id
   TARGET_REPO = "basstian-ai/simple-pim-1754492683911",
   TARGET_BRANCH = "main",
-  // Default model now gpt-5; OPENAI_MODEL or AI_MODEL can override
-  AI_MODEL = process.env.OPENAI_MODEL || process.env.AI_MODEL || "gpt-5",
+  // Default model now gpt-5-mini; OPENAI_MODEL or AI_MODEL can override
+  AI_MODEL = process.env.OPENAI_MODEL || process.env.AI_MODEL || "gpt-5-mini",
   AGENT_MAX_PROMPT_CHARS = parseInt(process.env.AGENT_MAX_PROMPT_CHARS || "45000", 10),
   AGENT_RETRY = parseInt(process.env.AGENT_RETRY || "3", 10),
   AGENT_MODE,
