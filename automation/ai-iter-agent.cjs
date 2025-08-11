@@ -17,11 +17,15 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini';
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID;
-const TARGET_REPO = process.env.TARGET_REPO; // "owner/name"
+// Target repo + directory (accept both TARGET_REPO_DIR and TARGET_DIR for backwards compat)
+const TARGET_REPO = process.env.TARGET_REPO; // e.g. "basstian-ai/simple-pim-1754492683911"
+const TARGET_REPO_DIR =
+  process.env.TARGET_REPO_DIR ||
+  process.env.TARGET_DIR ||
+  path.resolve(process.cwd(), '..', 'simple-pim-1754492683911');
 const TARGET_REPO_GIT =
-  process.env.TARGET_REPO_GIT
-  || (TARGET_REPO ? `https://github.com/${TARGET_REPO}.git` : 'https://github.com/basstian-ai/simple-pim-1754492683911');
-const GH_PUSH_TOKEN = process.env.GH_PUSH_TOKEN || process.env.GITHUB_TOKEN; // prefer PAT
+  process.env.TARGET_REPO_GIT ||
+  (TARGET_REPO ? `https://github.com/${TARGET_REPO}.git` : 'https://github.com/basstian-ai/simple-pim-1754492683911');const GH_PUSH_TOKEN = process.env.GH_PUSH_TOKEN || process.env.GITHUB_TOKEN; // prefer PAT
 
 
 if (!OPENAI_API_KEY) {
