@@ -29,7 +29,6 @@ jobs:
   TARGET_REPO_DIR: ${{ github.workspace }}/../simple-pim-1754492683911
 
 
-
     steps:
       - name: Checkout automation repo
         uses: actions/checkout@v4
