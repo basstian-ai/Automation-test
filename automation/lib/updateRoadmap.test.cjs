@@ -61,4 +61,32 @@ const { updateRoadmap, readRoadmap } = require('./utils.cjs');
   assert(/- step 1(?:\n|$)/.test(archive));
 }
 
+// Pruning completed items
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-'));
+  const file = path.join(dir, 'roadmap.md');
+  fs.writeFileSync(file, '# Roadmap\n\n## Progress\n- [x] done\n- todo\n', 'utf8');
+  updateRoadmap(dir, '', '');
+  const main = fs.readFileSync(file, 'utf8');
+  const archive = fs.readFileSync(path.join(dir, 'roadmap-archive.md'), 'utf8');
+  assert(!/\[x\] done/.test(main));
+  assert(/todo/.test(main));
+  assert(/\[x\] done/.test(archive));
+}
+
+// Pruning dated items older than threshold
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-'));
+  const file = path.join(dir, 'roadmap.md');
+  const oldDate = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const recentDate = new Date().toISOString().slice(0, 10);
+  fs.writeFileSync(file, `# Roadmap\n\n## Next Steps\n- [${oldDate}] stale\n- [${recentDate}] fresh\n`, 'utf8');
+  updateRoadmap(dir, '', '');
+  const main = fs.readFileSync(file, 'utf8');
+  const archive = fs.readFileSync(path.join(dir, 'roadmap-archive.md'), 'utf8');
+  assert(!/stale/.test(main));
+  assert(/fresh/.test(main));
+  assert(/stale/.test(archive));
+}
+
 console.log('updateRoadmap tests passed.');

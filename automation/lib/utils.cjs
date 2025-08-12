@@ -460,6 +460,8 @@ function updateRoadmap(repoDir, changesSummary = '', nextSteps = '') {
   appendSection('Next Steps', nextSteps);
 
   const MAX_ITEMS = 20;
+  const STALE_DAYS = 30;
+  const STALE_MS = STALE_DAYS * 24 * 60 * 60 * 1000;
 
   function archiveItems(header, items) {
     if (!items.length) return;
@@ -488,6 +490,35 @@ function updateRoadmap(repoDir, changesSummary = '', nextSteps = '') {
     fs.writeFileSync(archiveFile, archLines.join('\n'), 'utf8');
   }
 
+  function pruneMarked(header) {
+    const name = header.toLowerCase().replace(/^#+\s*/, '');
+    const idx = lines.findIndex((l) => l.trim().toLowerCase().replace(/^#+\s*/, '') === name);
+    if (idx === -1) return;
+    let sectionEnd = lines.length;
+    for (let i = idx + 1; i < lines.length; i++) {
+      if (/^#/.test(lines[i])) { sectionEnd = i; break; }
+    }
+    const isItem = (l) => /^[-*+]\s+/.test(l) || /^\d+\.\s+/.test(l);
+    const removed = [];
+    for (let i = idx + 1; i < sectionEnd; i++) {
+      if (!isItem(lines[i])) continue;
+      const line = lines[i];
+      let remove = /\[x\]/i.test(line);
+      if (!remove) {
+        const m = line.match(/\[(\d{4}-\d{2}-\d{2})\]/);
+        if (m) {
+          const d = new Date(m[1]);
+          if (!isNaN(d) && Date.now() - d.getTime() > STALE_MS) remove = true;
+        }
+      }
+      if (remove) {
+        removed.push(lines.splice(i, 1)[0]);
+        sectionEnd--; i--;
+      }
+    }
+    archiveItems(header, removed);
+  }
+
   function enforceLimit(header) {
     const name = header.toLowerCase().replace(/^#+\s*/, '');
     const idx = lines.findIndex((l) => l.trim().toLowerCase().replace(/^#+\s*/, '') === name);
@@ -511,6 +542,8 @@ function updateRoadmap(repoDir, changesSummary = '', nextSteps = '') {
     archiveItems(header, removed);
   }
 
+  pruneMarked('Progress');
+  pruneMarked('Next Steps');
   enforceLimit('Progress');
   enforceLimit('Next Steps');
 
