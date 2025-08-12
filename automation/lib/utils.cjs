@@ -205,6 +205,8 @@ function reconstructNewFileFromChunk(chunk) {
 function ensureDefaultExportSlugifyShim(absPath) {
   if (!fs.existsSync(absPath)) return false;
   let txt = fs.readFileSync(absPath, 'utf8');
+  // Strip stray lines beginning with '#' (e.g. '# End of file')
+  txt = txt.replace(/^#.*$/gm, '').trimEnd();
   if (/export\s+default\s+slugify\s*;?/m.test(txt)) return false; // already has default
   const needsNL = txt.length && !txt.endsWith('\n');
   txt += (needsNL ? '\n' : '') + '\n// default export shim for consumers using default import\nexport default slugify;\n';

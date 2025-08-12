@@ -75,9 +75,12 @@ Each commit must deliver meaningful progress and include a '# NEXT STEPS' Markdo
 # CHANGES SUMMARY
 - bullets of issues fixed (with filenames)
 - roadmap item implemented (ID/title), if any
- 
+
 # NEXT STEPS
-- prioritized follow-up tasks
+- follow-up items for the operator
+
+ 
+
 \`\`\`
 
 Return the diff first, then the three sections. Do not include anything else.

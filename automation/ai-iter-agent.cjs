@@ -128,6 +128,33 @@ function generateCommitMessage(diff) {
   return `chore(ai): ${summary} (auto)`;
 }
 
+function splitLLMResponse(out) {
+  const markers = ['# TEST PLAN', '# CHANGES SUMMARY', '# NEXT STEPS'];
+  const idxTest = out.indexOf(markers[0]);
+  const idxChanges = out.indexOf(markers[1]);
+  const idxNext = out.indexOf(markers[2]);
+  let diff = out;
+  let testPlan = '', changesSummary = '', nextSteps = '';
+  if (idxTest !== -1) {
+    diff = out.slice(0, idxTest).trim();
+    if (idxChanges !== -1) {
+      testPlan = out.slice(idxTest, idxChanges).trim();
+      if (idxNext !== -1) {
+        changesSummary = out.slice(idxChanges, idxNext).trim();
+        nextSteps = out.slice(idxNext).trim();
+      } else {
+        changesSummary = out.slice(idxChanges).trim();
+      }
+    } else {
+      testPlan = out.slice(idxTest).trim();
+    }
+  } else {
+    diff = out.trim();
+  }
+  if (diff && !diff.endsWith('\n')) diff += '\n';
+  return { diff, testPlan, changesSummary, nextSteps };
+}
+
 async function main() {
 const repoDir = TARGET_REPO_DIR;
 const authUrl = GH_PUSH_TOKEN
@@ -183,7 +210,8 @@ if (GH_PUSH_TOKEN) {
 
   // 3) Ask LLM for a unified diff (Fix→Improve)
   console.log('🧠 Calling LLM for unified diff...');
-  let diff = await callLLM({ system: SYSTEM_PROMPT, payload });
+  let raw = await callLLM({ system: SYSTEM_PROMPT, payload });
+  let { diff, testPlan, changesSummary, nextSteps } = splitLLMResponse(raw);
   if (!diff || !diff.includes('diff --git')) {
     console.warn('Got non-unified patch. Asking model to reformat to unified git diff only...');
     const reformPrompt = `
@@ -193,19 +221,27 @@ RESPONSE RULES:
 - No code fences, no "*** Begin Patch", no prose.
 If no changes are needed, return a minimal valid diff that makes no changes.
 `;
-    diff = await callLLM({
+    const reformRaw = await callLLM({
       system: SYSTEM_PROMPT + '\n' + reformPrompt,
-      payload: { ...payload, previousResponse: String(diff).slice(-20000) } // give the model its last output to convert
+      payload: { ...payload, previousResponse: String(raw).slice(-20000) } // give the model its last output to convert
     });
+    const reformParsed = splitLLMResponse(reformRaw);
+    diff = reformParsed.diff;
+    if (!testPlan) testPlan = reformParsed.testPlan;
+    if (!changesSummary) changesSummary = reformParsed.changesSummary;
+    if (!nextSteps) nextSteps = reformParsed.nextSteps;
   }
   if (!diff || !diff.includes('diff --git')) {
     console.error('No unified diff returned after reformat attempt. Full response:\n', diff);
     process.exit(1);
   }
+  if (testPlan) console.log(testPlan);
+  if (changesSummary) console.log(changesSummary);
+  if (nextSteps) console.log(nextSteps);
 
   // 4) Apply diff, try build
    console.log('🩹 Applying patch from model...');
- let buildOK = false; // <-- ensure this exists in this scope
+  let buildOK = false; // <-- ensure this exists in this scope
   try {
     applyUnifiedDiff(diff, repoDir);
   } catch (e) {
@@ -218,11 +254,16 @@ RESPONSE RULES:
 - No code fences. No "*** Begin Patch".
 - Do not include any prose.
 `;
-  const retry = await callLLM({
+  const retryRaw = await callLLM({
     system: SYSTEM_PROMPT + '\n' + reformPrompt,
     payload: { ...payload, previousResponse: String(diff).slice(-20000) }
   });
-  applyUnifiedDiff(retry, repoDir); // will throw if still invalid
+  const retryParsed = splitLLMResponse(retryRaw);
+  diff = retryParsed.diff;
+  applyUnifiedDiff(diff, repoDir); // will throw if still invalid
+  if (retryParsed.testPlan) console.log(retryParsed.testPlan);
+  if (retryParsed.changesSummary) console.log(retryParsed.changesSummary);
+  if (retryParsed.nextSteps) console.log(retryParsed.nextSteps);
 }
     // Run small deterministic fixes that we know are safe
   runPreBuildFixes(repoDir);
@@ -239,12 +280,21 @@ RESPONSE RULES:
       ...payload,
       trimmedLogs: `${trimmedLogs}\n\n==== LOCAL BUILD OUTPUT ====\n${localLogs.slice(-20000)}`
     };
-    const retryDiff = await callLLM({ system: SYSTEM_PROMPT, payload: retryPayload });
+    const retryRaw = await callLLM({ system: SYSTEM_PROMPT, payload: retryPayload });
+    const retryParsed = splitLLMResponse(retryRaw);
+    const retryDiff = retryParsed.diff;
     if (!retryDiff || !retryDiff.includes('diff --git')) {
       console.error('Retry did not return a diff. Aborting.');
       process.exit(1);
     }
     applyUnifiedDiff(retryDiff, repoDir);
+    if (retryParsed.testPlan) console.log(retryParsed.testPlan);
+    if (retryParsed.changesSummary) console.log(retryParsed.changesSummary);
+    if (retryParsed.nextSteps) console.log(retryParsed.nextSteps);
+    diff = retryDiff;
+    testPlan = retryParsed.testPlan || testPlan;
+    changesSummary = retryParsed.changesSummary || changesSummary;
+    nextSteps = retryParsed.nextSteps || nextSteps;
     tryLocalBuild(repoDir); // throws on failure
     buildOK = true;
   }
