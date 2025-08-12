@@ -32,6 +32,16 @@ if (!OPENAI_API_KEY) {
   process.exit(1);
 }
 
+if (!VERCEL_TOKEN && !VERCEL_PROJECT_ID) {
+  console.warn('Missing VERCEL_TOKEN and VERCEL_PROJECT_ID; skipping Vercel log ingestion.');
+} else if (!VERCEL_TOKEN) {
+  console.error('VERCEL_TOKEN is required when VERCEL_PROJECT_ID is set.');
+  process.exit(1);
+} else if (!VERCEL_PROJECT_ID) {
+  console.error('VERCEL_PROJECT_ID is required when VERCEL_TOKEN is set.');
+  process.exit(1);
+}
+
 async function callLLM({ system, payload }) {
   const body = {
     model: OPENAI_MODEL, // keep gpt-5-mini

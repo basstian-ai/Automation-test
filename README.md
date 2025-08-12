@@ -79,6 +79,8 @@ Vercel (for log ingestion)
 - `VERCEL_TOKEN` – Vercel token with read access
 - `VERCEL_PROJECT_ID` – Project ID of the PIM app
 
+Both variables are required to fetch Vercel logs. If neither is set, the agent will continue but skip log ingestion. If only one is provided, the agent exits with an error.
+
 Target repo (where diffs are applied)
 
 - `TARGET_REPO_DIR` – path to the PIM repo (default: `../simple-pim-1754492683911`)
