@@ -49,3 +49,9 @@ A modern Product Information Management platform centralizes product data, suppo
 - Time‑to‑market for new products.
 - Adoption of channels/locales and workflow efficiency.
 
+## Progress
+- Added automation to keep the roadmap up to date with each iteration.
+
+## Next Steps
+- Integrate the automated roadmap updates into the broader development workflow.
+

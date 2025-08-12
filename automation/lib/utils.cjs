@@ -390,6 +390,44 @@ function readRoadmap(repoDir) {
   return '# Roadmap\n\n(No roadmap.md found)';
 }
 
+function updateRoadmap(repoDir, changesSummary = '', nextSteps = '') {
+  const candidates = ['roadmap.md', 'ROADMAP.md'];
+  let file;
+  for (const name of candidates) {
+    const p = path.join(repoDir, name);
+    if (fs.existsSync(p)) {
+      file = p;
+      break;
+    }
+  }
+  if (!file) file = path.join(repoDir, 'ROADMAP.md');
+
+  let content = '';
+  if (fs.existsSync(file)) {
+    content = fs.readFileSync(file, 'utf8');
+  } else {
+    content = '# Roadmap\n';
+  }
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+
+  function appendSection(header, text) {
+    if (!text) return;
+    const idx = lines.findIndex((l) => l.trim().toLowerCase() === header.toLowerCase());
+    if (idx === -1) {
+      lines.push('', header, `- ${text.trim()}`);
+    } else {
+      let insert = idx + 1;
+      while (insert < lines.length && lines[insert].startsWith('-')) insert++;
+      lines.splice(insert, 0, `- ${text.trim()}`);
+    }
+  }
+
+  appendSection('## Progress', changesSummary);
+  appendSection('## Next Steps', nextSteps);
+
+  fs.writeFileSync(file, lines.join('\n'), 'utf8');
+}
+
 /** ---------- Pre-build deterministic fixes ---------- */
 function ensureDefaultExportSlugify(repoDir) {
   const abs = path.join(repoDir, 'lib/slugify.js');
@@ -477,6 +515,7 @@ module.exports = {
   getRepoTree,
   collectRepoFiles,
   readRoadmap,
+  updateRoadmap,
   pickPackageManager,
   applyUnifiedDiff,
   runPreBuildFixes,
