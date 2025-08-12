@@ -117,14 +117,41 @@ function computeFilesToSend(repoDir, issues) {
   return Array.from(set).slice(0, 100);
 }
 
-function generateCommitMessage(diff) {
-  const fileRegex = /^diff --git a\/\S+ b\/(\S+)$/gm;
-  const files = Array.from(new Set([...diff.matchAll(fileRegex)].map(m => m[1])));
-  let summary;
-  if (files.length === 0) summary = 'update files';
-  else if (files.length === 1) summary = `update ${files[0]}`;
-  else if (files.length === 2) summary = `update ${files[0]} and ${files[1]}`;
-  else summary = `update ${files[0]} and ${files.length - 1} other files`;
+function generateCommitMessage(diff, changesSummary = '', roadmap = '') {
+  let summary = '';
+
+  // 1) Try the first bullet under "# CHANGES SUMMARY"
+  if (changesSummary) {
+    const firstBullet = changesSummary
+      .split('\n')
+      .map(l => l.trim())
+      .find(l => /^[-*]\s+/.test(l) || /^\d+\.\s+/.test(l));
+    if (firstBullet) {
+      summary = firstBullet
+        .replace(/^[-*]\s+/, '')
+        .replace(/^\d+\.\s+/, '')
+        .trim();
+    }
+  }
+
+  // 2) Fallback to first roadmap heading (ID/title) if no summary yet
+  if (!summary && roadmap) {
+    const m = roadmap.match(/^###\s+(\d+(?:\.\d+)*)\.\s+([^\n(]+)/m);
+    if (m) {
+      summary = `${m[1]}. ${m[2].trim()}`;
+    }
+  }
+
+  // 3) Finally, fallback to file-based summary
+  if (!summary) {
+    const fileRegex = /^diff --git a\/\S+ b\/(\S+)$/gm;
+    const files = Array.from(new Set([...diff.matchAll(fileRegex)].map(m => m[1])));
+    if (files.length === 0) summary = 'update files';
+    else if (files.length === 1) summary = `update ${files[0]}`;
+    else if (files.length === 2) summary = `update ${files[0]} and ${files[1]}`;
+    else summary = `update ${files[0]} and ${files.length - 1} other files`;
+  }
+
   return `chore(ai): ${summary} (auto)`;
 }
 
@@ -302,7 +329,7 @@ RESPONSE RULES:
 
   // 5) Commit & push
   if (buildOK) {
-    const commitMessage = generateCommitMessage(diff);
+    const commitMessage = generateCommitMessage(diff, changesSummary, roadmap);
     console.log(`✅ Build is green. Committing & pushing with message: ${commitMessage}`);
     commitAndPush(commitMessage, repoDir);
   }
