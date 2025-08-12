@@ -139,8 +139,9 @@ function applyChunk(repoDir, tmpName) {
   ];
   for (const [checkCmd, applyCmd] of variants) {
     try {
-      run(`${checkCmd} ${tmpName}`, { cwd: repoDir });
-      run(`${applyCmd} ${tmpName}`, { cwd: repoDir });
+      // Suppress noisy git apply errors by piping stdio
+      run(`${checkCmd} ${tmpName}`, { cwd: repoDir, stdio: 'pipe' });
+      run(`${applyCmd} ${tmpName}`, { cwd: repoDir, stdio: 'pipe' });
       return true;
     } catch (_) {}
   }

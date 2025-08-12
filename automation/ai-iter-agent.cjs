@@ -76,13 +76,14 @@ async function fetchVercelLogs() {
   if (!deployments.length) return { trimmedLogs: '', issues: [], deployments: [] };
   const d = deployments[0]; // latest
   const id = d.uid || d.id;
-  const buildText = await getBuildEvents({ token: VERCEL_TOKEN, deploymentId: id });
-  let runtimeText = '';
-  try {
-    runtimeText = await getRuntimeLogs({ token: VERCEL_TOKEN, projectId: VERCEL_PROJECT_ID, deploymentId: id });
-  } catch (err) {
-    console.warn('Failed to fetch Vercel runtime logs:', err.message || err);
-  }
+  // Fetch build and runtime logs concurrently for speed
+  const [buildText, runtimeText] = await Promise.all([
+    getBuildEvents({ token: VERCEL_TOKEN, deploymentId: id }),
+    getRuntimeLogs({ token: VERCEL_TOKEN, projectId: VERCEL_PROJECT_ID, deploymentId: id }).catch(err => {
+      console.warn('Failed to fetch Vercel runtime logs:', err.message || err);
+      return '';
+    })
+  ]);
   const trimmedLogs = concatAndTrimLogs({ buildText, runtimeText });
   const issues = extractIssuesFromLogs(trimmedLogs);
   return { trimmedLogs, issues, deployments };
