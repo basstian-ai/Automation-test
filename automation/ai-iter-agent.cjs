@@ -89,7 +89,11 @@ async function fetchVercelLogs() {
   const id = d.uid || d.id;
   const buildText = await getBuildEvents({ token: VERCEL_TOKEN, deploymentId: id });
   let runtimeText = '';
-  try { runtimeText = await getRuntimeLogs({ token: VERCEL_TOKEN, projectId: VERCEL_PROJECT_ID, deploymentId: id }); } catch {}
+  try {
+    runtimeText = await getRuntimeLogs({ token: VERCEL_TOKEN, projectId: VERCEL_PROJECT_ID, deploymentId: id });
+  } catch (err) {
+    console.warn('Failed to fetch Vercel runtime logs:', err.message || err);
+  }
   const trimmedLogs = concatAndTrimLogs({ buildText, runtimeText });
   const issues = extractIssuesFromLogs(trimmedLogs);
   return { trimmedLogs, issues, deployments };
