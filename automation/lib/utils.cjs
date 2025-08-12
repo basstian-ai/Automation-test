@@ -46,6 +46,7 @@ function sanitizeDiff(raw) {
   // Normalize
   s = s.replace(/^\uFEFF/, ''); // BOM
   s = s.replace(/\r/g, '');     // CRLF → LF
+  s = s.replace(/\0/g, '');     // Drop any stray NUL bytes
 
   // Strip code fences & "*** Begin/End Patch" wrappers
   s = s.replace(/^\s*```[^\n]*\n[\s\S]*?\n```/gm, '');
@@ -255,8 +256,11 @@ function fallbackApply(repoDir, { a, b, type, chunk }) {
           nextText = extractAddedContentFromChunk(chunk); // plus-only fallback
         }
         if (nextText && nextText.trim().length > 0) {
-          fs.writeFileSync(abs, nextText, 'utf8');
-          return true;
+          const braces = (nextText.match(/\{/g) || []).length === (nextText.match(/\}/g) || []).length;
+          if (braces) {
+            fs.writeFileSync(abs, nextText, 'utf8');
+            return true;
+          }
         }
       }
     }
