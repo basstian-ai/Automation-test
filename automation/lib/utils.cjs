@@ -411,19 +411,27 @@ function updateRoadmap(repoDir, changesSummary = '', nextSteps = '') {
   const lines = content.replace(/\r\n/g, '\n').split('\n');
 
   function appendSection(header, text) {
-    if (!text) return;
-    const idx = lines.findIndex((l) => l.trim().toLowerCase() === header.toLowerCase());
+    const items = String(text || '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .filter((l) => !/^#/.test(l));
+    if (items.length === 0) return;
+    const name = header.toLowerCase().replace(/^#+\s*/, '');
+    const idx = lines.findIndex((l) => l.trim().toLowerCase().replace(/^#+\s*/, '') === name);
+    const entries = items.map((t) => `- ${t}`);
     if (idx === -1) {
-      lines.push('', header, `- ${text.trim()}`);
+      const heading = header.startsWith('#') ? header : `## ${header}`;
+      lines.push('', heading, ...entries);
     } else {
       let insert = idx + 1;
       while (insert < lines.length && lines[insert].startsWith('-')) insert++;
-      lines.splice(insert, 0, `- ${text.trim()}`);
+      lines.splice(insert, 0, ...entries);
     }
   }
 
-  appendSection('## Progress', changesSummary);
-  appendSection('## Next Steps', nextSteps);
+  appendSection('Progress', changesSummary);
+  appendSection('Next Steps', nextSteps);
 
   fs.writeFileSync(file, lines.join('\n'), 'utf8');
 }
