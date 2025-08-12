@@ -71,46 +71,6 @@ async function callLLM({ system, payload }) {
     }
   }
 }
-async function callLLM({ system, payload }) {
-  const body = {
-    model: OPENAI_MODEL, // keep gpt-5-mini
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: JSON.stringify(payload) }
-    ]
-  };
-
-  for (let attempt = 0; attempt < 3; attempt++) { // 3 tries: ~1s, 2s
-    try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        // Only retry 429/5xx; otherwise fail fast
-        if (res.status !== 429 && (res.status < 500 || res.status >= 600)) {
-          throw new Error(`OpenAI ${res.status}: ${txt.slice(0,500)}`);
-        }
-        throw new Error(`Retryable ${res.status}: ${txt.slice(0,500)}`);
-      }
-
-      const json = await res.json();
-      const out = json.choices?.[0]?.message?.content || '';
-      if (!out) throw new Error('OpenAI returned empty message');
-      return out;
-    } catch (err) {
-      if (attempt === 2) throw err;          // give up after 3 tries
-      await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // 1s, 2s
-    }
-  }
-}
-
 async function fetchVercelLogs() {
   if (!VERCEL_TOKEN || !VERCEL_PROJECT_ID) return { trimmedLogs: '', issues: [], deployments: [] };
   const deployments = await listDeployments({ token: VERCEL_TOKEN, projectId: VERCEL_PROJECT_ID, limit: 5 });
