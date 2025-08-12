@@ -114,6 +114,17 @@ function computeFilesToSend(repoDir, issues) {
   return [...set].filter(p => fs.existsSync(path.join(repoDir, p)));
 }
 
+function generateCommitMessage(diff) {
+  const fileRegex = /^diff --git a\/\S+ b\/(\S+)$/gm;
+  const files = Array.from(new Set([...diff.matchAll(fileRegex)].map(m => m[1])));
+  let summary;
+  if (files.length === 0) summary = 'update files';
+  else if (files.length === 1) summary = `update ${files[0]}`;
+  else if (files.length === 2) summary = `update ${files[0]} and ${files[1]}`;
+  else summary = `update ${files[0]} and ${files.length - 1} other files`;
+  return `chore(ai): ${summary} (auto)`;
+}
+
 async function main() {
 const repoDir = TARGET_REPO_DIR;
 const authUrl = GH_PUSH_TOKEN
@@ -238,8 +249,9 @@ RESPONSE RULES:
 
   // 5) Commit & push
   if (buildOK) {
-    console.log('✅ Build is green. Committing & pushing...');
-    commitAndPush('chore(ai): fix build issues and implement one roadmap item (auto)', repoDir);
+    const commitMessage = generateCommitMessage(diff);
+    console.log(`✅ Build is green. Committing & pushing with message: ${commitMessage}`);
+    commitAndPush(commitMessage, repoDir);
   }
   console.log('✨ Done.');
 }
