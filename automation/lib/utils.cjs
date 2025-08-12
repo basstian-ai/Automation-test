@@ -256,8 +256,11 @@ function fallbackApply(repoDir, { a, b, type, chunk }) {
           nextText = extractAddedContentFromChunk(chunk); // plus-only fallback
         }
         if (nextText && nextText.trim().length > 0) {
-          fs.writeFileSync(abs, nextText, 'utf8');
-          return true;
+          const braces = (nextText.match(/\{/g) || []).length === (nextText.match(/\}/g) || []).length;
+          if (braces) {
+            fs.writeFileSync(abs, nextText, 'utf8');
+            return true;
+          }
         }
       }
     }
