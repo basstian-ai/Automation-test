@@ -459,6 +459,61 @@ function updateRoadmap(repoDir, changesSummary = '', nextSteps = '') {
   appendSection('Progress', changesSummary);
   appendSection('Next Steps', nextSteps);
 
+  const MAX_ITEMS = 20;
+
+  function archiveItems(header, items) {
+    if (!items.length) return;
+    const archiveFile = path.join(repoDir, 'roadmap-archive.md');
+    let archLines;
+    if (fs.existsSync(archiveFile)) {
+      archLines = fs.readFileSync(archiveFile, 'utf8').replace(/\r\n/g, '\n').split('\n');
+    } else {
+      archLines = ['# Roadmap Archive', ''];
+    }
+
+    const name = header.toLowerCase().replace(/^#+\s*/, '');
+    let idx = archLines.findIndex((l) => l.trim().toLowerCase().replace(/^#+\s*/, '') === name);
+
+    if (idx === -1) {
+      archLines.push(`## ${header}`, '', ...items);
+    } else {
+      let sectionEnd = archLines.length;
+      for (let i = idx + 1; i < archLines.length; i++) {
+        if (/^#/.test(archLines[i])) { sectionEnd = i; break; }
+      }
+      if (archLines[idx + 1] !== '') { archLines.splice(idx + 1, 0, ''); sectionEnd++; }
+      archLines.splice(sectionEnd, 0, ...items);
+    }
+
+    fs.writeFileSync(archiveFile, archLines.join('\n'), 'utf8');
+  }
+
+  function enforceLimit(header) {
+    const name = header.toLowerCase().replace(/^#+\s*/, '');
+    const idx = lines.findIndex((l) => l.trim().toLowerCase().replace(/^#+\s*/, '') === name);
+    if (idx === -1) return;
+    let sectionEnd = lines.length;
+    for (let i = idx + 1; i < lines.length; i++) {
+      if (/^#/.test(lines[i])) { sectionEnd = i; break; }
+    }
+    const isItem = (l) => /^[-*+]\s+/.test(l) || /^\d+\.\s+/.test(l);
+    const itemIdxs = [];
+    for (let i = idx + 1; i < sectionEnd; i++) {
+      if (isItem(lines[i])) itemIdxs.push(i);
+    }
+    if (itemIdxs.length <= MAX_ITEMS) return;
+    const removeCount = itemIdxs.length - MAX_ITEMS;
+    const removed = [];
+    for (let i = 0; i < removeCount; i++) {
+      const rmIdx = itemIdxs[i] - i;
+      removed.push(lines.splice(rmIdx, 1)[0]);
+    }
+    archiveItems(header, removed);
+  }
+
+  enforceLimit('Progress');
+  enforceLimit('Next Steps');
+
   fs.writeFileSync(file, lines.join('\n'), 'utf8');
 }
 
