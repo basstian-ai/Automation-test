@@ -46,6 +46,7 @@ function sanitizeDiff(raw) {
   // Normalize
   s = s.replace(/^\uFEFF/, ''); // BOM
   s = s.replace(/\r/g, '');     // CRLF → LF
+  s = s.replace(/\0/g, '');     // Drop any stray NUL bytes
 
   // Strip code fences & "*** Begin/End Patch" wrappers
   s = s.replace(/^\s*```[^\n]*\n[\s\S]*?\n```/gm, '');
@@ -102,7 +103,9 @@ function splitDiffIntoFiles(sanitized) {
   // Split into per-file chunks (keep the "diff --git" marker with each)
   const normalized = sanitized.replace(/^diff --git /, '\n\0diff --git ');
   const parts = normalized.split(/\n(?=diff --git )/g);
-  return parts.map(p => p.replace(/^\0/, '')).filter(Boolean);
+  // Each chunk may start with an injected "\0" and/or leading newline.
+  // Strip those so downstream logic sees a clean "diff --git" header.
+  return parts.map(p => p.replace(/^[\n\0]+/, '')).filter(Boolean);
 }
 
 function parseChunkPaths(chunk) {
@@ -399,24 +402,27 @@ function fixDuplicateApiRoutes(repoDir) {
 }
 
 function ensureHealthApiValid(repoDir) {
-  const rel = 'pages/api/health.js';
-  const abs = path.join(repoDir, rel);
-  if (!fs.existsSync(abs)) return false;
+  const files = ['pages/api/health.js', 'pages/api/healthz.js'];
   const content = `export default function handler(req, res) {
   const version = process.env.npm_package_version || '0.0.0';
   return res.status(200).json({ ok: true, uptime: process.uptime(), version });
 }
 `;
-  const current = fs.readFileSync(abs, 'utf8');
-  const broken =
-    /SyntaxError|<<<<<<<|>>>>>>>|^\s*$/m.test(current) ||
-    current.trim().endsWith('{') ||
-    current.includes('return res.status(200).json') === false;
-  if (broken) {
-    fs.writeFileSync(abs, content, 'utf8');
-    return true;
+  const touched = [];
+  for (const rel of files) {
+    const abs = path.join(repoDir, rel);
+    if (!fs.existsSync(abs)) continue;
+    const current = fs.readFileSync(abs, 'utf8');
+    const broken =
+      /SyntaxError|<<<<<<<|>>>>>>>|^\s*$/m.test(current) ||
+      current.trim().endsWith('{') ||
+      current.includes('return res.status(200).json') === false;
+    if (broken) {
+      fs.writeFileSync(abs, content, 'utf8');
+      touched.push(`rewrote ${rel} to a safe handler`);
+    }
   }
-  return false;
+  return touched;
 }
 
 // Tiny helper some endpoints import; create it if missing to avoid build breaks
@@ -449,7 +455,7 @@ function runPreBuildFixes(repoDir) {
   if (ensureWithTimeoutHelper(repoDir)) actions.push('created lib/api/withTimeout.js');
   if (ensureDefaultExportSlugify(repoDir)) actions.push('added default export shim to lib/slugify.js');
   actions.push(...fixDuplicateApiRoutes(repoDir));
-  if (ensureHealthApiValid(repoDir)) actions.push('rewrote pages/api/health.js to a safe handler');
+  actions.push(...ensureHealthApiValid(repoDir));
   console.log('🔧 Pre-build fixes:', actions.length ? actions : 'none needed');
 }
 
