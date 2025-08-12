@@ -1,7 +1,7 @@
 /**
  * AI Iteration Agent (wired with Vercel logs → issues → LLM → unified diff)
  * - Phase 1: FIX build/runtime issues
- * - Phase 2: IMPROVE by implementing one roadmap item
+ * - Phase 2: IMPROVE by implementing roadmap items
  */
 'use strict';
 
@@ -100,18 +100,21 @@ async function fetchVercelLogs() {
 
 function computeFilesToSend(repoDir, issues) {
   const fromIssues = filesFromIssues(issues);
-  const likely = [
-    'pages/admin.js', 'pages/admin/index.js',
-    'pages/attributes.js', 'pages/attributes/index.js',
-    'pages/api/products.js', 'pages/api/products/index.js',
-    'pages/api/attributes.js', 'pages/api/attributes/index.js',
-    'pages/api/attribute-groups.js', 'pages/api/attribute-groups/index.js',
-    'pages/api/products/[sku]/attributes/flat.js',
-    'pages/api/slugify.js',
-    'lib/slugify.js', 'lib/slugify.ts',
-  ];
-  const set = new Set([...fromIssues, ...likely].filter(Boolean));
-  return [...set].filter(p => fs.existsSync(path.join(repoDir, p)));
+  const extra = [];
+
+  function walk(dir) {
+    const abs = path.join(repoDir, dir);
+    if (!fs.existsSync(abs)) return;
+    for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
+      const rel = path.join(dir, entry.name).replace(/\\/g, '/');
+      if (entry.isDirectory()) walk(rel);
+      else if (/\.(js|jsx|ts|tsx|cjs|mjs)$/.test(entry.name)) extra.push(rel);
+    }
+  }
+
+  ['pages', 'lib', 'components'].forEach(walk);
+  const set = new Set([...fromIssues, ...extra]);
+  return Array.from(set).slice(0, 100);
 }
 
 function generateCommitMessage(diff) {
@@ -154,7 +157,7 @@ if (GH_PUSH_TOKEN) {
   const { trimmedLogs, issues } = await fetchVercelLogs();
   console.log(`ℹ️  Parsed ${issues.length} issue(s) from Vercel logs`);
   if (issues.length === 0) {
-   console.log('ℹ️  No issues found → proceeding to implement ONE roadmap item.');
+   console.log('ℹ️  No issues found → proceeding to implement roadmap improvements.');
  }
   const rules = issues.map(i => ({ file: i.file, rules: strategyFor(i) })).filter(r => r.rules.length);
 
@@ -173,7 +176,7 @@ if (GH_PUSH_TOKEN) {
     roadmap,
     constraints: {
       allowedOps: ['modify', 'rename', 'delete', 'create'],
-      commitStyle: 'single small commit'
+      commitStyle: 'single comprehensive commit'
     },
     context: { packageManager, frameworkVariant }
   };
