@@ -12,7 +12,7 @@ const { listDeployments, getBuildEvents, getRuntimeLogs, concatAndTrimLogs } = r
 const { fetchWithRetry } = require('./lib/http.cjs');
 const { extractIssuesFromLogs, filesFromIssues } = require('./lib/parseLogs.cjs');
 const { strategyFor } = require('./lib/strategies.cjs');
-const { tryLocalBuild, getRepoTree, collectRepoFiles, readRoadmap, applyUnifiedDiff, commitAndPush, pickPackageManager, run, runPreBuildFixes } = require('./lib/utils.cjs');
+const { tryLocalBuild, getRepoTree, collectRepoFiles, readRoadmap, applyUnifiedDiff, commitAndPush, pickPackageManager, run, runPreBuildFixes, updateRoadmap } = require('./lib/utils.cjs');
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini';
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
@@ -329,6 +329,7 @@ RESPONSE RULES:
 
   // 5) Commit & push
   if (buildOK) {
+    updateRoadmap(repoDir, changesSummary, nextSteps);
     const commitMessage = generateCommitMessage(diff, changesSummary, roadmap);
     console.log(`✅ Build is green. Committing & pushing with message: ${commitMessage}`);
     commitAndPush(commitMessage, repoDir);
