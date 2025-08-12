@@ -411,21 +411,44 @@ function updateRoadmap(repoDir, changesSummary = '', nextSteps = '') {
   const lines = content.replace(/\r\n/g, '\n').split('\n');
 
   function appendSection(header, text) {
-    const items = String(text || '')
+    const rawItems = String(text || '')
       .split('\n')
       .map((l) => l.trim())
       .filter(Boolean)
       .filter((l) => !/^#/.test(l));
-    if (items.length === 0) return;
+    if (rawItems.length === 0) return;
     const name = header.toLowerCase().replace(/^#+\s*/, '');
     const idx = lines.findIndex((l) => l.trim().toLowerCase().replace(/^#+\s*/, '') === name);
-    const entries = items.map((t) => `- ${t}`);
+    const isItem = (l) => /^[-*+]\s+/.test(l) || /^\d+\.\s+/.test(l);
+    const norm = (l) => l.replace(/^[-*+]\s+/, '').replace(/^\d+\.\s+/, '').trim();
+
     if (idx === -1) {
       const heading = header.startsWith('#') ? header : `## ${header}`;
-      lines.push('', heading, ...entries);
+      const entries = rawItems.map((t) => `- ${t}`);
+      lines.push('', heading, '', ...entries);
     } else {
-      let insert = idx + 1;
-      while (insert < lines.length && lines[insert].startsWith('-')) insert++;
+      let sectionEnd = lines.length;
+      for (let i = idx + 1; i < lines.length; i++) {
+        if (/^#/.test(lines[i])) { sectionEnd = i; break; }
+      }
+
+      const existing = new Set();
+      for (let i = idx + 1; i < sectionEnd; i++) {
+        if (isItem(lines[i])) existing.add(norm(lines[i]));
+      }
+
+      const items = rawItems.filter((t) => !existing.has(norm(t)));
+      if (items.length === 0) return;
+
+      if (lines[idx + 1] !== '') {
+        lines.splice(idx + 1, 0, '');
+        sectionEnd++;
+      }
+
+      let insert = idx + 2;
+      while (insert < sectionEnd && isItem(lines[insert])) insert++;
+
+      const entries = items.map((t) => `- ${t}`);
       lines.splice(insert, 0, ...entries);
     }
   }
