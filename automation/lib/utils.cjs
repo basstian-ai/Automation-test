@@ -446,6 +446,9 @@ function updateRoadmap(repoDir, changesSummary = '', nextSteps = '') {
       }
 
       let insert = idx + 2;
+      // Skip any non-list preface lines before the actual list items.
+      while (insert < sectionEnd && !isItem(lines[insert]) && lines[insert].trim() !== '') insert++;
+      // Then advance past existing list items (bulleted or numbered).
       while (insert < sectionEnd && isItem(lines[insert])) insert++;
 
       const entries = items.map((t) => `- ${t}`);
