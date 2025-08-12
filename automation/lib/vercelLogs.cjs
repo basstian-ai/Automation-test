@@ -1,16 +1,15 @@
 'use strict';
 
+const { fetchWithRetry } = require('./http.cjs');
+
 const VERCEL_API = 'https://api.vercel.com';
 
 async function _fetch(url, { token }) {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Vercel ${url} -> ${res.status}: ${text.slice(0,300)}`);
-  }
-  return res;
+  return fetchWithRetry(
+    url,
+    { headers: { Authorization: `Bearer ${token}` } },
+    { errorPrefix: `Vercel ${url} -> `, maxErrorLength: 300 }
+  );
 }
 
 async function listDeployments({ token, projectId, limit = 5 }) {
