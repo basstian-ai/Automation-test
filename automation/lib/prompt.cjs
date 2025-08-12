@@ -61,7 +61,7 @@ Group related updates into a coherent commit. Broader changes across multiple fi
 
 ## OUTPUT FORMAT
 1) **Unified git diff** (apply at repo root). No code fences, no prose mixed in.
-2) After the diff, append the two Markdown sections exactly:
+2) After the diff, append the three Markdown sections exactly:
 
 \`\`\`
 # TEST PLAN
@@ -72,9 +72,11 @@ Group related updates into a coherent commit. Broader changes across multiple fi
 # CHANGES SUMMARY
 - bullets of issues fixed (with filenames)
 - roadmap item implemented (ID/title), if any
+# NEXT STEPS
+- follow-up items for the operator
 \`\`\`
 
-Return the diff first, then the two sections. Do not include anything else.
+Return the diff first, then the three sections. Do not include anything else.
 `;
 
 const REFORMAT_PROMPT = `
@@ -96,6 +98,9 @@ After the diff, append:
 ...
 
 # CHANGES SUMMARY
+...
+
+# NEXT STEPS
 ...
 \`\`\`
 `;
