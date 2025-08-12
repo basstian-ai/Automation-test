@@ -64,6 +64,10 @@ function sanitizeDiff(raw) {
     '\n# CHANGES SUMMARY',
     '\n#Changes Summary',
     '\n#CHANGES SUMMARY',
+    '\n# Next Steps',
+    '\n# NEXT STEPS',
+    '\n#Next Steps',
+    '\n#NEXT STEPS',
     '\n*** End Patch',
     '\n```'
   ];
