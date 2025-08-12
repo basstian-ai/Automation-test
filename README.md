@@ -77,3 +77,7 @@ OPENAI_API_KEY=sk-... OPENAI_MODEL=gpt-4.1 node automation/ai-iter-agent.cjs
 3. Asks the model for a **unified diff** to **FIX** issues and then **IMPROVE** one roadmap item.
 4. Applies patch, builds locally (retry once if red), commits & pushes.
 
+### Roadmap maintenance
+
+When `automation/lib/utils.cjs` updates `roadmap.md`, it automatically prunes finished or stale tasks. Any list item marked with `[x]` or prefixed with a date older than 30 days is removed from the main roadmap and appended to `roadmap-archive.md`. This keeps the roadmap focused on active work while preserving history in the archive.
+
