@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { SYSTEM_PROMPT } = require('./lib/prompt.cjs');
 const { listDeployments, getBuildEvents, getRuntimeLogs, concatAndTrimLogs } = require('./lib/vercelLogs.cjs');
+const { fetchWithRetry } = require('./lib/http.cjs');
 const { extractIssuesFromLogs, filesFromIssues } = require('./lib/parseLogs.cjs');
 const { strategyFor } = require('./lib/strategies.cjs');
 const { tryLocalBuild, getRepoTree, collectRepoFiles, readRoadmap, applyUnifiedDiff, commitAndPush, pickPackageManager, run, runPreBuildFixes } = require('./lib/utils.cjs');
@@ -51,35 +52,23 @@ async function callLLM({ system, payload }) {
     ]
   };
 
-  for (let attempt = 0; attempt < 3; attempt++) { // 3 tries: ~1s, 2s
-    try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify(body),
-      });
+  const res = await fetchWithRetry(
+    'https://api.openai.com/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify(body),
+    },
+    { errorPrefix: 'OpenAI ' }
+  );
 
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        // Only retry 429/5xx; otherwise fail fast
-        if (res.status !== 429 && (res.status < 500 || res.status >= 600)) {
-          throw new Error(`OpenAI ${res.status}: ${txt.slice(0,500)}`);
-        }
-        throw new Error(`Retryable ${res.status}: ${txt.slice(0,500)}`);
-      }
-
-      const json = await res.json();
-      const out = json.choices?.[0]?.message?.content || '';
-      if (!out) throw new Error('OpenAI returned empty message');
-      return out;
-    } catch (err) {
-      if (attempt === 2) throw err;          // give up after 3 tries
-      await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // 1s, 2s
-    }
-  }
+  const json = await res.json();
+  const out = json.choices?.[0]?.message?.content || '';
+  if (!out) throw new Error('OpenAI returned empty message');
+  return out;
 }
 async function fetchVercelLogs() {
   if (!VERCEL_TOKEN || !VERCEL_PROJECT_ID) return { trimmedLogs: '', issues: [], deployments: [] };
