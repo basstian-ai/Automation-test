@@ -102,7 +102,9 @@ function splitDiffIntoFiles(sanitized) {
   // Split into per-file chunks (keep the "diff --git" marker with each)
   const normalized = sanitized.replace(/^diff --git /, '\n\0diff --git ');
   const parts = normalized.split(/\n(?=diff --git )/g);
-  return parts.map(p => p.replace(/^\0/, '')).filter(Boolean);
+  // Each chunk may start with an injected "\0" and/or leading newline.
+  // Strip those so downstream logic sees a clean "diff --git" header.
+  return parts.map(p => p.replace(/^[\n\0]+/, '')).filter(Boolean);
 }
 
 function parseChunkPaths(chunk) {
