@@ -4,7 +4,7 @@ import { getLatestProdDeployment, getRuntimeLogs } from "../lib/vercel.js";
 import { loadState, saveState } from "../lib/state.js";
 import { readFile, upsertFile } from "../lib/github.js";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
-import { summarizeLogToBug } from "../lib/prompts.js";
+import { summarizeLogToBug, type LogEntryForBug } from "../lib/prompts.js";
 
 type RawLog = {
   level?: string;
@@ -88,13 +88,15 @@ export async function ingestLogs(): Promise<void> {
       return;
     }
 
-    // Map to the strict shape summarizeLogToBug expects
-    const summarizeInput = appEntries.map(e => ({
-      level: e.level as string,
-      message: e.message as string,
-      path: e.requestPath,
-      ts: e.timestamp
-    }));
+     // Map to the strict shape summarizeLogToBug expects
+    const summarizeInput: LogEntryForBug[] = appEntries
+      .filter(e => e.level === "error" || e.level === "warning")
+      .map(e => ({
+        level: (e.level as "error" | "warning") ?? "error",
+        message: String(e.message ?? ""),
+        path: e.requestPath || undefined,
+        ts: e.timestamp || undefined
+      }));
 
     const suggestion = await summarizeLogToBug(summarizeInput);
 
