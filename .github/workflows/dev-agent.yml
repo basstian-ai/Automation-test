@@ -2,8 +2,8 @@ name: AI Iteration Agent
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/10 * * * *"  # every 10 minutes (default branch only)
+  #schedule:
+   # - cron: "*/10 * * * *"  # every 10 minutes (default branch only)
 
 jobs:
   iter:
