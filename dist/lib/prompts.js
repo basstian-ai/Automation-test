@@ -1,0 +1,51 @@
+import OpenAI from "openai";
+import { ENV } from "./env.js";
+const openai = new OpenAI({ apiKey: ENV.OPENAI_API_KEY });
+export async function summarizeLogToBug(entries) {
+    const messages = [
+        { role: "system", content: "You are an experienced software architect. Convert each unique error/warning into a succinct bug with a short title and 2–4 line description. No priorities, no duplicates." },
+        { role: "user", content: JSON.stringify(entries, null, 2) }
+    ];
+    const r = await openai.chat.completions.create({
+        model: ENV.OPENAI_MODEL,
+        temperature: 0.2,
+        messages
+    });
+    return r.choices[0]?.message?.content ?? "";
+}
+export async function reviewToIdeas(input) {
+    const messages = [
+        { role: "system", content: "You are an experienced software architect. Propose small, actionable items (≤1 day) as YAML under queue:. Avoid duplicates vs existing lists." },
+        { role: "user", content: JSON.stringify(input, null, 2) }
+    ];
+    const r = await openai.chat.completions.create({
+        model: ENV.OPENAI_MODEL,
+        temperature: 0.2,
+        messages
+    });
+    return r.choices[0]?.message?.content ?? "";
+}
+export async function synthesizeTasksPrompt(input) {
+    const messages = [
+        { role: "system", content: "Promote items from bugs/new into tasks.\nReturn YAML under items: with type (bug|improvement|feature), title, desc, source, created.\nAssign unique priority 1..N (≤100). Deduplicate. Optimize for critical bugs & meaningful user progress. Then also return YAML for queues with remaining.\n" },
+        { role: "user", content: JSON.stringify(input, null, 2) }
+    ];
+    const r = await openai.chat.completions.create({
+        model: ENV.OPENAI_MODEL,
+        temperature: 0.1,
+        messages
+    });
+    return r.choices[0]?.message?.content ?? "";
+}
+export async function implementPlan(input) {
+    const messages = [
+        { role: "system", content: "You are a senior developer. Plan minimal changes to implement the task. Output JSON: {operations:[{path,action,content?}], testHint:string, commitTitle:string, commitBody:string}. Only include files that belong to the task; keep diffs small; include at least one test if there is a test harness." },
+        { role: "user", content: JSON.stringify(input, null, 2) }
+    ];
+    const r = await openai.chat.completions.create({
+        model: ENV.OPENAI_MODEL,
+        temperature: 0.2,
+        messages
+    });
+    return r.choices[0]?.message?.content ?? "";
+}
