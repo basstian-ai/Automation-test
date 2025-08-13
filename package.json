@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "engines": { "node": ">=20.0.0" },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/cli.js",
@@ -13,13 +15,13 @@
     "cmd:implement": "node dist/cli.js implement",
     "check": "node -e \"console.log('ok')\""
   },
-"dependencies": {
-    "octokit": "^3.2.1",
-    "js-yaml": "^4.1.0",
-    "openai": "^4.58.0"
-  },
-  "devDependencies": {
-    "@types/js-yaml": "^4.0.9",
-    "typescript": "^5.5.4"
-  }
+  "dependencies": {
+  "octokit": "^3.x",
+  "js-yaml": "^4.1.0",
+  "openai": "^4.58.0"
+},
+"devDependencies": {
+  "@types/js-yaml": "^4.0.9",
+  "typescript": "^5.5.4"
+}
 }
