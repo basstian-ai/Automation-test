@@ -1,20 +1,23 @@
+// src/lib/env.ts
 export const ENV = {
-    GH_USERNAME: must("GH_USERNAME"),
-    PAT_TOKEN: must("PAT_TOKEN"),
-    TARGET_REPO: must("TARGET_REPO"), // "owner/repo"
-    TARGET_DIR: process.env.TARGET_DIR || "", // e.g., "" or "subdir"
+    GH_USERNAME: process.env.GH_USERNAME || "ai-dev-agent",
+    PAT_TOKEN: process.env.PAT_TOKEN || "",
+    TARGET_REPO: process.env.TARGET_REPO || "",
+    TARGET_DIR: process.env.TARGET_DIR || "",
     VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID || "",
     VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID || "",
     VERCEL_TOKEN: process.env.VERCEL_TOKEN || "",
-    OPENAI_API_KEY: must("OPENAI_API_KEY"),
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
     OPENAI_MODEL: process.env.OPENAI_MODEL || "gpt-4o-mini",
-    WRITE_MODE: process.env.AI_BOT_WRITE_MODE || "commit", // commit|pr
+    WRITE_MODE: process.env.AI_BOT_WRITE_MODE || "commit",
     DRY_RUN: process.env.DRY_RUN === "1",
     ALLOW_PATHS: (process.env.ALLOW_PATHS || "").split(",").map(s => s.trim()).filter(Boolean),
 };
-function must(name) {
-    const v = process.env[name];
-    if (!v)
-        throw new Error(`Missing env: ${name}`);
-    return v;
+// Call this inside commands to assert only what they need.
+export function requireEnv(names) {
+    for (const n of names) {
+        if (!process.env[n] || process.env[n] === "") {
+            throw new Error(`Missing env: ${n}`);
+        }
+    }
 }
