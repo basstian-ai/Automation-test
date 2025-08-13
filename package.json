@@ -13,13 +13,14 @@
     "cmd:implement": "node dist/cli.js implement",
     "check": "node -e \"console.log('ok')\""
   },
-  "dependencies": {
+"dependencies": {
     "@octokit/plugin-create-or-update-text-file": "^5.1.0",
-    "@octokit/rest": "^20.1.1",
+    "octokit": "^3.2.1",
     "js-yaml": "^4.1.0",
     "openai": "^4.58.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "typescript": "^5.5.4"
   }
 }

@@ -21,7 +21,7 @@ export async function implementTopTask() {
     const top = tasks[0];
 
     // Optional path guard
-    const repoTree = []; // (keep empty for now, or list via GH if you want)
+    const repoTree: string[] = []; // (keep empty for now, or list via GH if you want)
     const planJson = await implementPlan({ vision, done, topTask: top, repoTree });
     let plan: any = {};
     try { plan = JSON.parse(planJson); } catch { plan = {}; }
