@@ -50,7 +50,7 @@ export async function upsertFile(path, updater, message) {
         path,
         message,
         content: b64(next),
-        sha, // include sha if file existed
+        sha, // include if file existed
         committer: { name: "ai-dev-agent", email: "bot@local" },
         author: { name: "ai-dev-agent", email: "bot@local" }
     });
