@@ -384,10 +384,18 @@ function collectRepoFiles(repoDir, paths = []) {
 
 function readRoadmap(repoDir) {
   const p = path.join(repoDir, 'roadmap.md');
-  if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
-  const alt = path.join(repoDir, 'ROADMAP.md');
-  if (fs.existsSync(alt)) return fs.readFileSync(alt, 'utf8');
-  return '# Roadmap\n\n(No roadmap.md found)';
+  let content = '';
+  if (fs.existsSync(p)) {
+    content = fs.readFileSync(p, 'utf8');
+  } else {
+    const alt = path.join(repoDir, 'ROADMAP.md');
+    if (fs.existsSync(alt)) content = fs.readFileSync(alt, 'utf8');
+    else return '# Roadmap\n\n(No roadmap.md found)';
+  }
+
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  const filtered = lines.filter((l) => !/\[x\]/i.test(l));
+  return filtered.join('\n');
 }
 
 function updateRoadmap(repoDir, changesSummary = '', nextSteps = '') {
@@ -409,6 +417,43 @@ function updateRoadmap(repoDir, changesSummary = '', nextSteps = '') {
     content = '# Roadmap\n';
   }
   const lines = content.replace(/\r\n/g, '\n').split('\n');
+
+  function markCompleted(summary) {
+    const parts = String(summary || '')
+      .split('\n')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    const header = 'Next Steps';
+    const name = header.toLowerCase();
+    const idx = lines.findIndex((l) => l.trim().toLowerCase().replace(/^#+\s*/, '') === name);
+    if (idx === -1) return;
+    let sectionEnd = lines.length;
+    for (let i = idx + 1; i < lines.length; i++) {
+      if (/^#/.test(lines[i])) { sectionEnd = i; break; }
+    }
+    const isItem = (l) => /^[-*+]\s+/.test(l) || /^\d+\.\s+/.test(l);
+    const norm = (l) => l
+      .replace(/^[-*+]\s+/, '')
+      .replace(/^\d+\.\s+/, '')
+      .replace(/^\[(?:x|\d{4}-\d{2}-\d{2})\]\s*/i, '')
+      .trim();
+    for (let i = idx + 1; i < sectionEnd; i++) {
+      if (!isItem(lines[i])) continue;
+      const item = norm(lines[i]).toLowerCase();
+      for (const part of parts) {
+        if (!part) continue;
+        if (item.includes(part) || part.includes(item)) {
+          if (!/\[x\]/i.test(lines[i])) {
+            lines[i] = lines[i].replace(/^([ \t]*)([-*+]|\d+\.)\s*/, '$1$2 [x] ');
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  markCompleted(changesSummary);
 
   function appendSection(header, text) {
     const rawItems = String(text || '')

@@ -74,6 +74,29 @@ const { updateRoadmap, readRoadmap } = require('./utils.cjs');
   assert(/\[x\] done/.test(archive));
 }
 
+// Detect completed item from changesSummary
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-'));
+  const file = path.join(dir, 'roadmap.md');
+  fs.writeFileSync(file, '# Roadmap\n\n## Next Steps\n- finish task\n', 'utf8');
+  updateRoadmap(dir, 'finish task', '');
+  const main = fs.readFileSync(file, 'utf8');
+  const archive = fs.readFileSync(path.join(dir, 'roadmap-archive.md'), 'utf8');
+  assert(/## Progress[\s\S]*finish task/.test(main));
+  assert(!/## Next Steps[^#]*finish task/.test(main));
+  assert(/\[x\]\s+finish task/.test(archive));
+}
+
+// readRoadmap filters completed entries
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-'));
+  const file = path.join(dir, 'roadmap.md');
+  fs.writeFileSync(file, '# Roadmap\n\n- [x] done\n- todo\n', 'utf8');
+  const txt = readRoadmap(dir);
+  assert(!/\[x\] done/.test(txt));
+  assert(/todo/.test(txt));
+}
+
 // Pruning dated items older than threshold
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-'));
