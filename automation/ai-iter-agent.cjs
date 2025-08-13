@@ -13,6 +13,8 @@ const { fetchWithRetry } = require('./lib/http.cjs');
 const { extractIssuesFromLogs, filesFromIssues } = require('./lib/parseLogs.cjs');
 const { strategyFor } = require('./lib/strategies.cjs');
 const { tryLocalBuild, getRepoTree, collectRepoFiles, readRoadmap, applyUnifiedDiff, commitAndPush, pickPackageManager, run, runPreBuildFixes, updateRoadmap } = require('./lib/utils.cjs');
+const STATE_FILE = path.join(__dirname, 'state.json');
+const STATE_MAX = parseInt(process.env.ROADMAP_STATE_N || '5', 10);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini';
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
@@ -219,7 +221,18 @@ if (GH_PUSH_TOKEN) {
   const repoTree = getRepoTree(repoDir);
   const filesToSend = computeFilesToSend(repoDir, issues);
   const repoFiles = collectRepoFiles(repoDir, filesToSend);
-  const roadmap = readRoadmap(repoDir);
+  let state = { recent: [] };
+  if (fs.existsSync(STATE_FILE)) {
+    try {
+      state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) || state;
+    } catch {}
+  }
+  let recentItems = Array.isArray(state.recent) ? state.recent : [];
+  let roadmap = readRoadmap(repoDir);
+  if (recentItems.length) {
+    const lines = roadmap.split('\n').filter(l => !recentItems.some(r => l.includes(r)));
+    roadmap = lines.join('\n');
+  }
 
   const payload = {
     issues,
@@ -333,6 +346,20 @@ RESPONSE RULES:
     const commitMessage = generateCommitMessage(diff, changesSummary, roadmap);
     console.log(`✅ Build is green. Committing & pushing with message: ${commitMessage}`);
     commitAndPush(commitMessage, repoDir);
+    const firstBullet = (changesSummary || '')
+      .split('\n')
+      .map(l => l.trim())
+      .find(l => /^[-*]\s+/.test(l) || /^\d+\.\s+/.test(l));
+    const chosenItem = firstBullet
+      ? firstBullet.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '').trim()
+      : commitMessage;
+    if (chosenItem) {
+      recentItems.push(chosenItem);
+      if (recentItems.length > STATE_MAX) {
+        recentItems.splice(0, recentItems.length - STATE_MAX);
+      }
+      fs.writeFileSync(STATE_FILE, JSON.stringify({ recent: recentItems }, null, 2));
+    }
   }
   console.log('✨ Done.');
 }
