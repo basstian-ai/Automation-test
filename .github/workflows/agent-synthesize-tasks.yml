@@ -1,32 +1,31 @@
-name: ai-dev-agent
+name: agent-synthesize-tasks
 on:
   schedule:
-    - cron: "*/15 * * * *"   # implement
-    - cron: "0 */6 * * *"    # ingest-logs (every 6h)
-    - cron: "7 4 * * *"      # review-repo (04:07 UTC)
-    - cron: "12 4 * * *"     # synthesize-tasks (04:12 UTC)
+    - cron: "12 4 * * *"     # 04:12 UTC (≈ 06:12 Oslo summer / 05:12 winter)
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: ai-agent-${{ github.ref }}
+  group: agent-synthesize-tasks-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  run:
+  synthesize-tasks:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        step: [ "ingest-logs", "review-repo", "synthesize-tasks", "implement" ]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
-      - run: npm ci
+      - name: Ensure lockfile (first run)
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --no-audit --no-fund
+          fi
+      - run: npm ci --no-audit --no-fund
       - run: npm run build
-      - run: node dist/cli.js ${{ matrix.step }}
+      - run: node dist/cli.js synthesize-tasks
         env:
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}

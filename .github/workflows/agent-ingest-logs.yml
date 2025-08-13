@@ -1,0 +1,41 @@
+name: agent-ingest-logs
+on:
+  schedule:
+    - cron: "0 */6 * * *"    # 00:00, 06:00, 12:00, 18:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-ingest-logs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ingest-logs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Ensure lockfile (first run)
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --no-audit --no-fund
+          fi
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: node dist/cli.js ingest-logs
+        env:
+          GH_USERNAME: ${{ secrets.GH_USERNAME }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          TARGET_REPO: ${{ secrets.TARGET_REPO }}
+          TARGET_DIR: ${{ secrets.TARGET_DIR }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          AI_BOT_WRITE_MODE: commit
+          DRY_RUN: "0"
+          ALLOW_PATHS: ""

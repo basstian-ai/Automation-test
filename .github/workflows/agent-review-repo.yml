@@ -1,0 +1,41 @@
+name: agent-review-repo
+on:
+  schedule:
+    - cron: "7 4 * * *"      # 04:07 UTC (≈ 06:07 Oslo summer / 05:07 winter)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-review-repo-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  review-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Ensure lockfile (first run)
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --no-audit --no-fund
+          fi
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: node dist/cli.js review-repo
+        env:
+          GH_USERNAME: ${{ secrets.GH_USERNAME }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          TARGET_REPO: ${{ secrets.TARGET_REPO }}
+          TARGET_DIR: ${{ secrets.TARGET_DIR }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          AI_BOT_WRITE_MODE: commit
+          DRY_RUN: "0"
+          ALLOW_PATHS: ""
