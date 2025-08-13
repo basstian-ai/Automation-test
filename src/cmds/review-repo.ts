@@ -17,8 +17,9 @@ export async function reviewRepo() {
     const { owner, repo } = parseRepo(process.env.TARGET_REPO!);
     const commits = await gh().rest.repos.listCommits({ owner, repo, per_page: 10 });
     const sinceSha = state.lastReviewedSha;
-    const recent = commits.data.map((c: { sha: string; commit: { message: string } }) =>
-      `${c.sha.slice(0,7)} ${c.commit.message.split("\n")[0]}`
+   const recent = commits.data.map(
+      (c: { sha: string; commit: { message: string } }) =>
+        `${c.sha.slice(0,7)} ${c.commit.message.split("\n")[0]}`
     );
     const input = { commits: recent, vision, tasks, bugs, done, fresh };
 
