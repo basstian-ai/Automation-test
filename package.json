@@ -14,7 +14,6 @@
     "check": "node -e \"console.log('ok')\""
   },
 "dependencies": {
-    "@octokit/plugin-create-or-update-text-file": "^5.1.0",
     "octokit": "^3.2.1",
     "js-yaml": "^4.1.0",
     "openai": "^4.58.0"

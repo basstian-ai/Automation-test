@@ -1,5 +1,5 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { readFile, parseRepo, gh } from "../lib/github.js";
+import { readFile, parseRepo, gh, upsertFile } from "../lib/github.js";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
 import { reviewToIdeas } from "../lib/prompts.js";
 import { loadState, saveState } from "../lib/state.js";
@@ -15,9 +15,11 @@ export async function reviewRepo() {
 
     const state = await loadState();
     const { owner, repo } = parseRepo(process.env.TARGET_REPO!);
-    const commits = await gh().repos.listCommits({ owner, repo, per_page: 10 });
+    const commits = await gh().rest.repos.listCommits({ owner, repo, per_page: 10 });
     const sinceSha = state.lastReviewedSha;
-    const recent = commits.data.map(c => `${c.sha.slice(0,7)} ${c.commit.message.split("\n")[0]}`);
+    const recent = commits.data.map((c: { sha: string; commit: { message: string } }) =>
+      `${c.sha.slice(0,7)} ${c.commit.message.split("\n")[0]}`
+    );
     const input = { commits: recent, vision, tasks, bugs, done, fresh };
 
     const ideas = await reviewToIdeas(input);
@@ -27,10 +29,7 @@ export async function reviewRepo() {
     yaml.queue.push({ id: `IDEA-${Date.now()}`, title: "Architect review batch", details: ideas, created: new Date().toISOString() });
     const next = writeYamlBlock(current, yaml);
 
-    await gh().repos.createOrUpdateFileContents({
-      owner, repo, path: newPath, message: "bot: review repo → new.md",
-      content: Buffer.from(next, "utf8").toString("base64")
-    });
+    await upsertFile(newPath, () => next, "bot: review repo → new.md");
 
     const headSha = commits.data[0]?.sha;
     await saveState({ ...state, lastReviewedSha: headSha });
