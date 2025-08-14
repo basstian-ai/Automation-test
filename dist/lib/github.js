@@ -48,7 +48,8 @@ export function resolveRepoPath(p) {
 }
 export async function readFile(path) {
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
-    const got = await getFile(owner, repo, path);
+    const safePath = resolveRepoPath(path);
+    const got = await getFile(owner, repo, safePath);
     return got.content;
 }
 export async function upsertFile(path, updater, message) {
