@@ -1,7 +1,7 @@
 name: agent-review-repo
 on:
   schedule:
-    - cron: "7 4 * * *"      # 04:07 UTC (≈ 06:07 Oslo summer / 05:07 winter)
+    - cron: "0 * * * *"      # 
   workflow_dispatch:
 
 permissions:
@@ -35,7 +35,7 @@ jobs:
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          OPENAI_MODEL: gpt-5
           AI_BOT_WRITE_MODE: commit
           DRY_RUN: "0"
           ALLOW_PATHS: ""
