@@ -1,5 +1,5 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { readFile, upsertFile, commitMany, resolveRepoPath } from "../lib/github.js";
+import { readFile, commitMany, resolveRepoPath } from "../lib/github.js";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
 import { implementPlan } from "../lib/prompts.js";
 import { ENV } from "../lib/env.js";
@@ -57,25 +57,31 @@ export async function implementTopTask() {
                 content: `- ${new Date().toISOString()} Implemented: ${top.title}\n`
             });
         }
-        // Apply operations
+        // Apply operations and roadmap updates
         const files = [];
         for (const op of filtered) {
             if (op.action !== "create" && op.action !== "update")
                 continue;
             files.push({ path: op.path, content: op.content ?? "" });
         }
+        // Prepare roadmap changes
+        const remaining = tYaml.items.filter(i => i !== top);
+        const nextTasks = writeYamlBlock(tRaw, { items: remaining });
+        const doneLine = `- ${new Date().toISOString()}: ✅ ${top.id || ""} — ${plan.commitTitle || top.title}\n`;
+        const nextDone = done + doneLine;
+        files.push({ path: "roadmap/tasks.md", content: nextTasks });
+        files.push({ path: "roadmap/done.md", content: nextDone });
         if (files.length) {
             const title = plan.commitTitle || ((top.type === "bug" ? "fix" : "feat") + `: ${top.title || top.id}`);
             const body = plan.commitBody || (top.desc || "");
-            await commitMany(files, `${title}\n\n${body}`);
+            try {
+                await commitMany(files, `${title}\n\n${body}`);
+                console.log("Implement complete.");
+            }
+            catch (err) {
+                console.error("Bulk commit failed; no changes were applied.", err);
+            }
         }
-        // Update roadmap: remove task and append to done
-        const remaining = tYaml.items.filter(i => i !== top);
-        const nextTasks = writeYamlBlock(tRaw, { items: remaining });
-        await upsertFile("roadmap/tasks.md", () => nextTasks, "bot: remove completed task");
-        const doneLine = `- ${new Date().toISOString()}: ✅ ${top.id || ""} — ${plan.commitTitle || top.title}\n`;
-        await upsertFile("roadmap/done.md", (old) => (old || "") + doneLine, "bot: append done");
-        console.log("Implement complete.");
     }
     finally {
         await releaseLock();

@@ -75,18 +75,41 @@ export async function commitMany(files, message) {
         console.log(`[DRY_RUN] Would commit ${files.length} files:`, files.map(f => resolveRepoPath(f.path)));
         return;
     }
-    for (const f of files) {
-        const safePath = resolveRepoPath(f.path);
-        const existing = await getFile(owner, repo, safePath);
-        await gh().rest.repos.createOrUpdateFileContents({
-            owner,
-            repo,
-            path: safePath,
-            message,
-            content: b64(f.content),
-            sha: existing.sha,
-            committer: { name: "ai-dev-agent", email: "bot@local" },
-            author: { name: "ai-dev-agent", email: "bot@local" }
-        });
+    const client = gh();
+    // Normalize and ensure paths are within repo scope
+    const safe = files.map(f => ({ path: resolveRepoPath(f.path), content: f.content }));
+    // Determine the current branch and commit
+    const { data: repoData } = await client.rest.repos.get({ owner, repo });
+    const branch = repoData.default_branch;
+    const { data: refData } = await client.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+    const baseSha = refData.object.sha;
+    const { data: commitData } = await client.rest.git.getCommit({ owner, repo, commit_sha: baseSha });
+    // Create blobs and collect tree entries
+    const tree = [];
+    for (const f of safe) {
+        const blob = await client.rest.git.createBlob({ owner, repo, content: f.content, encoding: "utf-8" });
+        tree.push({ path: f.path, mode: "100644", type: "blob", sha: blob.data.sha });
+    }
+    // Create new tree and commit
+    const { data: newTree } = await client.rest.git.createTree({ owner, repo, base_tree: commitData.tree.sha, tree });
+    const { data: newCommit } = await client.rest.git.createCommit({
+        owner,
+        repo,
+        message,
+        tree: newTree.sha,
+        parents: [baseSha],
+        committer: { name: "ai-dev-agent", email: "bot@local" },
+        author: { name: "ai-dev-agent", email: "bot@local" }
+    });
+    // Update branch reference; rollback if it fails
+    try {
+        await client.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: newCommit.sha });
+    }
+    catch (err) {
+        try {
+            await client.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: baseSha, force: true });
+        }
+        catch { }
+        throw err;
     }
 }
