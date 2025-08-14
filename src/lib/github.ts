@@ -81,7 +81,8 @@ export async function upsertFile(
 
 export async function commitMany(
   files: Array<{ path: string; content: string }>,
-  message: string
+  message: string,
+  branch = ENV.BRANCH
 ) {
   const { owner, repo } = parseRepo(ENV.TARGET_REPO);
   if (ENV.DRY_RUN) {
@@ -99,8 +100,8 @@ export async function commitMany(
 
   // Determine the current branch and commit
   const { data: repoData } = await client.rest.repos.get({ owner, repo });
-  const branch = repoData.default_branch;
-  const { data: refData } = await client.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+  const targetBranch = branch || repoData.default_branch;
+  const { data: refData } = await client.rest.git.getRef({ owner, repo, ref: `heads/${targetBranch}` });
   const baseSha = refData.object.sha;
   const { data: commitData } = await client.rest.git.getCommit({ owner, repo, commit_sha: baseSha });
 
@@ -125,10 +126,10 @@ export async function commitMany(
 
   // Update branch reference; rollback if it fails
   try {
-    await client.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: newCommit.sha });
+    await client.rest.git.updateRef({ owner, repo, ref: `heads/${targetBranch}`, sha: newCommit.sha });
   } catch (err) {
     try {
-      await client.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: baseSha, force: true });
+      await client.rest.git.updateRef({ owner, repo, ref: `heads/${targetBranch}`, sha: baseSha, force: true });
     } catch {}
     throw err;
   }

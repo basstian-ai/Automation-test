@@ -11,6 +11,7 @@ export const ENV = {
   OPENAI_MODEL: process.env.OPENAI_MODEL || "gpt-4o-mini",
   WRITE_MODE: process.env.AI_BOT_WRITE_MODE || "commit",
   DRY_RUN: process.env.DRY_RUN === "1",
+  BRANCH: process.env.GITHUB_REF_NAME || process.env.GITHUB_HEAD_REF || "",
   ALLOW_PATHS: (process.env.ALLOW_PATHS || "").split(",").map(s => s.trim()).filter(Boolean),
 };
 

@@ -69,7 +69,7 @@ export async function upsertFile(path, updater, message) {
         author: { name: "ai-dev-agent", email: "bot@local" }
     });
 }
-export async function commitMany(files, message) {
+export async function commitMany(files, message, branch = ENV.BRANCH) {
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
     if (ENV.DRY_RUN) {
         console.log(`[DRY_RUN] Would commit ${files.length} files:`, files.map(f => resolveRepoPath(f.path)));
@@ -80,8 +80,8 @@ export async function commitMany(files, message) {
     const safe = files.map(f => ({ path: resolveRepoPath(f.path), content: f.content }));
     // Determine the current branch and commit
     const { data: repoData } = await client.rest.repos.get({ owner, repo });
-    const branch = repoData.default_branch;
-    const { data: refData } = await client.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+    const targetBranch = branch || repoData.default_branch;
+    const { data: refData } = await client.rest.git.getRef({ owner, repo, ref: `heads/${targetBranch}` });
     const baseSha = refData.object.sha;
     const { data: commitData } = await client.rest.git.getCommit({ owner, repo, commit_sha: baseSha });
     // Create blobs and collect tree entries
@@ -103,11 +103,11 @@ export async function commitMany(files, message) {
     });
     // Update branch reference; rollback if it fails
     try {
-        await client.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: newCommit.sha });
+        await client.rest.git.updateRef({ owner, repo, ref: `heads/${targetBranch}`, sha: newCommit.sha });
     }
     catch (err) {
         try {
-            await client.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: baseSha, force: true });
+            await client.rest.git.updateRef({ owner, repo, ref: `heads/${targetBranch}`, sha: baseSha, force: true });
         }
         catch { }
         throw err;

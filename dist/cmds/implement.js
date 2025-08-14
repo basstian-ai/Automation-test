@@ -75,7 +75,7 @@ export async function implementTopTask() {
             const title = plan.commitTitle || ((top.type === "bug" ? "fix" : "feat") + `: ${top.title || top.id}`);
             const body = plan.commitBody || (top.desc || "");
             try {
-                await commitMany(files, `${title}\n\n${body}`);
+                await commitMany(files, `${title}\n\n${body}`, ENV.BRANCH);
                 console.log("Implement complete.");
             }
             catch (err) {
