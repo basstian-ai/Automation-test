@@ -41,7 +41,11 @@ export function resolveRepoPath(p: string): string {
   if (norm === "" || norm === "." || norm.startsWith("..")) {
     throw new Error(`Refusing path outside repo: ${p}`);
   }
-  const base = (ENV.TARGET_DIR || "").replace(/^\/+|\/+$/g, "");
+  const rawBase = ENV.TARGET_DIR || "";
+  const base = rawBase.replace(/^\/+|\/+$/g, "");
+  if (base.includes("://") || base.includes(":")) {
+    throw new Error(`Invalid TARGET_DIR: ${ENV.TARGET_DIR}`);
+  }
   const joined = base ? pathPosix.join(base, norm) : norm;
   return joined.replace(/^\/+/, "");
 }
