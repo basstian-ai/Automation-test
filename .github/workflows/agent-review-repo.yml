@@ -35,7 +35,7 @@ jobs:
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: gpt-5
+          OPENAI_MODEL: gpt-4o
           AI_BOT_WRITE_MODE: commit
           DRY_RUN: "0"
           ALLOW_PATHS: ""
