@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: agent-implement-${{ github.ref }}
+  group: ai-dev-agent-global
   cancel-in-progress: false
 
 jobs:
