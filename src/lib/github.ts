@@ -74,17 +74,41 @@ export async function commitMany(
     console.log(`[DRY_RUN] Would commit ${files.length} files:`, files.map(f => f.path));
     return;
   }
-  for (const f of files) {
-    const existing = await getFile(owner, repo, f.path);
-    await gh().rest.repos.createOrUpdateFileContents({
+
+  const client = gh();
+
+  // Determine default branch and current commit
+  const { data: repoInfo } = await client.rest.repos.get({ owner, repo });
+  const branch = repoInfo.default_branch;
+  const { data: ref } = await client.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+  const currentSha = ref.object.sha;
+  const { data: baseCommit } = await client.rest.git.getCommit({ owner, repo, commit_sha: currentSha });
+
+  try {
+    // Create blobs for each file
+    const treeEntries = await Promise.all(files.map(async (f) => {
+      const blob = await client.rest.git.createBlob({ owner, repo, content: f.content, encoding: "utf-8" });
+      return { path: f.path, mode: "100644", type: "blob", sha: blob.data.sha } as const;
+    }));
+
+    // Build tree and commit
+    const { data: tree } = await client.rest.git.createTree({ owner, repo, base_tree: baseCommit.tree.sha, tree: treeEntries });
+    const { data: commit } = await client.rest.git.createCommit({
       owner,
       repo,
-      path: f.path,
       message,
-      content: b64(f.content),
-      sha: existing.sha,
-      committer: { name: "ai-dev-agent", email: "bot@local" },
-      author: { name: "ai-dev-agent", email: "bot@local" }
+      tree: tree.sha,
+      parents: [currentSha],
+      author: { name: "ai-dev-agent", email: "bot@local" },
+      committer: { name: "ai-dev-agent", email: "bot@local" }
     });
+
+    await client.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: commit.sha });
+  } catch (e) {
+    // Roll back to previous commit if something went wrong
+    try {
+      await client.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: currentSha, force: true });
+    } catch {}
+    throw e;
   }
 }
