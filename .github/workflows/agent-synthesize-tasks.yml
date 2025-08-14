@@ -1,7 +1,7 @@
 name: agent-synthesize-tasks
 on:
   schedule:
-    - cron: "12 4 * * *"     # 04:12 UTC (≈ 06:12 Oslo summer / 05:12 winter)
+    - cron: "*/30 * * * *"     # 04:12 UTC (≈ 06:12 Oslo summer / 05:12 winter)
   workflow_dispatch:
 
 permissions:
