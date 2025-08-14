@@ -73,11 +73,13 @@ export async function ingestLogs() {
             return;
         }
         // Map to the strict shape summarizeLogToBug expects
-        const summarizeInput = appEntries.map(e => ({
-            level: e.level,
-            message: e.message,
-            path: e.requestPath,
-            ts: e.timestamp
+        const summarizeInput = appEntries
+            .filter(e => e.level === "error" || e.level === "warning")
+            .map(e => ({
+            level: e.level ?? "error",
+            message: String(e.message ?? ""),
+            path: e.requestPath || undefined,
+            ts: e.timestamp || undefined
         }));
         const suggestion = await summarizeLogToBug(summarizeInput);
         const bugsPath = "roadmap/bugs.md";
