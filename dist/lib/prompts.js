@@ -49,7 +49,7 @@ export async function reviewToIdeas(input) {
     return r.choices[0]?.message?.content ?? "";
 }
 /**
- * Promote bugs/new → tasks with unique priorities (1..N).
+ * Promote items from roadmap/new.md (ideas queue) → tasks with unique priorities (1..N).
  * Return YAML (items: [...]) in a code block; caller merges & enforces limits.
  */
 export async function synthesizeTasksPrompt(input) {
@@ -57,7 +57,7 @@ export async function synthesizeTasksPrompt(input) {
     const messages = [
         {
             role: "system",
-            content: "Promote items from bugs/new into tasks.\n" +
+            content: "Promote items from roadmap/new.md (ideas queue) into tasks.\n" +
                 "Return ONLY YAML in a code block with the shape:\n```yaml\nitems:\n  - id: <leave blank or omit>\n    type: bug|improvement|feature\n    title: <short>\n    desc: <2–4 lines>\n    source: logs|review|user|vision\n    created: <ISO>\n    priority: <int>\n```\n" +
                 "Rules: no duplicates vs existing tasks; unique priorities 1..N; prefer critical bugs and user-impactful work; cap at ~100."
         },
