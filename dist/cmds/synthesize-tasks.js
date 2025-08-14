@@ -1,7 +1,11 @@
+import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, upsertFile } from "../lib/github.js";
-import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
+import { readYamlBlock } from "../lib/md.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
+function normTitle(t = "") { return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim(); }
+function yamlBlock(obj) { return "```yaml\n" + yaml.dump(obj, { lineWidth: 120 }) + "```"; }
+function isMeta(t) { return /batch task synthesis/i.test(t?.title || "") || /```/.test(t?.desc || ""); }
 export async function synthesizeTasks() {
     if (!(await acquireLock())) {
         console.log("Lock taken; exiting.");
@@ -9,31 +13,51 @@ export async function synthesizeTasks() {
     }
     try {
         const vision = (await readFile("roadmap/vision.md")) || "";
-        const tasks = (await readFile("roadmap/tasks.md")) || "";
-        const bugs = (await readFile("roadmap/bugs.md")) || "";
-        const ideas = (await readFile("roadmap/new.md")) || "";
-        const done = (await readFile("roadmap/done.md")) || "";
-        const proposal = await synthesizeTasksPrompt({ tasks, bugs, ideas, vision, done });
-        // naive: append proposal into tasks and clear queues (agent-friendly; you can refine)
-        const tYaml = readYamlBlock(tasks, { items: [] });
-        const nYaml = readYamlBlock(ideas, { queue: [] });
-        const bYaml = readYamlBlock(bugs, { queue: [] });
-        tYaml.items = Array.isArray(tYaml.items) ? tYaml.items : [];
-        tYaml.items = tYaml.items.slice(0, 100); // guardrail
-        // Record the LLM proposal for traceability
-        tYaml.items.push({
-            id: `TSK-${Date.now()}`,
-            type: "improvement",
-            title: "Batch task synthesis",
-            desc: proposal,
-            source: "review",
-            created: new Date().toISOString(),
-            priority: (tYaml.items.length || 0) + 1
+        const tasksMd = (await readFile("roadmap/tasks.md")) || "";
+        const bugsMd = (await readFile("roadmap/bugs.md")) || "";
+        const ideasMd = (await readFile("roadmap/new.md")) || "";
+        const doneMd = (await readFile("roadmap/done.md")) || "";
+        const proposal = await synthesizeTasksPrompt({ tasks: tasksMd, bugs: bugsMd, ideas: ideasMd, vision, done: doneMd });
+        // Extract YAML (fenced or bare)
+        const m = proposal.match(/```yaml\s*?\n([\s\S]*?)\n```/);
+        const toParse = m ? m[1] : proposal;
+        let parsed = {};
+        try {
+            parsed = yaml.load(toParse) || {};
+        }
+        catch {
+            parsed = {};
+        }
+        let proposed = Array.isArray(parsed.items) ? parsed.items : [];
+        proposed = proposed.filter(t => t?.title && !isMeta(t));
+        // Existing tasks
+        const existing = readYamlBlock(tasksMd, { items: [] }).items || [];
+        // Merge & dedupe
+        const seen = new Set();
+        const merged = [];
+        for (const t of [...existing, ...proposed]) {
+            const key = (t.id && `id:${t.id.toLowerCase().trim()}`) ||
+                `tt:${(t.type || "").toLowerCase()}|${normTitle(t.title)}`;
+            if (seen.has(key))
+                continue;
+            seen.add(key);
+            merged.push(t);
+        }
+        // Unique priorities 1..N (≤100)
+        merged.sort((a, b) => {
+            const pa = a.priority ?? 1e9, pb = b.priority ?? 1e9;
+            if (pa !== pb)
+                return pa - pb;
+            const ca = a.created || "", cb = b.created || "";
+            if (ca !== cb)
+                return ca.localeCompare(cb);
+            return normTitle(a.title).localeCompare(normTitle(b.title));
         });
-        await upsertFile("roadmap/tasks.md", (old) => writeYamlBlock(old, tYaml), "bot: synthesize → tasks.md");
-        await upsertFile("roadmap/new.md", (old) => writeYamlBlock("", { queue: [] }), "bot: clear → new.md");
-        await upsertFile("roadmap/bugs.md", (old) => writeYamlBlock("", { queue: [] }), "bot: clear → bugs.md");
-        console.log("Synthesis complete.");
+        const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
+        const header = "# Tasks (single source of truth)\n\n";
+        const next = header + yamlBlock({ items: limited }) + "\n";
+        await upsertFile("roadmap/tasks.md", () => next, "bot: synthesize tasks (merge + dedupe + single block)");
+        console.log(`Synthesis complete. Tasks: ${limited.length}`);
     }
     finally {
         await releaseLock();

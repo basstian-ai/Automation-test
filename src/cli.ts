@@ -2,6 +2,7 @@ import { ingestLogs } from "./cmds/ingest-logs.js";
 import { reviewRepo } from "./cmds/review-repo.js";
 import { synthesizeTasks } from "./cmds/synthesize-tasks.js";
 import { implementTopTask } from "./cmds/implement.js";
+import { normalizeRoadmap } from "./cmds/normalize-roadmap.js";
 
 const cmd = process.argv[2];
 
@@ -11,8 +12,9 @@ const cmd = process.argv[2];
     else if (cmd === "review-repo") await reviewRepo();
     else if (cmd === "synthesize-tasks") await synthesizeTasks();
     else if (cmd === "implement") await implementTopTask();
+    else if (cmd === "normalize-roadmap") await normalizeRoadmap();
     else {
-      console.error("Usage: cli <ingest-logs|review-repo|synthesize-tasks|implement>");
+      console.error("Usage: cli <ingest-logs|review-repo|synthesize-tasks|implement|normalize-roadmap>");
       process.exit(2);
     }
   } catch (err: any) {

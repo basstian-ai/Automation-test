@@ -1,8 +1,27 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath } from "../lib/github.js";
+import yaml from "js-yaml";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
 import { implementPlan } from "../lib/prompts.js";
 import { ENV } from "../lib/env.js";
+function extractTasks(md) {
+    const a = readYamlBlock(md, { items: [] });
+    if (a.items?.length)
+        return a.items;
+    const m = md.match(/```yaml\s*?\n([\s\S]*?)\n```/);
+    if (m) {
+        try {
+            const parsed = yaml.load(m[1]);
+            if (parsed?.items?.length)
+                return parsed.items;
+        }
+        catch { }
+    }
+    return [];
+}
+function isMeta(t) {
+    return /batch task synthesis/i.test(t?.title || "") || /```/.test(t?.desc || "");
+}
 export async function implementTopTask() {
     if (!(await acquireLock())) {
         console.log("Lock taken; exiting.");
@@ -13,14 +32,14 @@ export async function implementTopTask() {
         const vision = (await readFile("roadmap/vision.md")) || "";
         const done = (await readFile("roadmap/done.md")) || "";
         const tRaw = (await readFile("roadmap/tasks.md")) || "";
-        const tYaml = readYamlBlock(tRaw, { items: [] });
-        if (!tYaml.items.length) {
-            console.log("No tasks.");
+        const tasks = extractTasks(tRaw).filter(t => !isMeta(t));
+        if (!tasks.length) {
+            console.log("No tasks (none after filtering). Ensure tasks.md has one fenced yaml block with `items:`.");
             return;
         }
         // Pick highest priority
-        const tasks = [...tYaml.items].sort((a, b) => (a.priority || 999) - (b.priority || 999));
-        const top = tasks[0];
+        const sorted = [...tasks].sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+        const top = sorted[0];
         // Optional path guard
         const repoTree = []; // (keep empty for now, or list via GH if you want)
         const planJson = await implementPlan({ vision, done, topTask: top, repoTree });
@@ -65,7 +84,7 @@ export async function implementTopTask() {
             files.push({ path: op.path, content: op.content ?? "" });
         }
         // Prepare roadmap changes
-        const remaining = tYaml.items.filter(i => i !== top);
+        const remaining = tasks.filter(i => i !== top);
         const nextTasks = writeYamlBlock(tRaw, { items: remaining });
         const doneLine = `- ${new Date().toISOString()}: ✅ ${top.id || ""} — ${plan.commitTitle || top.title}\n`;
         const nextDone = done + doneLine;
