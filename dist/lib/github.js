@@ -13,22 +13,43 @@ export function gh() {
 function b64(s) {
     return Buffer.from(s, "utf8").toString("base64");
 }
-async function getFile(owner, repo, path) {
+async function getFile(owner, repo, path, ref) {
     const client = gh();
     try {
-        const res = await client.rest.repos.getContent({ owner, repo, path });
+        const res = await client.rest.repos.getContent({ owner, repo, path, ref });
         const data = res.data;
-        if (!Array.isArray(data) && data.type === "file" && typeof data.content === "string") {
-            const content = Buffer.from(data.content, "base64").toString("utf8");
-            return { sha: data.sha, content };
-        }
-        return { sha: undefined, content: undefined };
+        if (Array.isArray(data))
+            throw new Error(`Expected file at ${path}, got directory`);
+        const sha = data.sha;
+        const content = data.content ? Buffer.from(data.content, "base64").toString("utf8") : undefined;
+        return { sha, content };
     }
     catch (e) {
-        if (e.status === 404)
+        if (e?.status === 404)
             return { sha: undefined, content: undefined };
         throw e;
     }
+}
+export async function getDefaultBranch() {
+    const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const { data } = await gh().rest.repos.get({ owner, repo });
+    return data.default_branch;
+}
+export async function ensureBranch(branch, baseBranch) {
+    const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const ref = `heads/${branch}`;
+    try {
+        await gh().rest.git.getRef({ owner, repo, ref });
+        return;
+    }
+    catch (e) {
+        if (e?.status !== 404)
+            throw e;
+    }
+    const base = baseBranch || await getDefaultBranch();
+    const baseRef = await gh().rest.git.getRef({ owner, repo, ref: `heads/${base}` });
+    const baseSha = baseRef.data.object.sha;
+    await gh().rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: baseSha });
 }
 export function resolveRepoPath(p) {
     if (!p)
@@ -51,16 +72,16 @@ export async function readFile(path) {
     const got = await getFile(owner, repo, path);
     return got.content;
 }
-export async function upsertFile(path, updater, message) {
+export async function upsertFile(path, updater, message, opts) {
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
     const safePath = resolveRepoPath(path);
+    const ref = opts?.branch;
     if (ENV.DRY_RUN) {
-        const old = await readFile(safePath);
-        const next = updater(old);
-        console.log(`[DRY_RUN] Would write ${safePath} with message: ${message}\n---\n${next}`);
+        const next = updater(undefined);
+        console.log(`[DRY_RUN] upsert ${safePath} on ${ref || "(default branch)"}: ${message}\n---\n${next}\n---`);
         return;
     }
-    const { sha, content: old } = await getFile(owner, repo, safePath);
+    const { sha, content: old } = await getFile(owner, repo, safePath, ref);
     const next = updater(old);
     await gh().rest.repos.createOrUpdateFileContents({
         owner,
@@ -68,52 +89,32 @@ export async function upsertFile(path, updater, message) {
         path: safePath,
         message,
         content: b64(next),
-        sha, // include if file existed
+        sha,
+        ...(ref ? { branch: ref } : {}),
         committer: { name: "ai-dev-agent", email: "bot@local" },
         author: { name: "ai-dev-agent", email: "bot@local" }
     });
 }
-export async function commitMany(files, message, branch = ENV.BRANCH) {
+export async function commitMany(files, message, opts) {
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const ref = opts?.branch;
     if (ENV.DRY_RUN) {
-        console.log(`[DRY_RUN] Would commit ${files.length} files:`, files.map(f => resolveRepoPath(f.path)));
+        console.log(`[DRY_RUN] commitMany ${files.length} files on ${ref || "(default branch)"}: ${message}`);
         return;
     }
-    const client = gh();
-    // Normalize and ensure paths are within repo scope
-    const safe = files.map(f => ({ path: resolveRepoPath(f.path), content: f.content }));
-    // Determine the current branch and commit
-    const { data: repoData } = await client.rest.repos.get({ owner, repo });
-    const targetBranch = branch || repoData.default_branch;
-    const { data: refData } = await client.rest.git.getRef({ owner, repo, ref: `heads/${targetBranch}` });
-    const baseSha = refData.object.sha;
-    const { data: commitData } = await client.rest.git.getCommit({ owner, repo, commit_sha: baseSha });
-    // Create blobs and collect tree entries
-    const tree = [];
-    for (const f of safe) {
-        const blob = await client.rest.git.createBlob({ owner, repo, content: f.content, encoding: "utf-8" });
-        tree.push({ path: f.path, mode: "100644", type: "blob", sha: blob.data.sha });
-    }
-    // Create new tree and commit
-    const { data: newTree } = await client.rest.git.createTree({ owner, repo, base_tree: commitData.tree.sha, tree });
-    const { data: newCommit } = await client.rest.git.createCommit({
-        owner,
-        repo,
-        message,
-        tree: newTree.sha,
-        parents: [baseSha],
-        committer: { name: "ai-dev-agent", email: "bot@local" },
-        author: { name: "ai-dev-agent", email: "bot@local" }
-    });
-    // Update branch reference; rollback if it fails
-    try {
-        await client.rest.git.updateRef({ owner, repo, ref: `heads/${targetBranch}`, sha: newCommit.sha });
-    }
-    catch (err) {
-        try {
-            await client.rest.git.updateRef({ owner, repo, ref: `heads/${targetBranch}`, sha: baseSha, force: true });
-        }
-        catch { }
-        throw err;
+    for (const f of files) {
+        const safePath = resolveRepoPath(f.path);
+        const { sha } = await getFile(owner, repo, safePath, ref);
+        await gh().rest.repos.createOrUpdateFileContents({
+            owner,
+            repo,
+            path: safePath,
+            message,
+            content: b64(f.content),
+            sha,
+            ...(ref ? { branch: ref } : {}),
+            committer: { name: "ai-dev-agent", email: "bot@local" },
+            author: { name: "ai-dev-agent", email: "bot@local" }
+        });
     }
 }
