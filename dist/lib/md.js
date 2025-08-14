@@ -1,5 +1,5 @@
 import yaml from "js-yaml";
-const YAML_BLOCK = /```yaml\n([\s\S]*?)\n```/m;
+const YAML_BLOCK = /```yaml\r?\n([\s\S]*?)\r?\n```/m;
 export function readYamlBlock(md, fallback) {
     const m = md.match(YAML_BLOCK);
     if (!m)
