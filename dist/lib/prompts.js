@@ -43,7 +43,6 @@ export async function reviewToIdeas(input) {
     ];
     const r = await openai.chat.completions.create({
         model: ENV.OPENAI_MODEL,
-        temperature: 0.2,
         messages
     });
     return r.choices[0]?.message?.content ?? "";
