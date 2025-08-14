@@ -1,5 +1,5 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { readFile, commitMany, resolveRepoPath } from "../lib/github.js";
+import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch, upsertFile } from "../lib/github.js";
 import yaml from "js-yaml";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
 import { implementPlan } from "../lib/prompts.js";
@@ -40,6 +40,20 @@ export async function implementTopTask() {
     const sorted = [...tasks].sort((a,b) => (a.priority??999)-(b.priority??999));
     const top = sorted[0];
 
+    const writeMode = (ENV.WRITE_MODE || "commit").toLowerCase();
+    let targetBranch: string | undefined;
+
+    if (writeMode === "pr") {
+      const base = process.env.BASE_BRANCH || await getDefaultBranch();
+      const safeName = (title: string) =>
+        title.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+      const branchName = `codex/${safeName(top.title || "change")}`;
+      await ensureBranch(branchName, base);
+      targetBranch = branchName;
+    } else {
+      targetBranch = undefined;
+    }
+
     // Optional path guard
     const repoTree: string[] = []; // (keep empty for now, or list via GH if you want)
     const planJson = await implementPlan({ vision, done, topTask: top, repoTree });
@@ -76,7 +90,7 @@ export async function implementTopTask() {
       });
     }
 
-    // Apply operations and roadmap updates
+    // Build file list from normalized ops
     const files: Array<{ path: string; content: string }> = [];
     for (const op of filtered) {
       if (op.action !== "create" && op.action !== "update") continue;
@@ -88,14 +102,13 @@ export async function implementTopTask() {
     const nextTasks = writeYamlBlock(tRaw, { items: remaining });
     const doneLine = `- ${new Date().toISOString()}: ✅ ${top.id || ""} — ${plan.commitTitle || top.title}\n`;
     const nextDone = done + doneLine;
-    files.push({ path: "roadmap/tasks.md", content: nextTasks });
-    files.push({ path: "roadmap/done.md", content: nextDone });
 
     if (files.length) {
       const title = plan.commitTitle || ((top.type === "bug" ? "fix" : "feat") + `: ${top.title || top.id}`);
-      const body  = plan.commitBody || (top.desc || "");
       try {
-        await commitMany(files, `${title}\n\n${body}`, ENV.BRANCH);
+        await commitMany(files, title, { branch: targetBranch });
+        await upsertFile("roadmap/tasks.md", () => nextTasks, "bot: remove completed task", { branch: targetBranch });
+        await upsertFile("roadmap/done.md", () => nextDone, "bot: append done item", { branch: targetBranch });
         console.log("Implement complete.");
       } catch (err) {
         console.error("Bulk commit failed; no changes were applied.", err);
