@@ -1,7 +1,7 @@
 name: agent-review-repo
 on:
   schedule:
-    - cron: "7 4 * * *"      # 04:07 UTC (≈ 06:07 Oslo summer / 05:07 winter)
+    - cron: "3 * * *"      # 
   workflow_dispatch:
 
 permissions:
