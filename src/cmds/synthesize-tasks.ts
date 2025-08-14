@@ -55,7 +55,15 @@ export async function synthesizeTasks() {
 
     const header = "# Tasks (single source of truth)\n\n";
     const next = header + yamlBlock({ items: limited }) + "\n";
-    await upsertFile("roadmap/tasks.md", () => next, "bot: synthesize tasks (merge + dedupe + single block)");
+    await upsertFile(
+      "roadmap/tasks.md",
+      () => next,
+      "bot: synthesize tasks (merge + dedupe + single block)"
+    );
+
+    // Clear the ideas queue after merging so items aren't reprocessed
+    await upsertFile("roadmap/new.md", () => "", "bot: clear new.md after task synthesis");
+
     console.log(`Synthesis complete. Tasks: ${limited.length}`);
   } finally {
     await releaseLock();
