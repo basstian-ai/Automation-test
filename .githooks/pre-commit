@@ -1,0 +1,6 @@
+#!/bin/sh
+# Prevent commits that modify roadmap/vision.md
+if git diff --cached --name-only | grep -q '^roadmap/vision.md$'; then
+  echo 'Error: roadmap/vision.md is protected and cannot be modified.'
+  exit 1
+fi
