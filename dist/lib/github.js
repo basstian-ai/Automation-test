@@ -1,4 +1,5 @@
 import { Octokit } from "octokit";
+import { posix as pathPosix } from "node:path";
 import { ENV } from "./env.js";
 export function parseRepo(s) {
     const [owner, repo] = s.split("/");
@@ -29,6 +30,18 @@ async function getFile(owner, repo, path) {
         throw e;
     }
 }
+export function resolveRepoPath(p) {
+    if (!p)
+        throw new Error("Empty path");
+    let norm = p.replace(/\\/g, "/").replace(/^\/+/, "").replace(/^\.\//, "");
+    norm = pathPosix.normalize(norm);
+    if (norm === "" || norm === "." || norm.startsWith("..")) {
+        throw new Error(`Refusing path outside repo: ${p}`);
+    }
+    const base = (ENV.TARGET_DIR || "").replace(/^\/+|\/+$/g, "");
+    const joined = base ? pathPosix.join(base, norm) : norm;
+    return joined.replace(/^\/+/, "");
+}
 export async function readFile(path) {
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
     const got = await getFile(owner, repo, path);
@@ -36,18 +49,19 @@ export async function readFile(path) {
 }
 export async function upsertFile(path, updater, message) {
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const safePath = resolveRepoPath(path);
     if (ENV.DRY_RUN) {
-        const old = await readFile(path);
+        const old = await readFile(safePath);
         const next = updater(old);
-        console.log(`[DRY_RUN] Would write ${path} with message: ${message}\n---\n${next}`);
+        console.log(`[DRY_RUN] Would write ${safePath} with message: ${message}\n---\n${next}`);
         return;
     }
-    const { sha, content: old } = await getFile(owner, repo, path);
+    const { sha, content: old } = await getFile(owner, repo, safePath);
     const next = updater(old);
     await gh().rest.repos.createOrUpdateFileContents({
         owner,
         repo,
-        path,
+        path: safePath,
         message,
         content: b64(next),
         sha, // include if file existed
@@ -58,15 +72,16 @@ export async function upsertFile(path, updater, message) {
 export async function commitMany(files, message) {
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
     if (ENV.DRY_RUN) {
-        console.log(`[DRY_RUN] Would commit ${files.length} files:`, files.map(f => f.path));
+        console.log(`[DRY_RUN] Would commit ${files.length} files:`, files.map(f => resolveRepoPath(f.path)));
         return;
     }
     for (const f of files) {
-        const existing = await getFile(owner, repo, f.path);
+        const safePath = resolveRepoPath(f.path);
+        const existing = await getFile(owner, repo, safePath);
         await gh().rest.repos.createOrUpdateFileContents({
             owner,
             repo,
-            path: f.path,
+            path: safePath,
             message,
             content: b64(f.content),
             sha: existing.sha,

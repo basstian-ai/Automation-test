@@ -1,5 +1,5 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { readFile, upsertFile, commitMany } from "../lib/github.js";
+import { readFile, upsertFile, commitMany, resolveRepoPath } from "../lib/github.js";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
 import { implementPlan } from "../lib/prompts.js";
 import { ENV } from "../lib/env.js";
@@ -26,10 +26,26 @@ export async function implementTopTask() {
     let plan: any = {};
     try { plan = JSON.parse(planJson); } catch { plan = {}; }
 
-    const ops: Array<{ path: string; action: string; content?: string }> = Array.isArray(plan.operations) ? plan.operations : [];
-    const filtered = ENV.ALLOW_PATHS.length
-      ? ops.filter(o => ENV.ALLOW_PATHS.some(allow => o.path.startsWith(allow)))
-      : ops;
+    const ops: Array<{ path: string; action: string; content?: string }> =
+      Array.isArray(plan.operations) ? plan.operations : [];
+
+    // Normalize to safe, repo-relative paths (and apply TARGET_DIR)
+    const normalized: Array<{ path: string; action: string; content?: string }> = [];
+    for (const o of ops) {
+      try {
+        normalized.push({ ...o, path: resolveRepoPath(o.path || "") });
+      } catch (err) {
+        console.warn(`Skipping operation with invalid path ${o.path}:`, err);
+      }
+    }
+
+    // Enforce ALLOW_PATHS after normalization (if configured)
+    let filtered = ENV.ALLOW_PATHS.length
+      ? normalized.filter(o => {
+          const allows = ENV.ALLOW_PATHS.map(a => a.replace(/^\/+/, "").replace(/^\.\//, ""));
+          return allows.some(allow => o.path.startsWith(allow));
+        })
+      : normalized;
 
     if (!filtered.length) {
       // Fallback: create a minimal test placeholder if none proposed
