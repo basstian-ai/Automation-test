@@ -52,7 +52,8 @@ export function resolveRepoPath(p: string): string {
 
 export async function readFile(path: string): Promise<string | undefined> {
   const { owner, repo } = parseRepo(ENV.TARGET_REPO);
-  const got = await getFile(owner, repo, path);
+  const safePath = resolveRepoPath(path);
+  const got = await getFile(owner, repo, safePath);
   return got.content;
 }
 
@@ -64,7 +65,7 @@ export async function upsertFile(
   const { owner, repo } = parseRepo(ENV.TARGET_REPO);
   const safePath = resolveRepoPath(path);
   if (ENV.DRY_RUN) {
-    const old = await readFile(safePath);
+    const old = await readFile(path);
     const next = updater(old);
     console.log(`[DRY_RUN] Would write ${safePath} with message: ${message}\n---\n${next}`);
     return;
