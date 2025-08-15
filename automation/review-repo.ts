@@ -119,10 +119,16 @@ async function main() {
   const roadmapDir = path.join(TARGET_PATH, "roadmap");
   const roadmapFresh = await readOr(path.join(roadmapDir, "new.md"));
   const roadmapTasks = await readOr(path.join(roadmapDir, "tasks.md"));
+  const visionLocal = await readOr(path.join(TARGET_PATH, "vision.md"));
+  const visionRoadmap = await readOr(path.join(roadmapDir, "vision.md"));
+  const vision = visionLocal || visionRoadmap;
+  if (visionLocal) console.log("found vision.md");
+  else if (visionRoadmap) console.log("found roadmap/vision.md");
+  else console.log("no vision file");
 
   const plan = await planRepo({
     manifest,
-    roadmap: { tasks: roadmapTasks, fresh: roadmapFresh },
+    roadmap: { tasks: roadmapTasks, fresh: roadmapFresh, vision },
     maxTasks: MAX_TASKS,
     protected: PROTECTED_PATHS,
   });

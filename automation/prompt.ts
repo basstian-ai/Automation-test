@@ -10,7 +10,7 @@ function requireEnv(names: string[]): void {
 
 export async function planRepo(input: {
   manifest: any;
-  roadmap: { tasks: string; fresh: string };
+  roadmap: { tasks: string; fresh: string; vision: string };
   maxTasks: number;
   protected: string[];
 }): Promise<string> {

@@ -31,7 +31,9 @@ jobs:
             npm install --package-lock-only --no-audit --no-fund
           fi
       - run: npm ci --no-audit --no-fund
-      - run: npx ts-node automation/review-repo.ts
+      - run: >-
+          npx tsc automation/prompt.ts automation/review-repo.ts --outDir dist/automation --rootDir automation --module NodeNext --moduleResolution NodeNext --target ES2022 --esModuleInterop --skipLibCheck
+      - run: node dist/automation/review-repo.js
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-5
