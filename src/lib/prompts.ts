@@ -54,7 +54,7 @@ export async function reviewToIdeas(input: {
     {
       role: "system" as const,
       content:
-        "You are an experienced software architect. Propose small, actionable items (≤1 day) based on the context. " +
+        "You are an experienced software architect. Propose, actionable items for code bot based on the context. Include tasks that make visible progress for the end user." +
         "Return ONLY YAML in a code block with the shape:\n```yaml\nqueue:\n  - id: <leave blank or omit>\n    title: <short>\n    details: <1-3 lines>\n    created: <ISO>\n```" +
         "\nAvoid duplicates vs the provided lists."
     },
@@ -62,7 +62,7 @@ export async function reviewToIdeas(input: {
   ];
   const r = await openai.chat.completions.create({
     model: ENV.OPENAI_MODEL,
-    temperature: 0.2,
+    temperature: 0.3,
     messages
   });
   return r.choices[0]?.message?.content ?? "";
@@ -120,9 +120,9 @@ export async function implementPlan(input: {
     {
       role: "system" as const,
       content:
-        "You are a senior developer. Plan minimal changes to implement the task in a small, safe diff. " +
+        "You are a senior developer. Develope task and deliver in a safe diff. " +
         "Output ONLY JSON with keys: operations (array of {path, action:create|update, content?}), testHint, commitTitle, commitBody. " +
-        "Keep diffs small; only files relevant to the task; include at least one test file if a test harness exists; avoid broad refactors."
+        "Keep diffs tangible; only files relevant to the task; include at least one test file if a test harness exists; avoid broad refactors."
     },
     { role: "user" as const, content: JSON.stringify(input, null, 2) }
   ];
