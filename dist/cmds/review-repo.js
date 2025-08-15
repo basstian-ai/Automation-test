@@ -32,10 +32,19 @@ export async function reviewRepo() {
         const recent = commitsData.map((c) => `${c.sha.slice(0, 7)} ${c.commit.message.split("\n")[0]}`);
         const input = { commits: recent, vision, tasks, bugs, done, fresh };
         const ideas = await reviewToIdeas(input);
+        const generated = readYamlBlock(ideas, { queue: [] });
         const newPath = "roadmap/new.md";
         const current = (await readFile(newPath)) || "";
         const yaml = readYamlBlock(current, { queue: [] });
-        yaml.queue.push({ id: `IDEA-${Date.now()}`, title: "Architect review batch", details: ideas, created: new Date().toISOString() });
+        const base = Date.now();
+        for (const [i, item] of (generated.queue || []).entries()) {
+            yaml.queue.push({
+                id: item.id || `IDEA-${base + i}`,
+                title: item.title,
+                details: item.details,
+                created: item.created || new Date().toISOString()
+            });
+        }
         const next = writeYamlBlock(current, yaml);
         await upsertFile(newPath, () => next, "bot: review repo → new.md");
         const headSha = commitsData[0]?.sha;
