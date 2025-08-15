@@ -7,8 +7,10 @@ function requireEnv(names) {
     }
 }
 export async function planRepo(input) {
-    requireEnv(["OPENAI_API_KEY", "OPENAI_MODEL"]);
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    requireEnv(["OPENAI_API_KEY"]);
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const model = process.env.PLANNER_MODEL || "gpt-5";
+    const maxOutput = Number(process.env.MAX_OUTPUT_TOKENS || 1200);
     const system = [
         "You are an agnostic, milestone-driven project planner.",
         "Use only neutral terms (entities, records, admin area, REST endpoints).",
@@ -25,9 +27,11 @@ export async function planRepo(input) {
         `TASKS: cap at ${input.maxTasks}. Each task must have Title, Rationale, Acceptance, Files, Tests.`,
         "Reject micro-tasks unless they unblock the milestone."
     ].join("\n");
-    const user = JSON.stringify({ manifest: input.manifest, roadmap: input.roadmap });
-    const r = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL,
+    const user = JSON.stringify({ manifest: input.manifest, roadmap: input.roadmap, vision: input.vision });
+    const r = await client.chat.completions.create({
+        model,
+        temperature: 0.2,
+        max_output_tokens: maxOutput,
         messages: [
             { role: "system", content: system },
             { role: "user", content: user }
