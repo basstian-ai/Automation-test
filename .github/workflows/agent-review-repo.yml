@@ -37,12 +37,15 @@ jobs:
       - run: node dist/automation/review-repo.js
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: gpt-5
           TARGET_PATH: target
-          MAX_FILES: 800
-          MAX_BYTES_PER_FILE: 50000
+          MAX_FILES: "180"
+          MAX_SAMPLED_FILES: "80"
+          MAX_BYTES_PER_FILE: "1500"
+          MAX_INPUT_CHARS: "80000"
+          MAX_OUTPUT_TOKENS: "1200"
           MAX_TASKS_PER_RUN: 5
-          PROTECTED_PATHS: '["roadmap/vision.md","vision.md"]'
+          PROTECTED_PATHS: '["vision.md","roadmap/vision.md"]'
+          PLANNER_MODEL: "gpt-4.1-mini"
       - name: Commit roadmap & audits to target
         working-directory: target
         run: |
