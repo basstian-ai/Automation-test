@@ -33,6 +33,7 @@ jobs:
           fi
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      # Run the compiled review script as the single entry point
       - run: node dist/automation/review-repo.js
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

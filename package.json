@@ -10,7 +10,6 @@
     "build": "tsc -p tsconfig.json && tsc automation/prompt.ts automation/review-repo.ts --outDir dist/automation --rootDir automation --module ES2022 --moduleResolution bundler --target ES2022 --esModuleInterop --skipLibCheck && node -e \"const fs=require('fs');const p='dist/automation/review-repo.js';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace('./prompt','./prompt.js'));\"",
     "start": "node dist/cli.js",
     "cmd:ingest-logs": "node dist/cli.js ingest-logs",
-    "cmd:review-repo": "node dist/cli.js review-repo",
     "cmd:synthesize-tasks": "node dist/cli.js synthesize-tasks",
     "cmd:implement": "node dist/cli.js implement",
     "check": "node -e \"console.log('ok')\""
