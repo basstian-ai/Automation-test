@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { planRepo } from "./prompt.js";
+import { planRepo } from "./prompt";
 
 const TARGET_PATH = process.env.TARGET_PATH || "target";
 const MAX_FILES = parseInt(process.env.MAX_FILES || "800", 10);
@@ -93,6 +93,15 @@ async function writeFileSafe(p: string, content: string) {
   console.log(`Wrote ${p}`);
 }
 
+async function readFirstExisting(base: string, rels: string[]) {
+  for (const r of rels) {
+    try {
+      return { path: r, content: await fs.readFile(path.join(base, r), "utf8") };
+    } catch {}
+  }
+  return null;
+}
+
 async function main() {
   const manifest = await scanRepo(TARGET_PATH);
   console.log(`Scanned ${manifest.fileCount} files in ${manifest.dirCount} dirs`);
@@ -119,16 +128,12 @@ async function main() {
   const roadmapDir = path.join(TARGET_PATH, "roadmap");
   const roadmapFresh = await readOr(path.join(roadmapDir, "new.md"));
   const roadmapTasks = await readOr(path.join(roadmapDir, "tasks.md"));
-  const visionLocal = await readOr(path.join(TARGET_PATH, "vision.md"));
-  const visionRoadmap = await readOr(path.join(roadmapDir, "vision.md"));
-  const vision = visionLocal || visionRoadmap;
-  if (visionLocal) console.log("found vision.md");
-  else if (visionRoadmap) console.log("found roadmap/vision.md");
-  else console.log("no vision file");
+  const visionFile = await readFirstExisting(TARGET_PATH, ["vision.md", "roadmap/vision.md"]);
+  console.log(`[review] vision doc: ${visionFile ? visionFile.path : "none"}`);
 
   const plan = await planRepo({
     manifest,
-    roadmap: { tasks: roadmapTasks, fresh: roadmapFresh, vision },
+    roadmap: { tasks: roadmapTasks, fresh: roadmapFresh, vision: visionFile?.content || "" },
     maxTasks: MAX_TASKS,
     protected: PROTECTED_PATHS,
   });

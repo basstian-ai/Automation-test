@@ -7,7 +7,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc automation/prompt.ts automation/review-repo.ts --outDir dist/automation --rootDir automation --module NodeNext --moduleResolution NodeNext --target ES2022 --esModuleInterop --skipLibCheck",
+    "build": "tsc -p tsconfig.json && tsc automation/prompt.ts automation/review-repo.ts --outDir dist/automation --rootDir automation --module ES2022 --moduleResolution bundler --target ES2022 --esModuleInterop --skipLibCheck && node -e \"const fs=require('fs');const p='dist/automation/review-repo.js';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace('./prompt','./prompt.js'));\"",
     "start": "node dist/cli.js",
     "cmd:ingest-logs": "node dist/cli.js ingest-logs",
     "cmd:review-repo": "node dist/cli.js review-repo",
