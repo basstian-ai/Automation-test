@@ -1,7 +1,7 @@
 name: agent-review-repo
 on:
   schedule:
-    - cron: "0 * * * *"      # 
+    - cron: "0 */4 * * *"      # 
   workflow_dispatch:
 
 permissions:
@@ -43,7 +43,7 @@ jobs:
           MAX_BYTES_PER_FILE: "1500"
           MAX_INPUT_CHARS: "80000"
           MAX_OUTPUT_TOKENS: "1200"
-          MAX_TASKS_PER_RUN: 5
+          MAX_TASKS_PER_RUN: 20
           PROTECTED_PATHS: '["vision.md","roadmap/vision.md"]'
           PLANNER_MODEL: "gpt-4.1-mini"
       - name: Commit roadmap & audits to target
