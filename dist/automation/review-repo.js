@@ -185,12 +185,38 @@ async function main() {
         maxTasks: MAX_TASKS,
         protected: PROTECTED_PATHS,
     });
-    const required = ["REPO_SUMMARY", "STRUCTURE_FINDINGS", "TOP_MILESTONE", "TASKS"];
-    const ok = required.every(h => plan.includes(h));
-    if (!ok)
-        throw new Error("Planner output missing required sections");
-    await writeFileSafe(path.join(roadmapDir, "new.md"), plan);
-    const taskCount = (plan.match(/^\s*-/mg) || []).length;
+    function normalizeHeadings(s) {
+        const heads = [
+            "REPO_SUMMARY",
+            "STRUCTURE_FINDINGS",
+            "TOP_MILESTONE",
+            "TASKS",
+            "DONE_UPDATES"
+        ];
+        const rx = new RegExp(`^\\s*#{1,6}\\s*(${heads.join("|")})\\s*$`, "i");
+        return s
+            .split("\n")
+            .map(line => {
+            const m = line.match(rx);
+            return m ? m[1].toUpperCase() : line;
+        })
+            .join("\n");
+    }
+    let output = plan;
+    // ensure bare headings even if the model renders markdown
+    output = normalizeHeadings(output);
+    // (optional sanity check)
+    const required = [
+        "REPO_SUMMARY",
+        "STRUCTURE_FINDINGS",
+        "TOP_MILESTONE",
+        "TASKS"
+    ];
+    if (!required.every(h => new RegExp(`^${h}\\s*$`, "m").test(output))) {
+        throw new Error("Planner output missing bare section headings");
+    }
+    await writeFileSafe(path.join(roadmapDir, "new.md"), output);
+    const taskCount = (output.match(/^\s*-/gm) || []).length;
     console.log(`roadmap/new.md tasks: ${taskCount}`);
 }
 main().catch(err => { console.error(err); process.exit(1); });

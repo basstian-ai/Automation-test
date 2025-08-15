@@ -27,7 +27,7 @@ export async function planRepo(input: {
     "Use only neutral terms (entities, records, admin area, REST endpoints).",
     `Do not suggest changes in protected paths: ${input.protected.join(", ")}.`,
     "If no vision is provided, continue without inventing one.",
-    "Output sections in markdown with exact headings:",
+    "Output sections as PLAIN TEXT headings with NO leading '#', '##', or formatting. Each heading must be EXACTLY the section name on its own line:",
     "REPO_SUMMARY",
     "STRUCTURE_FINDINGS",
     "TOP_MILESTONE",
