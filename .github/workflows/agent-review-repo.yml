@@ -16,6 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}
+          path: target
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - name: Ensure lockfile (first run)
@@ -24,18 +29,13 @@ jobs:
             npm install --package-lock-only --no-audit --no-fund
           fi
       - run: npm ci --no-audit --no-fund
-      - run: npm run build
-      - run: node dist/cli.js review-repo
+      - run: npx ts-node automation/review-repo.ts
         env:
-          GH_USERNAME: ${{ secrets.GH_USERNAME }}
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          TARGET_REPO: ${{ secrets.TARGET_REPO }}
-          TARGET_DIR: ${{ secrets.TARGET_DIR }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-5
-          AI_BOT_WRITE_MODE: commit
-          DRY_RUN: "0"
-          ALLOW_PATHS: ""
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          TARGET_PATH: target
+          MAX_FILES: 800
+          MAX_BYTES_PER_FILE: 50000
+          MAX_TASKS_PER_RUN: 5
+          PROTECTED_PATHS: '["roadmap/vision.md","vision.md"]'
