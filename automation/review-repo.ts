@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { planRepo } from "./prompt.js";
+import { planRepo } from "./prompt";
 
 const TARGET_PATH = process.env.TARGET_PATH || "target";
 const MAX_FILES = parseInt(process.env.MAX_FILES || "800", 10);
@@ -127,7 +127,13 @@ async function main() {
     protected: PROTECTED_PATHS,
   });
 
+  const required = ["REPO_SUMMARY", "STRUCTURE_FINDINGS", "TOP_MILESTONE", "TASKS"];
+  const ok = required.every(h => plan.includes(h));
+  if (!ok) throw new Error("Planner output missing required sections");
+
   await writeFileSafe(path.join(roadmapDir, "new.md"), plan);
+  const taskCount = (plan.match(/^\s*-/mg) || []).length;
+  console.log(`roadmap/new.md tasks: ${taskCount}`);
 }
 
 async function readOr(p: string): Promise<string> {
