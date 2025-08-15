@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { planRepo } from "./prompt";
+import { planRepo } from "./prompt.js";
 
 const TARGET_PATH = process.env.TARGET_PATH || "target";
 const MAX_FILES = parseInt(process.env.MAX_FILES || "800", 10);

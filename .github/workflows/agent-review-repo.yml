@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
       - uses: actions/checkout@v4
         with:
           repository: ${{ secrets.TARGET_REPO }}
@@ -31,8 +32,7 @@ jobs:
             npm install --package-lock-only --no-audit --no-fund
           fi
       - run: npm ci --no-audit --no-fund
-      - run: >-
-          npx tsc automation/prompt.ts automation/review-repo.ts --outDir dist/automation --rootDir automation --module NodeNext --moduleResolution NodeNext --target ES2022 --esModuleInterop --skipLibCheck
+      - run: npm run build
       - run: node dist/automation/review-repo.js
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

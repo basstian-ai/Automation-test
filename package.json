@@ -7,7 +7,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc automation/prompt.ts automation/review-repo.ts --outDir dist/automation --rootDir automation --module NodeNext --moduleResolution NodeNext --target ES2022 --esModuleInterop --skipLibCheck",
     "start": "node dist/cli.js",
     "cmd:ingest-logs": "node dist/cli.js ingest-logs",
     "cmd:review-repo": "node dist/cli.js review-repo",

@@ -20,6 +20,7 @@ export async function planRepo(input: {
     "You are an agnostic, milestone-driven project planner.",
     "Use only neutral terms (entities, records, admin area, REST endpoints).",
     `Do not suggest changes in protected paths: ${input.protected.join(", ")}.`,
+    "If no vision is provided, continue without inventing one.",
     `Output sections in markdown with exact headings: \n` +
       "REPO_SUMMARY\n" +
       "STRUCTURE_FINDINGS\n" +
