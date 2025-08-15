@@ -16,6 +16,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}
+          path: target
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - name: Ensure lockfile (first run)
@@ -25,17 +33,21 @@ jobs:
           fi
       - run: npm ci --no-audit --no-fund
       - run: npm run build
-      - run: node dist/cli.js review-repo
+      # Run the compiled review script as the single entry point
+      - run: node dist/automation/review-repo.js
         env:
-          GH_USERNAME: ${{ secrets.GH_USERNAME }}
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          TARGET_REPO: ${{ secrets.TARGET_REPO }}
-          TARGET_DIR: ${{ secrets.TARGET_DIR }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-5
-          AI_BOT_WRITE_MODE: commit
-          DRY_RUN: "0"
-          ALLOW_PATHS: ""
+          TARGET_PATH: target
+          MAX_FILES: 800
+          MAX_BYTES_PER_FILE: 50000
+          MAX_TASKS_PER_RUN: 5
+          PROTECTED_PATHS: '["roadmap/vision.md","vision.md"]'
+      - name: Commit roadmap & audits to target
+        working-directory: target
+        run: |
+          git config user.name "ai-dev-agent"
+          git config user.email "ai@bot"
+          git add audits/*.md roadmap/*.md 2>/dev/null || true
+          git commit -m "chore(agent): repo review + tasks" || echo "nothing to commit"
+          git push
