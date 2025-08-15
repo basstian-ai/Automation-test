@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
-import path from "path";
-import { execSync } from "child_process";
+import path from "node:path";
+import crypto from "node:crypto";
 import { planRepo } from "./prompt.js";
 
 const TARGET_PATH = process.env.TARGET_PATH || "target";
@@ -9,15 +9,34 @@ const MAX_BYTES_PER_FILE = parseInt(process.env.MAX_BYTES_PER_FILE || "50000", 1
 const MAX_TASKS = parseInt(process.env.MAX_TASKS_PER_RUN || "5", 10);
 const PROTECTED_PATHS: string[] = JSON.parse(process.env.PROTECTED_PATHS || "[]");
 
-const IGNORE_DIRS = new Set(["node_modules", ".git", "dist", "build", "out"]);
-const TEXT_EXT = /\.(md|txt|js|ts|json|yaml|yml|html|css|py|java|go|rb|sh|c|cpp|cs)$/i;
+const IGNORE_DIRS = new Set([
+  "node_modules",
+  ".git",
+  ".next",
+  ".vercel",
+  ".turbo",
+  ".cache",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  ".pnpm-store"
+]);
+
+const TEXT_EXT = /\.(md|txt|js|jsx|ts|tsx|json|yaml|yml|html|css|mjs|cjs|py|java|go|rb|sh|c|cpp|cs)$/i;
+
+function dirSignature(entries: string[]) {
+  const sig = entries.filter(Boolean).sort().join("|");
+  return crypto.createHash("md5").update(sig).digest("hex");
+}
 
 async function scanRepo(root: string) {
-  const topLevel = await fs.readdir(root);
+  const entriesTop = await fs.readdir(root, { withFileTypes: true });
+  const topLevel = entriesTop.filter(e => e.isDirectory()).map(e => e.name);
   const files: { path: string; sample: string }[] = [];
   let fileCount = 0;
   let dirCount = 0;
-  const dupMap = new Map<string, number>();
+  const byBasename = new Map<string, Array<{ path: string; sig: string }>>();
 
   async function walk(cur: string) {
     const entries = await fs.readdir(cur, { withFileTypes: true });
@@ -27,15 +46,21 @@ async function scanRepo(root: string) {
       if (IGNORE_DIRS.has(e.name)) continue;
       if (e.isDirectory()) {
         dirCount++;
-        dupMap.set(e.name, (dupMap.get(e.name) || 0) + 1);
+        let childNames: string[] = [];
+        try {
+          childNames = await fs.readdir(full);
+        } catch {}
+        const sig = dirSignature(childNames);
+        const arr = byBasename.get(e.name) || [];
+        arr.push({ path: rel, sig });
+        byBasename.set(e.name, arr);
         await walk(full);
       } else if (e.isFile()) {
         fileCount++;
         if (files.length < Math.min(MAX_FILES, 600) && TEXT_EXT.test(e.name)) {
           try {
-            const buf = await fs.readFile(full);
-            const sample = buf.toString("utf8").slice(0, MAX_BYTES_PER_FILE);
-            files.push({ path: rel, sample });
+            const buf = await fs.readFile(full, "utf8");
+            files.push({ path: rel, sample: buf.slice(0, MAX_BYTES_PER_FILE) });
           } catch {}
         }
       }
@@ -43,7 +68,18 @@ async function scanRepo(root: string) {
   }
 
   await walk(root);
-  const duplicates = Array.from(dupMap.entries()).filter(([, c]) => c > 1).map(([n]) => n);
+
+  const duplicates = Array.from(byBasename.entries())
+    .flatMap(([base, arr]) => {
+      const bySig = new Map<string, string[]>();
+      for (const { path: p, sig } of arr) {
+        bySig.set(sig, [...(bySig.get(sig) || []), p]);
+      }
+      return Array.from(bySig.values())
+        .filter(v => v.length > 1)
+        .map(members => ({ base, members }));
+    });
+
   return { topLevel, fileCount, dirCount, duplicates, files };
 }
 
@@ -61,44 +97,40 @@ async function main() {
   const manifest = await scanRepo(TARGET_PATH);
   console.log(`Scanned ${manifest.fileCount} files in ${manifest.dirCount} dirs`);
   if (manifest.duplicates.length) {
-    console.log(`Duplicate dirs: ${manifest.duplicates.join(", ")}`);
+    console.log(`Duplicate dirs: ${manifest.duplicates.map(d => d.base).join(", ")}`);
   }
 
   const auditPath = path.join(TARGET_PATH, "audits", "repo-structure.md");
+  const dupLines = manifest.duplicates.length
+    ? manifest.duplicates.flatMap(d => [`- ${d.base}`, ...d.members.map(m => `  - ${m}`)])
+    : ["- none"];
   const auditContent = [
     `# Repo Structure`,
     `Scanned ${manifest.fileCount} files across ${manifest.dirCount} directories.`,
-    "", "## Top-level", ...manifest.topLevel.map(d => `- ${d}`),
-    "", "## Duplicate dir candidates", ...manifest.duplicates.map(d => `- ${d}`)
+    "",
+    "## Top-level",
+    ...manifest.topLevel.map(d => `- ${d}`),
+    "",
+    "## Duplicate dir candidates",
+    ...dupLines
   ].join("\n");
   await writeFileSafe(auditPath, auditContent);
 
-  const roadmapNew = await readOptional(path.join(TARGET_PATH, "roadmap", "new.md"));
-  const roadmapTasks = await readOptional(path.join(TARGET_PATH, "roadmap", "tasks.md"));
+  const roadmapDir = path.join(TARGET_PATH, "roadmap");
+  const roadmapFresh = await readOr(path.join(roadmapDir, "new.md"));
+  const roadmapTasks = await readOr(path.join(roadmapDir, "tasks.md"));
 
   const plan = await planRepo({
     manifest,
-    roadmap: { tasks: roadmapTasks, fresh: roadmapNew },
+    roadmap: { tasks: roadmapTasks, fresh: roadmapFresh },
     maxTasks: MAX_TASKS,
     protected: PROTECTED_PATHS,
   });
 
-  await writeFileSafe(path.join(TARGET_PATH, "roadmap", "new.md"), plan);
-  await writeFileSafe(path.join(TARGET_PATH, "roadmap", "tasks.md"), plan);
-
-  try {
-    execSync('git config user.name "ai-dev-agent"', { cwd: TARGET_PATH });
-    execSync('git config user.email "bot@local"', { cwd: TARGET_PATH });
-    execSync('git add audits/*.md roadmap/*.md', { cwd: TARGET_PATH });
-    execSync('git commit -m "chore(agent): review + tasks"', { cwd: TARGET_PATH });
-    execSync('git push', { cwd: TARGET_PATH });
-    console.log("Committed roadmap and audits.");
-  } catch (err) {
-    console.log("No changes to commit");
-  }
+  await writeFileSafe(path.join(roadmapDir, "new.md"), plan);
 }
 
-async function readOptional(p: string): Promise<string> {
+async function readOr(p: string): Promise<string> {
   try { return await fs.readFile(p, "utf8"); } catch { return ""; }
 }
 

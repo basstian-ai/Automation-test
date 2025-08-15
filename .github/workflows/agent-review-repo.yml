@@ -33,9 +33,16 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-5
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
           TARGET_PATH: target
           MAX_FILES: 800
           MAX_BYTES_PER_FILE: 50000
           MAX_TASKS_PER_RUN: 5
           PROTECTED_PATHS: '["roadmap/vision.md","vision.md"]'
+      - name: Commit roadmap & audits to target
+        working-directory: target
+        run: |
+          git config user.name "ai-dev-agent"
+          git config user.email "ai@bot"
+          git add audits/*.md roadmap/*.md 2>/dev/null || true
+          git commit -m "chore(agent): repo review + tasks" || echo "nothing to commit"
+          git push
