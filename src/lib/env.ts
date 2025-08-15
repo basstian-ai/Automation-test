@@ -8,7 +8,7 @@ export const ENV = {
   VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID || "",
   VERCEL_TOKEN: process.env.VERCEL_TOKEN || "",
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
-  OPENAI_MODEL: process.env.OPENAI_MODEL || "gpt-4o-mini",
+  OPENAI_MODEL: process.env.OPENAI_MODEL || "",
   WRITE_MODE: process.env.AI_BOT_WRITE_MODE || "commit",
   DRY_RUN: process.env.DRY_RUN === "1",
   BRANCH: process.env.GITHUB_REF_NAME || process.env.GITHUB_HEAD_REF || "",
