@@ -106,7 +106,7 @@ export async function ingestLogs(): Promise<void> {
 
     const grouped = new Map<string, LogEntryForBug[]>();
     for (const entry of appEntries) {
-      const signature = getLogSignature(entry.message);
+      const signature = getLogSignature(entry.message || "");
       if (!grouped.has(signature)) {
         grouped.set(signature, []);
       }
