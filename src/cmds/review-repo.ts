@@ -1,9 +1,10 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, parseRepo, gh, upsertFile } from "../lib/github.js";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
-import { reviewToIdeas } from "../lib/prompts.js";
+import { reviewToIdeas, reviewToSummary } from "../lib/prompts.js";
 import { loadState, saveState } from "../lib/state.js";
 import { requireEnv, ENV } from "../lib/env.js";
+import yaml from "js-yaml";
 
 export async function reviewRepo() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
@@ -28,16 +29,33 @@ export async function reviewRepo() {
       (c: { sha: string; commit: { message: string } }) =>
         `${c.sha.slice(0,7)} ${c.commit.message.split("\n")[0]}`
     );
-    const input = { commits: recent, vision, tasks, bugs, done, fresh };
 
-    const ideas = await reviewToIdeas(input);
+    // 1. Generate high-level summary
+    const summaryInput = { commits: recent, vision, tasks, bugs, done, fresh };
+    const summary = await reviewToSummary(summaryInput);
+    await upsertFile("reports/repo_summary.md", () => summary, "bot: update repo summary");
+
+    // 2. Generate actionable ideas from summary
+    const ideasInput = { summary, vision, tasks, bugs, done, fresh };
+    const ideasYaml = await reviewToIdeas(ideasInput);
+
+    // 3. Append new ideas to roadmap/new.md
     const newPath = "roadmap/new.md";
-    const current = (await readFile(newPath)) || "";
-    const yaml = readYamlBlock<{ queue: any[] }>(current, { queue: [] });
-    yaml.queue.push({ id: `IDEA-${Date.now()}`, title: "Architect review batch", details: ideas, created: new Date().toISOString() });
-    const next = writeYamlBlock(current, yaml);
+    const currentNewMd = (await readFile(newPath)) || "";
+    const currentIdeas = readYamlBlock<{ queue: any[] }>(currentNewMd, { queue: [] });
 
-    await upsertFile(newPath, () => next, "bot: review repo → new.md");
+    const newIdeas = (yaml.load(ideasYaml) as { queue: any[] })?.queue || [];
+
+    for (const idea of newIdeas) {
+      currentIdeas.queue.push({
+        ...idea,
+        id: idea.id || `IDEA-${Date.now()}`,
+        created: idea.created || new Date().toISOString()
+      });
+    }
+
+    const nextNewMd = writeYamlBlock(currentNewMd, currentIdeas);
+    await upsertFile(newPath, () => nextNewMd, "bot: review repo → new.md");
 
     const headSha = commitsData[0]?.sha;
     await saveState({ ...state, lastReviewedSha: headSha });

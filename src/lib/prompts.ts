@@ -38,10 +38,9 @@ export async function summarizeLogToBug(entries: LogEntryForBug[]): Promise<stri
 }
 
 /**
- * Quick repo review → ideas/improvements in YAML (under queue:).
- * Caller will parse/merge the YAML; duplicates should be minimized.
+ * Quick repo review → high-level summary in markdown.
  */
-export async function reviewToIdeas(input: {
+export async function reviewToSummary(input: {
   commits: string[];
   vision: string;
   tasks: string;
@@ -54,9 +53,37 @@ export async function reviewToIdeas(input: {
     {
       role: "system" as const,
       content:
-        "You are an experienced software architect. Propose, actionable items for code bot based on the context. Include tasks that make visible progress for the end user." +
+        "You are an experienced software architect. Review the provided repository context and write a high-level summary of the current status, recent activity, and potential areas for improvement. Output should be human-readable markdown, suitable for a technical project manager."
+    },
+    { role: "user" as const, content: JSON.stringify(input, null, 2) }
+  ];
+  const r = await openai.chat.completions.create({
+    model: ENV.OPENAI_MODEL,
+    messages
+  });
+  return r.choices[0]?.message?.content ?? "";
+}
+
+/**
+ * Repo review summary → ideas/improvements in YAML (under queue:).
+ * Caller will parse/merge the YAML; duplicates should be minimized.
+ */
+export async function reviewToIdeas(input: {
+  summary: string;
+  vision: string;
+  tasks: string;
+  bugs: string;
+  done: string;
+  fresh: string; // current new.md content
+}): Promise<string> {
+  const openai = getOpenAI();
+  const messages = [
+    {
+      role: "system" as const,
+      content:
+        "You are an experienced software architect. Based on the provided summary and other context, propose concise, actionable items for a code bot. Include tasks that make visible progress for the end user." +
         "Return ONLY YAML in a code block with the shape:\n```yaml\nqueue:\n  - id: <leave blank or omit>\n    title: <short>\n    details: <1-3 lines>\n    created: <ISO>\n```" +
-        "\nAvoid duplicates vs the provided lists."
+        "\nAvoid duplicates vs the provided lists. Focus on the opportunities identified in the summary."
     },
     { role: "user" as const, content: JSON.stringify(input, null, 2) }
   ];
