@@ -2,7 +2,7 @@ import { readFile, upsertFile } from "./github.js";
 const STATE_PATH = "roadmap/.state/agent-state.json";
 
 export type AgentState = {
-  ingest?: { lastDeploymentTimestamp?: number; lastRowIds?: string[] };
+  ingest?: { lastDeploymentId?: string; lastRowIds?: string[] };
   lastReviewedSha?: string;
 };
 

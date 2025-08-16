@@ -10,12 +10,12 @@ async function vfetch(path: string, params: Record<string, string | undefined> =
   return res.json();
 }
 
-export async function getLatestDeployment() {
+export async function getLatestProdDeployment() {
   if (!ENV.VERCEL_PROJECT_ID) return undefined;
   const data = await vfetch("/v6/deployments", {
     projectId: ENV.VERCEL_PROJECT_ID,
+    target: "production",
     limit: "1",
-    state: "READY,ERROR,CANCELED",
     teamId: ENV.VERCEL_TEAM_ID || undefined
   }) as any;
   return data.deployments?.[0];

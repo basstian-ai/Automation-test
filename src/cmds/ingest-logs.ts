@@ -1,6 +1,6 @@
 // src/cmds/ingest-logs.ts
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { getLatestDeployment, getRuntimeLogs } from "../lib/vercel.js";
+import { getLatestProdDeployment, getRuntimeLogs } from "../lib/vercel.js";
 import { loadState, saveState } from "../lib/state.js";
 import { readFile, upsertFile } from "../lib/github.js";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
@@ -19,7 +19,6 @@ function isInfraLog(e: RawLog): boolean {
   const msg = (e.message ?? e.text ?? "").toString();
   const path = (e.requestPath ?? "").toString();
   const INFRA_PATTERNS = [
-    /Query Duration Limit Exceeded/i,
     /ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN/i,
     /failed to fetch runtime-logs/i,
     /Too Many Requests|rate limit/i,
@@ -37,13 +36,12 @@ export async function ingestLogs(): Promise<void> {
   }
   try {
     const state = await loadState();
-    const dep = await getLatestDeployment();
+    const dep = await getLatestProdDeployment();
     if (!dep) {
       console.log("No deployment found; exit.");
       return;
     }
-    // Check timestamp instead of ID
-    if (state.ingest?.lastDeploymentTimestamp && dep.createdAt <= state.ingest.lastDeploymentTimestamp) {
+    if (state.ingest?.lastDeploymentId === dep.uid) {
       console.log("No new deployment; exit.");
       return;
     }
@@ -62,7 +60,7 @@ export async function ingestLogs(): Promise<void> {
 
     if (entries.length === 0) {
       console.log("No relevant log entries.");
-      await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+      await saveState({ ...state, ingest: { lastDeploymentId: dep.uid, lastRowIds: [] } });
       return;
     }
 
@@ -84,7 +82,7 @@ export async function ingestLogs(): Promise<void> {
       });
       const nextNew = writeYamlBlock(currentNew, newYaml);
       await upsertFile(newPath, () => nextNew, "bot: route infra ingestion issues → new.md");
-      await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+      await saveState({ ...state, ingest: { lastDeploymentId: dep.uid, lastRowIds: [] } });
       console.log("Infra-only logs detected; routed to new.md instead of bugs.md.");
       return;
     }
@@ -113,7 +111,7 @@ export async function ingestLogs(): Promise<void> {
     const next = writeYamlBlock(current, currentYaml);
     await upsertFile(bugsPath, () => next, "bot: ingest logs → bugs.md");
 
-    await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+    await saveState({ ...state, ingest: { lastDeploymentId: dep.uid, lastRowIds: [] } });
     console.log("Ingest complete.");
   } finally {
     await releaseLock();
