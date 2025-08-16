@@ -1,6 +1,6 @@
 // src/cmds/ingest-logs.ts
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { getLatestProdDeployment, getRuntimeLogs } from "../lib/vercel.js";
+import { getLatestDeployment, getRuntimeLogs } from "../lib/vercel.js";
 import { loadState, saveState } from "../lib/state.js";
 import { readFile, upsertFile } from "../lib/github.js";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
@@ -37,7 +37,7 @@ export async function ingestLogs(): Promise<void> {
   }
   try {
     const state = await loadState();
-    const dep = await getLatestProdDeployment();
+    const dep = await getLatestDeployment();
     if (!dep) {
       console.log("No deployment found; exit.");
       return;
