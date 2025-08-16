@@ -1,0 +1,4 @@
+- [ ] [T0001] Add clustering to duplicate errors in logs {path: red, impact: H, effort: M, risk: M, tags: needs-triage}
+- [ ] [T0002] Backlog seeding when empty {path: both, impact: M, effort: M, risk: M, tags: needs-triage}
+- [ ] [T0003] Gate dependency changes {path: both, impact: M, effort: M, risk: M, tags: deps}
+- [ ] [T0004] Conventional commit style {path: both, impact: M, effort: M, risk: M, tags: needs-triage}

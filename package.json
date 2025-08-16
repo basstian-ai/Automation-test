@@ -12,7 +12,8 @@
     "cmd:ingest-logs": "node dist/cli.js ingest-logs",
     "cmd:synthesize-tasks": "node dist/cli.js synthesize-tasks",
     "cmd:implement": "node dist/cli.js implement",
-    "check": "node -e \"console.log('ok')\""
+    "check": "node -e \"console.log('ok')\"",
+    "format:backlog": "node agent/src/tools/normalizeBacklog.js"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",
