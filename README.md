@@ -1,4 +1,4 @@
-Absolutely — here’s a clear, end-to-end spec of what the “AI Dev Agent” is meant to do and how it works.
+Here’s a clear, end-to-end spec of what the “AI Dev Agent” is meant to do and how it works.
 
 Intention (the “why”)
 
