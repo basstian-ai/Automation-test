@@ -1,18 +1,17 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
-import { ENV, requireEnv } from "../lib/env.js";
+import { ENV } from "../lib/env.js";
+import { completeTask } from "../lib/tasks.js";
 export async function implementTopTask() {
     if (!(await acquireLock())) {
         console.log("Lock taken; exiting.");
         return;
     }
     try {
-        requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
-        const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY);
+        const { supabase } = await import("../lib/supabase.js");
         // Load vision for context
         const vision = (await readFile("roadmap/vision.md")) || "";
         // Retrieve top priority task from Supabase
@@ -125,25 +124,7 @@ export async function implementTopTask() {
             }
             try {
                 await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
-                const { error: updateError } = await supabase
-                    .from("tasks")
-                    .update({ status: "done", type: "done" })
-                    .eq("id", top.id);
-                if (updateError) {
-                    console.error("Failed to update task status", updateError);
-                    return;
-                }
-                const { error: insertError } = await supabase.from("tasks").insert({
-                    title: top.title,
-                    desc: top.desc,
-                    type: "done",
-                    priority: top.priority,
-                    parent: top.id,
-                });
-                if (insertError) {
-                    console.error("Failed to insert completed task record", insertError);
-                    return;
-                }
+                await completeTask(top);
                 console.log("Implement complete.");
             }
             catch (err) {
