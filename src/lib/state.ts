@@ -23,6 +23,9 @@ async function sbRequest(path: string, init: RequestInit = {}) {
   if (!res.ok) {
     throw new Error(`Supabase error: ${res.status} ${res.statusText}`);
   }
+  if (res.status === 204 || res.headers.get("Content-Length") === "0") {
+    return undefined;
+  }
   return res.json();
 }
 
@@ -32,8 +35,8 @@ export type AgentState = {
 };
 
 export async function loadState(): Promise<AgentState> {
-  const data = (await sbRequest("agent_state?select=data&limit=1")) as any[];
-  const row = data[0];
+  const data = (await sbRequest("agent_state?select=data&limit=1")) as any[] | undefined;
+  const row = data?.[0];
   return (row?.data as AgentState) || {};
 }
 
