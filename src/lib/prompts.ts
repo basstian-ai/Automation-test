@@ -145,7 +145,7 @@ export async function implementPlan(input: {
     {
       role: "system" as const,
       content:
-        "You are a senior developer. Develope task and deliver in a safe diff. " +
+        "You are a senior developer. Develop the task and deliver a safe diff. " +
         "Output ONLY JSON with keys: operations (array of {path, action:create|update, content?}), testHint, commitTitle, commitBody. " +
         "Keep diffs tangible; only files relevant to the task; include at least one test file if a test harness exists; avoid broad refactors."
     },
