@@ -13,3 +13,10 @@ export async function insertRoadmap(items: RoadmapItem[]) {
   if (error) throw error;
 }
 
+export async function upsertRoadmap(items: RoadmapItem[]) {
+  const { error } = await supabase
+    .from("roadmap")
+    .upsert(items, { onConflict: "id" });
+  if (error) throw error;
+}
+
