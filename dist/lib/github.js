@@ -122,6 +122,18 @@ export async function commitMany(files, message, opts) {
         repo,
         commit_sha: latestCommitSha
     });
+    const { data: existingTree } = await git.getTree({
+        owner,
+        repo,
+        tree_sha: latestCommit.data.tree.sha,
+        recursive: "true"
+    });
+    const modeByPath = new Map();
+    for (const entry of existingTree.tree) {
+        if (entry.type === "blob" && entry.path && entry.mode) {
+            modeByPath.set(entry.path, entry.mode);
+        }
+    }
     const treeEntries = [];
     for (const f of files) {
         const safePath = resolveRepoPath(f.path);
@@ -131,9 +143,10 @@ export async function commitMany(files, message, opts) {
             content: f.content,
             encoding: "utf-8"
         });
+        const mode = modeByPath.get(safePath) || "100644";
         treeEntries.push({
             path: safePath,
-            mode: "100644",
+            mode,
             type: "blob",
             sha: blob.data.sha
         });
