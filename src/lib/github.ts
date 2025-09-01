@@ -119,24 +119,71 @@ export async function commitMany(
 ) {
   const { owner, repo } = parseRepo(ENV.TARGET_REPO);
   const ref = opts?.branch;
+  const msg = formatMessage(message);
   if (ENV.DRY_RUN) {
-    const msg = formatMessage(message);
-    console.log(`[DRY_RUN] commitMany ${files.length} files on ${ref || "(default branch)"}: ${msg}`);
+    console.log(
+      `[DRY_RUN] commitMany will create 1 commit on ${ref || "(default branch)"}: ${msg}`
+    );
+    for (const f of files) {
+      const safePath = resolveRepoPath(f.path);
+      console.log(`  - ${safePath} (${f.content.length} bytes)`);
+    }
     return;
   }
+
+  const branch = ref || (await getDefaultBranch());
+  const git = gh().rest.git;
+  const headRef = await git.getRef({ owner, repo, ref: `heads/${branch}` });
+  const latestCommitSha = headRef.data.object.sha;
+  const latestCommit = await git.getCommit({
+    owner,
+    repo,
+    commit_sha: latestCommitSha
+  });
+
+  const treeEntries: Array<{
+    path: string;
+    mode: "100644";
+    type: "blob";
+    sha: string;
+  }> = [];
   for (const f of files) {
     const safePath = resolveRepoPath(f.path);
-    const { sha } = await getFile(owner, repo, safePath, ref);
-    await gh().rest.repos.createOrUpdateFileContents({
+    const blob = await git.createBlob({
       owner,
       repo,
+      content: f.content,
+      encoding: "utf-8"
+    });
+    treeEntries.push({
       path: safePath,
-      message: formatMessage(message),
-      content: b64(f.content),
-      sha,
-      ...(ref ? { branch: ref } : {}),
-      committer: { name: "ai-dev-agent", email: "bot@local" },
-      author: { name: "ai-dev-agent", email: "bot@local" }
+      mode: "100644",
+      type: "blob",
+      sha: blob.data.sha
     });
   }
+
+  const tree = await git.createTree({
+    owner,
+    repo,
+    base_tree: latestCommit.data.tree.sha,
+    tree: treeEntries
+  });
+
+  const newCommit = await git.createCommit({
+    owner,
+    repo,
+    message: msg,
+    tree: tree.data.sha,
+    parents: [latestCommitSha],
+    committer: { name: "ai-dev-agent", email: "bot@local" },
+    author: { name: "ai-dev-agent", email: "bot@local" }
+  });
+
+  await git.updateRef({
+    owner,
+    repo,
+    ref: `heads/${branch}`,
+    sha: newCommit.data.sha
+  });
 }
