@@ -1,13 +1,13 @@
 import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { readFile, upsertFile } from "../lib/github.js";
-import { readYamlBlock } from "../lib/md.js";
+import { readFile } from "../lib/github.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
-import { requireEnv } from "../lib/env.js";
+import { ENV, requireEnv } from "../lib/env.js";
 
 type Task = { id?: string; type?: string; title?: string; desc?: string; source?: string; created?: string; priority?: number };
 
 function normTitle(t = "") { return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim(); }
+function normType(t = "") { return t.toLowerCase() === "idea" ? "idea" : "task"; }
 function yamlBlock(obj: any) { return "```yaml\n" + yaml.dump(obj, { lineWidth: 120 }) + "```"; }
 function isMeta(t: Task) { return /batch task synthesis/i.test(t?.title || "") || /```/.test(t?.desc || ""); }
 
@@ -15,45 +15,29 @@ export async function synthesizeTasks() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
     requireEnv(["SUPABASE_URL", "SUPABASE_KEY"]);
-    async function fetchFreshIdeas() {
-      const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=id,content&type=eq.new`;
-      const resp = await fetch(url, {
-        headers: {
-          apikey: process.env.SUPABASE_KEY!,
-          Authorization: `Bearer ${process.env.SUPABASE_KEY!}`,
-        },
-      });
-      if (!resp.ok) return { ideas: "", ids: [] as string[] };
-      const data = await resp.json();
-      return {
-        ideas: data.map((r: { content: string }) => r.content).join("\n"),
-        ids: data.map((r: { id: string }) => r.id),
-      };
-    }
-    async function clearFreshIdeas(ids: string[]) {
-      if (ids.length === 0) return;
-      const inClause = ids.map(id => `"${id}"`).join(",");
-      const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?id=in.(${inClause})`;
-      await fetch(url, {
-        method: "DELETE",
-        headers: {
-          apikey: process.env.SUPABASE_KEY!,
-          Authorization: `Bearer ${process.env.SUPABASE_KEY!}`,
-          "Content-Type": "application/json",
-          Prefer: "return=minimal",
-        },
-      });
-    }
 
     const vision = (await readFile("roadmap/vision.md")) || "";
-    const tasksMd = (await readFile("roadmap/tasks.md")) || "";
-    const bugsMd  = (await readFile("roadmap/bugs.md"))  || "";
-    const { ideas: ideasMd, ids: freshIds } = await fetchFreshIdeas();
     const doneMd  = (await readFile("roadmap/done.md"))  || "";
 
-    const proposal = await synthesizeTasksPrompt({ tasks: tasksMd, bugs: bugsMd, ideas: ideasMd, vision, done: doneMd });
+    const headers = { apikey: ENV.SUPABASE_KEY, Authorization: `Bearer ${ENV.SUPABASE_KEY}` };
+    const url = ENV.SUPABASE_URL;
+    const res = await fetch(`${url}/rest/v1/roadmap_items?select=*`, { headers });
+    if (!res.ok) throw new Error(`Supabase fetch failed: ${res.status}`);
+    const rows: Task[] = await res.json();
 
-    // Extract YAML (fenced or bare)
+    const tasks = rows.filter(r => r.type === "task");
+    const bugs  = rows.filter(r => r.type === "bug");
+    const ideas = rows.filter(r => r.type === "idea");
+
+    const proposal = await synthesizeTasksPrompt({
+      tasks: yamlBlock({ items: tasks }),
+      bugs: yamlBlock({ items: bugs }),
+      ideas: yamlBlock({ items: ideas }),
+      vision,
+      done: doneMd
+    });
+
+    // Extract YAML
     const m = proposal.match(/```yaml\s*?\n([\s\S]*?)\n```/);
     const toParse = m ? m[1] : proposal;
     let parsed: any = {};
@@ -61,21 +45,18 @@ export async function synthesizeTasks() {
     let proposed: Task[] = Array.isArray(parsed.items) ? parsed.items : [];
     proposed = proposed.filter(t => t?.title && !isMeta(t));
 
-    // Existing tasks
-    const existing = readYamlBlock<{ items: Task[] }>(tasksMd, { items: [] }).items || [];
-
     // Merge & dedupe
     const seen = new Set<string>();
     const merged: Task[] = [];
-    for (const t of [...existing, ...proposed]) {
+    for (const t of [...tasks, ...proposed]) {
       const key = (t.id && `id:${t.id.toLowerCase().trim()}`) ||
-                  `tt:${(t.type||"").toLowerCase()}|${normTitle(t.title!)}`;
+                  `tt:${normType(t.type)}|${normTitle(t.title!)}`;
       if (seen.has(key)) continue;
       seen.add(key);
       merged.push(t);
     }
 
-    // Unique priorities 1..N (≤100)
+    // Unique priorities
     merged.sort((a, b) => {
       const pa = a.priority ?? 1e9, pb = b.priority ?? 1e9;
       if (pa !== pb) return pa - pb;
@@ -85,20 +66,22 @@ export async function synthesizeTasks() {
     });
     const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
 
-    const header = "# Tasks (single source of truth)\n\n";
-    const next = header + yamlBlock({ items: limited }) + "\n";
-    await upsertFile(
-      "roadmap/tasks.md",
-      () => next,
-      "bot: synthesize tasks (merge + dedupe + single block)"
-    );
+    // Upsert tasks in Supabase
+    const delTasks = await fetch(`${url}/rest/v1/roadmap_items?type=eq.task`, { method: "DELETE", headers });
+    if (!delTasks.ok) throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
 
-    // Clear processed ideas from Supabase so items aren't reprocessed
-    await clearFreshIdeas(freshIds);
+    const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify(limited.map(t => ({ ...t, type: "task" }))),
+    });
+    if (!upsert.ok) throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
+
+    const delIdeas = await fetch(`${url}/rest/v1/roadmap_items?type=eq.idea`, { method: "DELETE", headers });
+    if (!delIdeas.ok) throw new Error(`Supabase delete ideas failed: ${delIdeas.status}`);
 
     console.log(`Synthesis complete. Tasks: ${limited.length}`);
   } finally {
     await releaseLock();
   }
 }
-
