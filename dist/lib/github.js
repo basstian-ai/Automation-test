@@ -1,6 +1,11 @@
 import { Octokit } from "octokit";
 import { posix as pathPosix } from "node:path";
 import { ENV } from "./env.js";
+function formatMessage(msg) {
+    if (typeof msg === "string")
+        return msg;
+    return msg.body ? `${msg.title}\n\n${msg.body}` : msg.title;
+}
 export function parseRepo(s) {
     const [owner, repo] = s.split("/");
     if (!owner || !repo)
@@ -78,7 +83,8 @@ export async function upsertFile(path, updater, message, opts) {
     const ref = opts?.branch;
     if (ENV.DRY_RUN) {
         const next = updater(undefined);
-        console.log(`[DRY_RUN] upsert ${safePath} on ${ref || "(default branch)"}: ${message}\n---\n${next}\n---`);
+        const msg = formatMessage(message);
+        console.log(`[DRY_RUN] upsert ${safePath} on ${ref || "(default branch)"}: ${msg}\n---\n${next}\n---`);
         return;
     }
     const { sha, content: old } = await getFile(owner, repo, safePath, ref);
@@ -87,7 +93,7 @@ export async function upsertFile(path, updater, message, opts) {
         owner,
         repo,
         path: safePath,
-        message,
+        message: formatMessage(message),
         content: b64(next),
         sha,
         ...(ref ? { branch: ref } : {}),
@@ -99,7 +105,8 @@ export async function commitMany(files, message, opts) {
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
     const ref = opts?.branch;
     if (ENV.DRY_RUN) {
-        console.log(`[DRY_RUN] commitMany ${files.length} files on ${ref || "(default branch)"}: ${message}`);
+        const msg = formatMessage(message);
+        console.log(`[DRY_RUN] commitMany ${files.length} files on ${ref || "(default branch)"}: ${msg}`);
         return;
     }
     for (const f of files) {
@@ -109,7 +116,7 @@ export async function commitMany(files, message, opts) {
             owner,
             repo,
             path: safePath,
-            message,
+            message: formatMessage(message),
             content: b64(f.content),
             sha,
             ...(ref ? { branch: ref } : {}),
