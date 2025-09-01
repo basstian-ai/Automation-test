@@ -1,19 +1,16 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
-import { ENV, requireEnv } from "../lib/env.js";
+import { ENV } from "../lib/env.js";
+import { supabase } from "../lib/supabase.js";
 
 type Task = { id?: string; title?: string; desc?: string; type?: string; priority?: number };
 
 export async function implementTopTask() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
-    const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY);
-
     // Load vision for context
     const vision = (await readFile("roadmap/vision.md")) || "";
 
@@ -92,7 +89,7 @@ export async function implementTopTask() {
       const scope = cb.scope || files.map(f => f.path).join(", ");
       const validation = cb.validation || plan.testHint || "n/a";
       const logLink = cb.logUrl || cb.logs || cb.log || undefined;
-      const taskLink = cb.taskUrl || cb.task || (top.id ? `${ENV.SUPABASE_URL}/rest/v1/tasks?id=eq.${top.id}` : undefined);
+      const taskLink = cb.taskUrl || cb.task || (top.id ? `${supabase.supabaseUrl}/rest/v1/tasks?id=eq.${top.id}` : undefined);
       const bodyParts = [
         `Root Cause: ${rootCause}`,
         `Scope: ${scope}`,
