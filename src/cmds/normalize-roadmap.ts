@@ -1,4 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
 import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { upsertFile } from "../lib/github.js";
@@ -23,9 +22,7 @@ function isMeta(t: Task) {
 export async function normalizeRoadmap() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    const supabaseUrl = process.env.SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { supabase } = await import("../lib/supabase.js");
     const { data, error } = await supabase.from("tasks").select("*");
     if (error) throw error;
     let items = (data || []) as Task[];
