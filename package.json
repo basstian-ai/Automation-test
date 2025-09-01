@@ -15,6 +15,7 @@
     "check": "node -e \"console.log('ok')\""
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.56.1",
     "js-yaml": "^4.1.0",
     "octokit": "^3.x",
     "openai": "^4.58.0",
