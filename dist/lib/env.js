@@ -9,6 +9,8 @@ export const ENV = {
     VERCEL_TOKEN: process.env.VERCEL_TOKEN || "",
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
     OPENAI_MODEL: process.env.OPENAI_MODEL || "",
+    SUPABASE_URL: process.env.SUPABASE_URL || "",
+    SUPABASE_KEY: process.env.SUPABASE_KEY || "",
     WRITE_MODE: process.env.AI_BOT_WRITE_MODE || "commit",
     DRY_RUN: process.env.DRY_RUN === "1",
     BRANCH: process.env.GITHUB_REF_NAME || process.env.GITHUB_HEAD_REF || "",
@@ -24,3 +26,4 @@ export function requireEnv(names) {
         }
     }
 }
+requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
