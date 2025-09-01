@@ -8,13 +8,13 @@ import yaml from "js-yaml";
 export async function reviewRepo() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_KEY"]);
+    requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
     async function fetchRoadmap(type: string) {
       const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=content&type=eq.${type}`;
       const resp = await fetch(url, {
         headers: {
-          apikey: process.env.SUPABASE_KEY!,
-          Authorization: `Bearer ${process.env.SUPABASE_KEY!}`,
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
         },
       });
       if (!resp.ok) return "";
@@ -62,8 +62,8 @@ export async function reviewRepo() {
       await fetch(`${process.env.SUPABASE_URL}/rest/v1/roadmap_items`, {
         method: "POST",
         headers: {
-          apikey: process.env.SUPABASE_KEY!,
-          Authorization: `Bearer ${process.env.SUPABASE_KEY!}`,
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
           "Content-Type": "application/json",
           Prefer: "return=minimal",
         },
