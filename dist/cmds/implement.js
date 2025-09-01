@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch, upsertFile } from "../lib/github.js";
 import yaml from "js-yaml";
@@ -120,19 +121,20 @@ export async function implementTopTask() {
                 title = `${prefix}: ${title}`;
             }
             try {
-
                 execSync("npm run check", { stdio: "inherit" });
-                execSync("npm test", { stdio: "inherit" });
+                const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+                if (pkg?.scripts?.test) {
+                    execSync("npm test", { stdio: "inherit" });
+                }
             }
             catch (err) {
                 console.error("Checks or tests failed; aborting commit.", err);
                 return;
             }
             try {
-                await commitMany(files, title, { branch: targetBranch });
+                await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
                 await upsertFile("roadmap/tasks.md", () => nextTasks, "bot: remove completed task", { branch: targetBranch });
-                await upsertFile("roadmap/done.md", () => nextDone, "bot: append done item", { branch: targetBranch });
-
+                await upsertFile("roadmap/done.md", () => nextDone, { title: "chore: append done item", body: commitBody }, { branch: targetBranch });
                 console.log("Implement complete.");
             }
             catch (err) {
