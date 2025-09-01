@@ -2,9 +2,8 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { getLatestDeployment, getRuntimeLogs } from "../lib/vercel.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
-import { readFile, upsertFile } from "../lib/github.js";
-import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
 import { summarizeLogToBug, type LogEntryForBug } from "../lib/prompts.js";
+import { insertRoadmap, type RoadmapItem } from "../lib/supabase.js";
 
 type RawLog = {
   level?: string;
@@ -80,23 +79,23 @@ export async function ingestLogs(): Promise<void> {
     const infraEntries = entries.filter(isInfraLog);
 
     if (appEntries.length === 0 && infraEntries.length > 0) {
-      const newPath = "roadmap/new.md";
-      const currentNew = (await readFile(newPath)) || "";
-      const newYaml = readYamlBlock<{ queue: any[] }>(currentNew, { queue: [] });
-      newYaml.queue.push({
+      const item: RoadmapItem = {
         id: `IDEA-INGEST-${dep.uid.slice(0, 6)}-${Date.now()}`,
+        type: "idea",
         title: "Ingestion/infra errors from Vercel logs API",
         details:
-          `Examples:\n${infraEntries.slice(0, 3).map(e => `- ${e.message}`).join("\n")}\n\n` +
+          `Examples:\n${infraEntries
+            .slice(0, 3)
+            .map(e => `- ${e.message}`)
+            .join("\n")}\n\n` +
           "Action: classify as infra; add retries/backoff; consider log drain.",
         created: new Date().toISOString()
-      });
-      const nextNew = writeYamlBlock(currentNew, newYaml);
-      await upsertFile(newPath, () => nextNew, "bot: route infra ingestion issues → new.md");
+      };
+      await insertRoadmap([item]);
       await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
       await appendChangelog("Handled infra-only logs during ingestion.");
-      await appendDecision("Routed infra-related logs to new.md instead of bugs.md.");
-      console.log("Infra-only logs detected; routed to new.md instead of bugs.md.");
+      await appendDecision("Routed infra-related logs to Supabase as ideas instead of bugs.");
+      console.log("Infra-only logs detected; routed to Supabase as type=idea.");
       return;
     }
 
@@ -122,31 +121,28 @@ export async function ingestLogs(): Promise<void> {
       });
     }
 
-    const bugsPath = "roadmap/bugs.md";
-    const current = (await readFile(bugsPath)) || "";
-    const currentYaml = readYamlBlock<{ queue: any[] }>(current, { queue: [] });
-
+    const items: RoadmapItem[] = [];
     for (const [_, entriesForSummary] of grouped) {
       const summary = await summarizeLogToBug(entriesForSummary);
       if (!summary) continue;
 
-      const lines = summary.trim().split('\n');
-      const title = lines[0]?.replace(/^#+\s*/, '').trim() || "Runtime error from logs";
-      const details = lines.slice(1).join('\n').trim();
+      const lines = summary.trim().split("\n");
+      const title = lines[0]?.replace(/^#+\s*/, "").trim() || "Runtime error from logs";
+      const details = lines.slice(1).join("\n").trim();
 
-      currentYaml.queue.push({
+      items.push({
         id: `BUG-${dep.uid.slice(0, 6)}-${Date.now()}`,
-        title: title,
-        details: details,
+        type: "bug",
+        title,
+        details,
         created: new Date().toISOString()
       });
     }
 
-    const next = writeYamlBlock(current, currentYaml);
-    await upsertFile(bugsPath, () => next, "bot: ingest logs → bugs.md");
+    await insertRoadmap(items);
 
     await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
-    await appendChangelog("Ingested runtime logs and updated bugs.md.");
+    await appendChangelog("Ingested runtime logs and inserted bugs into Supabase.");
     await appendDecision("Processed runtime logs and updated state after ingestion.");
     console.log("Ingest complete.");
   } finally {
