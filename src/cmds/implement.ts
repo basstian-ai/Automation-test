@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch, upsertFile } from "../lib/github.js";
 import yaml from "js-yaml";
@@ -108,7 +109,10 @@ export async function implementTopTask() {
       const title = plan.commitTitle || ((top.type === "bug" ? "fix" : "feat") + `: ${top.title || top.id}`);
       try {
         execSync("npm run check", { stdio: "inherit" });
-        execSync("npm test", { stdio: "inherit" });
+        const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+        if (pkg?.scripts?.test) {
+          execSync("npm test", { stdio: "inherit" });
+        }
       } catch (err) {
         console.error("Checks or tests failed; aborting commit.", err);
         return;
