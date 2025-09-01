@@ -1,7 +1,6 @@
 import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { upsertFile } from "../lib/github.js";
-import { supabase } from "../lib/supabase.js";
 
 type Task = {
   id?: string;
@@ -23,6 +22,7 @@ function isMeta(t: Task) {
 export async function normalizeRoadmap() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
+    const { supabase } = await import("../lib/supabase.js");
     const { data, error } = await supabase.from("tasks").select("*");
     if (error) throw error;
     let items = (data || []) as Task[];
