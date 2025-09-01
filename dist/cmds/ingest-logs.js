@@ -1,15 +1,25 @@
 // src/cmds/ingest-logs.ts
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { getLatestProdDeployment, getRuntimeLogs } from "../lib/vercel.js";
-import { loadState, saveState } from "../lib/state.js";
+import { getLatestDeployment, getRuntimeLogs } from "../lib/vercel.js";
+import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { readFile, upsertFile } from "../lib/github.js";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
 import { summarizeLogToBug } from "../lib/prompts.js";
+function getLogSignature(message) {
+    return message
+        .replace(/\[\w+\]/g, "") // remove [GET], [POST] etc
+        .replace(/\b\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\b/g, "[UUID]") // remove UUIDs
+        .replace(/\b[0-9a-f]{24}\b/g, "[ID]") // remove 24-char hex IDs
+        .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, "[TIMESTAMP]") // remove timestamps
+        .replace(/ip=\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/g, "ip=[IP]") // remove IP
+        .replace(/duration=\d+ms/g, "duration=[DURATION]") // remove duration
+        .replace(/:\d{2,5}/g, ":[PORT]") // remove port numbers
+        .trim();
+}
 function isInfraLog(e) {
     const msg = (e.message ?? e.text ?? "").toString();
     const path = (e.requestPath ?? "").toString();
     const INFRA_PATTERNS = [
-        /Query Duration Limit Exceeded/i,
         /ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN/i,
         /failed to fetch runtime-logs/i,
         /Too Many Requests|rate limit/i,
@@ -28,12 +38,12 @@ export async function ingestLogs() {
     }
     try {
         const state = await loadState();
-        const dep = await getLatestProdDeployment();
+        const dep = await getLatestDeployment();
         if (!dep) {
             console.log("No deployment found; exit.");
             return;
         }
-        if (state.ingest?.lastDeploymentId === dep.uid) {
+        if (state.ingest?.lastDeploymentTimestamp && dep.createdAt <= state.ingest.lastDeploymentTimestamp) {
             console.log("No new deployment; exit.");
             return;
         }
@@ -45,17 +55,15 @@ export async function ingestLogs() {
             message: r.message ?? r.text ?? "",
             requestPath: r.requestPath ?? "",
             timestamp: r.timestamp ?? ""
-        }))
-            .slice(0, 200);
+        }));
         if (entries.length === 0) {
             console.log("No relevant log entries.");
-            await saveState({ ...state, ingest: { lastDeploymentId: dep.uid, lastRowIds: [] } });
+            await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
             return;
         }
         const appEntries = entries.filter(e => !isInfraLog(e));
         const infraEntries = entries.filter(isInfraLog);
-        if (appEntries.length === 0) {
-            // Route infra/ingestion issues to new.md
+        if (appEntries.length === 0 && infraEntries.length > 0) {
             const newPath = "roadmap/new.md";
             const currentNew = (await readFile(newPath)) || "";
             const newYaml = readYamlBlock(currentNew, { queue: [] });
@@ -68,32 +76,54 @@ export async function ingestLogs() {
             });
             const nextNew = writeYamlBlock(currentNew, newYaml);
             await upsertFile(newPath, () => nextNew, "bot: route infra ingestion issues → new.md");
-            await saveState({ ...state, ingest: { lastDeploymentId: dep.uid, lastRowIds: [] } });
+            await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+            await appendChangelog("Handled infra-only logs during ingestion.");
+            await appendDecision("Routed infra-related logs to new.md instead of bugs.md.");
             console.log("Infra-only logs detected; routed to new.md instead of bugs.md.");
             return;
         }
-        // Map to the strict shape summarizeLogToBug expects
-        const summarizeInput = appEntries
-            .filter(e => e.level === "error" || e.level === "warning")
-            .map(e => ({
-            level: e.level ?? "error",
-            message: String(e.message ?? ""),
-            path: e.requestPath || undefined,
-            ts: e.timestamp || undefined
-        }));
-        const suggestion = await summarizeLogToBug(summarizeInput);
+        if (appEntries.length === 0) {
+            console.log("No application log entries to process.");
+            await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+            await appendChangelog("Ingestion run found no application logs.");
+            await appendDecision("No app logs to process from latest deployment.");
+            return;
+        }
+        const grouped = new Map();
+        for (const entry of appEntries) {
+            const signature = getLogSignature(entry.message || "");
+            if (!grouped.has(signature)) {
+                grouped.set(signature, []);
+            }
+            grouped.get(signature).push({
+                level: entry.level ?? "error",
+                message: String(entry.message ?? ""),
+                path: entry.requestPath || undefined,
+                ts: entry.timestamp || undefined
+            });
+        }
         const bugsPath = "roadmap/bugs.md";
         const current = (await readFile(bugsPath)) || "";
         const currentYaml = readYamlBlock(current, { queue: [] });
-        currentYaml.queue.push({
-            id: `BUG-${dep.uid.slice(0, 6)}-${Date.now()}`,
-            title: "App runtime errors & warnings from latest deployment",
-            details: suggestion,
-            created: new Date().toISOString()
-        });
+        for (const [_, entriesForSummary] of grouped) {
+            const summary = await summarizeLogToBug(entriesForSummary);
+            if (!summary)
+                continue;
+            const lines = summary.trim().split('\n');
+            const title = lines[0]?.replace(/^#+\s*/, '').trim() || "Runtime error from logs";
+            const details = lines.slice(1).join('\n').trim();
+            currentYaml.queue.push({
+                id: `BUG-${dep.uid.slice(0, 6)}-${Date.now()}`,
+                title: title,
+                details: details,
+                created: new Date().toISOString()
+            });
+        }
         const next = writeYamlBlock(current, currentYaml);
         await upsertFile(bugsPath, () => next, "bot: ingest logs → bugs.md");
-        await saveState({ ...state, ingest: { lastDeploymentId: dep.uid, lastRowIds: [] } });
+        await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+        await appendChangelog("Ingested runtime logs and updated bugs.md.");
+        await appendDecision("Processed runtime logs and updated state after ingestion.");
         console.log("Ingest complete.");
     }
     finally {
