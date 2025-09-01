@@ -26,8 +26,10 @@ Outputs
 	•	Unified diff (single patch per run when possible).
 	•	Commits/PRs with conventional, traceable messages.
 	•	Updated docs/tests when code changes.
-	•	Agent notes: AGENT_CHANGELOG.md, agent/DECISIONS.md, agent/STATE.json.
+	•	Agent notes stored in Supabase.
 	•	Roadmap progress: statuses/links back to PRs.
+
+Task progress, decisions, and changelog entries are stored exclusively in Supabase tables.
 
 Two paths in detail
 
@@ -42,7 +44,7 @@ B) Green path — Continuous improvement
 	•	Prioritize from Supabase tasks (or synthesize from repo gaps if empty).
 	•	Pick a thin vertical slice (tests + code + docs).
 	•	Implement in small, deployable steps; keep the app green after each step.
-	•	Update backlog item status, link to commit/PR, and write brief rationale in agent/DECISIONS.md.
+	•	Update backlog item status, link to commit/PR, and record brief rationale in Supabase.
 
 Component breakdown
 	•	Orchestrator: Entry script/Action that schedules runs and wires everything.
@@ -56,7 +58,7 @@ Component breakdown
 	•	Delta risk assessor (how risky is a change?)
 	•	Planner (LLM): Decides Fix vs Improve, writes a small plan, and proposes a single unified diff.
 	•	Executor: Applies patch, runs checks, commits, pushes, opens PR, triggers deploy.
-	•	Memory & Governance: Keeps agent/STATE.json, appends to AGENT_CHANGELOG.md, respects protected files and allowedOps[].
+	•	Memory & Governance: Stores run metadata and changelog entries in Supabase, respects protected files and allowedOps[].
 
 Guardrails & safety
 	•	Protected paths (e.g., roadmap/vision.md) are read-only. The agent refuses to modify them.
@@ -69,9 +71,7 @@ Guardrails & safety
 
 Files & conventions the agent uses
 	•	agent/config.json – project hints (framework, package manager, test scripts), and guardrails.
-	•	agent/STATE.json – last run metadata (what happened, next intent).
-	•	agent/DECISIONS.md – short “why” notes per run.
-	•	AGENT_CHANGELOG.md – human-readable summary of changes.
+	•	Supabase tables – run metadata, decisions, and changelog entries.
 	•	Supabase tasks table – backlog the agent pulls from (the agent can propose ~30 items if empty).
 	•	reports/repo_summary.md – ephemeral repo overview (kept out of the tasks table to avoid your deletion rule).
 	•	.github/workflows/ai-dev-agent.yml – schedule (e.g., every 4h) and permissions.
@@ -90,7 +90,7 @@ Commit & PR etiquette
 Observability
 	•	Summaries posted as PR comments on runs that affect a PR.
 	•	Status badge or check that reports: “Analyzed ▸ Planned ▸ Patched ▸ Tested ▸ Deployed”.
-	•	Minimal run metrics (duration, diff size, tests run, result) appended to agent/STATE.json.
+	•	Minimal run metrics (duration, diff size, tests run, result) recorded in Supabase.
 
 Failure & recovery strategy
 	•	Access failures (e.g., Vercel 400/403): record exact endpoint + payload expectation, open an Issue titled “Unblocked CI access required” with a checklist (token, project id, scope).
@@ -114,4 +114,4 @@ Example run (narrative)
 	4.	Runs linter/tsc/tests → green. Commits with linked log snippet.
 	5.	Redeploy kicks → green.
 	6.      Green path: picks “Add API timeout & retry with exponential backoff” from the Supabase tasks backlog.
-	7.	Implements small, feature-flagged change + tests + docs; opens PR with validation steps; updates agent/DECISIONS.md.
+	7.	Implements small, feature-flagged change + tests + docs; opens PR with validation steps; logs the rationale in Supabase.
