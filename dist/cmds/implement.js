@@ -11,8 +11,8 @@ export async function implementTopTask() {
         return;
     }
     try {
-        requireEnv(["SUPABASE_URL", "SUPABASE_KEY"]);
-        const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_KEY);
+        requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+        const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY);
         // Load vision for context
         const vision = (await readFile("roadmap/vision.md")) || "";
         // Retrieve top priority task from Supabase
@@ -119,14 +119,25 @@ export async function implementTopTask() {
             }
             try {
                 await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
-                await supabase.from("tasks").update({ status: "done", type: "done" }).eq("id", top.id);
-                await supabase.from("tasks").insert({
+                const { error: updateError } = await supabase
+                    .from("tasks")
+                    .update({ status: "done", type: "done" })
+                    .eq("id", top.id);
+                if (updateError) {
+                    console.error("Failed to update task status", updateError);
+                    return;
+                }
+                const { error: insertError } = await supabase.from("tasks").insert({
                     title: top.title,
                     desc: top.desc,
                     type: "done",
                     priority: top.priority,
                     parent: top.id,
                 });
+                if (insertError) {
+                    console.error("Failed to insert completed task record", insertError);
+                    return;
+                }
                 console.log("Implement complete.");
             }
             catch (err) {
