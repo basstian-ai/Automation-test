@@ -40,3 +40,4 @@ jobs:
           AI_BOT_WRITE_MODE: commit
           DRY_RUN: "0"
           ALLOW_PATHS: ""
+        # Runs `npm run check` and `npm test` before committing; aborts commit on failure
