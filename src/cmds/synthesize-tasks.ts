@@ -14,6 +14,7 @@ export async function synthesizeTasks() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
     requireEnv(["SUPABASE_URL", "SUPABASE_KEY"]);
+
     const vision = (await readFile("roadmap/vision.md")) || "";
     const doneMd  = (await readFile("roadmap/done.md"))  || "";
 
@@ -35,7 +36,7 @@ export async function synthesizeTasks() {
       done: doneMd
     });
 
-    // Extract YAML (fenced or bare)
+    // Extract YAML
     const m = proposal.match(/```yaml\s*?\n([\s\S]*?)\n```/);
     const toParse = m ? m[1] : proposal;
     let parsed: any = {};
@@ -43,13 +44,10 @@ export async function synthesizeTasks() {
     let proposed: Task[] = Array.isArray(parsed.items) ? parsed.items : [];
     proposed = proposed.filter(t => t?.title && !isMeta(t));
 
-    // Existing tasks
-    const existing = tasks;
-
     // Merge & dedupe
     const seen = new Set<string>();
     const merged: Task[] = [];
-    for (const t of [...existing, ...proposed]) {
+    for (const t of [...tasks, ...proposed]) {
       const key = (t.id && `id:${t.id.toLowerCase().trim()}`) ||
                   `tt:${(t.type||"").toLowerCase()}|${normTitle(t.title!)}`;
       if (seen.has(key)) continue;
@@ -57,7 +55,7 @@ export async function synthesizeTasks() {
       merged.push(t);
     }
 
-    // Unique priorities 1..N (≤100)
+    // Unique priorities
     merged.sort((a, b) => {
       const pa = a.priority ?? 1e9, pb = b.priority ?? 1e9;
       if (pa !== pb) return pa - pb;
@@ -67,15 +65,17 @@ export async function synthesizeTasks() {
     });
     const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
 
-    // Upsert tasks and clear processed ideas in Supabase
+    // Upsert tasks in Supabase
     const delTasks = await fetch(`${url}/rest/v1/roadmap_items?type=eq.task`, { method: "DELETE", headers });
     if (!delTasks.ok) throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
+
     const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
       body: JSON.stringify(limited.map(t => ({ ...t, type: "task" }))),
     });
     if (!upsert.ok) throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
+
     const delIdeas = await fetch(`${url}/rest/v1/roadmap_items?type=eq.idea`, { method: "DELETE", headers });
     if (!delIdeas.ok) throw new Error(`Supabase delete ideas failed: ${delIdeas.status}`);
 
@@ -84,4 +84,3 @@ export async function synthesizeTasks() {
     await releaseLock();
   }
 }
-

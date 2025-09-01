@@ -1,6 +1,5 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { readFile, parseRepo, gh, upsertFile } from "../lib/github.js";
-import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
+import { parseRepo, gh, upsertFile } from "../lib/github.js";
 import { reviewToIdeas, reviewToSummary } from "../lib/prompts.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { requireEnv, ENV } from "../lib/env.js";
@@ -9,12 +8,24 @@ import yaml from "js-yaml";
 export async function reviewRepo() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(["TARGET_REPO"]);
-    const vision = (await readFile("roadmap/vision.md")) || "";
-    const tasks  = (await readFile("roadmap/tasks.md"))  || "";
-    const bugs   = (await readFile("roadmap/bugs.md"))   || "";
-    const done   = (await readFile("roadmap/done.md"))   || "";
-    const fresh  = (await readFile("roadmap/new.md"))    || "";
+    requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_KEY"]);
+    async function fetchRoadmap(type: string) {
+      const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=content&type=eq.${type}`;
+      const resp = await fetch(url, {
+        headers: {
+          apikey: process.env.SUPABASE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_KEY!}`,
+        },
+      });
+      if (!resp.ok) return "";
+      const data = await resp.json();
+      return data.map((r: { content: string }) => r.content).join("\n");
+    }
+    const vision = await fetchRoadmap("vision");
+    const tasks  = await fetchRoadmap("tasks");
+    const bugs   = await fetchRoadmap("bugs");
+    const done   = await fetchRoadmap("done");
+    const fresh  = await fetchRoadmap("new");
 
     const state = await loadState();
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
@@ -39,23 +50,26 @@ export async function reviewRepo() {
     const ideasInput = { summary, vision, tasks, bugs, done, fresh };
     const ideasYaml = await reviewToIdeas(ideasInput);
 
-    // 3. Append new ideas to roadmap/new.md
-    const newPath = "roadmap/new.md";
-    const currentNewMd = (await readFile(newPath)) || "";
-    const currentIdeas = readYamlBlock<{ queue: any[] }>(currentNewMd, { queue: [] });
-
+    // 3. Insert new ideas into Supabase
     const newIdeas = (yaml.load(ideasYaml) as { queue: any[] })?.queue || [];
-
     for (const idea of newIdeas) {
-      currentIdeas.queue.push({
-        ...idea,
+      const payload = {
         id: idea.id || `IDEA-${Date.now()}`,
-        created: idea.created || new Date().toISOString()
+        type: "new",
+        content: yaml.dump(idea),
+        created: idea.created || new Date().toISOString(),
+      };
+      await fetch(`${process.env.SUPABASE_URL}/rest/v1/roadmap_items`, {
+        method: "POST",
+        headers: {
+          apikey: process.env.SUPABASE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_KEY!}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify(payload),
       });
     }
-
-    const nextNewMd = writeYamlBlock(currentNewMd, currentIdeas);
-    await upsertFile(newPath, () => nextNewMd, "bot: review repo → new.md");
 
     const headSha = commitsData[0]?.sha;
     await saveState({ ...state, lastReviewedSha: headSha });
