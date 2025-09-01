@@ -4,7 +4,6 @@ import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
 import { ENV } from "../lib/env.js";
-import { completeTask } from "../lib/tasks.js";
 import type { Task } from "../lib/types.js";
 
 export async function implementTopTask() {
@@ -119,6 +118,7 @@ export async function implementTopTask() {
       }
       try {
         await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
+        const { completeTask } = await import("../lib/tasks.js");
         await completeTask(top);
         console.log("Implement complete.");
       } catch (err) {
