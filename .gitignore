@@ -1,2 +1,4 @@
 .npmrc
 
+agent/
+AGENT_CHANGELOG.md
