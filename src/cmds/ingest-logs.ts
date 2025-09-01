@@ -1,9 +1,10 @@
 // src/cmds/ingest-logs.ts
+
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { getLatestDeployment, getRuntimeLogs } from "../lib/vercel.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { summarizeLogToBug, type LogEntryForBug } from "../lib/prompts.js";
-import { insertRoadmap, type RoadmapItem } from "../lib/supabase.js";
+import { insertRoadmap, type RoadmapItem } from "../lib/roadmap.js";
 
 type RawLog = {
   level?: string;
@@ -16,13 +17,13 @@ type RawLog = {
 
 function getLogSignature(message: string): string {
   return message
-    .replace(/\[\w+\]/g, "") // remove [GET], [POST] etc
-    .replace(/\b\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\b/g, "[UUID]") // remove UUIDs
-    .replace(/\b[0-9a-f]{24}\b/g, "[ID]") // remove 24-char hex IDs
-    .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, "[TIMESTAMP]") // remove timestamps
-    .replace(/ip=\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/g, "ip=[IP]") // remove IP
-    .replace(/duration=\d+ms/g, "duration=[DURATION]") // remove duration
-    .replace(/:\d{2,5}/g, ":[PORT]") // remove port numbers
+    .replace(/\[\w+\]/g, "")
+    .replace(/\b\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\b/g, "[UUID]")
+    .replace(/\b[0-9a-f]{24}\b/g, "[ID]")
+    .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, "[TIMESTAMP]")
+    .replace(/ip=\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/g, "ip=[IP]")
+    .replace(/duration=\d+ms/g, "duration=[DURATION]")
+    .replace(/:\d{2,5}/g, ":[PORT]")
     .trim();
 }
 
@@ -45,9 +46,11 @@ export async function ingestLogs(): Promise<void> {
     console.log("Lock taken; exiting.");
     return;
   }
+
   try {
     const state = await loadState();
     const dep = await getLatestDeployment();
+
     if (!dep) {
       console.log("No deployment found; exit.");
       return;
@@ -59,7 +62,6 @@ export async function ingestLogs(): Promise<void> {
     }
 
     const raw = await getRuntimeLogs(dep.uid);
-
     const entries: RawLog[] = (raw as any[])
       .filter(r => r && (r.level === "error" || r.level === "warning"))
       .map(r => ({
@@ -83,12 +85,10 @@ export async function ingestLogs(): Promise<void> {
         id: `IDEA-INGEST-${dep.uid.slice(0, 6)}-${Date.now()}`,
         type: "idea",
         title: "Ingestion/infra errors from Vercel logs API",
-        details:
-          `Examples:\n${infraEntries
-            .slice(0, 3)
-            .map(e => `- ${e.message}`)
-            .join("\n")}\n\n` +
-          "Action: classify as infra; add retries/backoff; consider log drain.",
+        details: `Examples:\n${infraEntries
+          .slice(0, 3)
+          .map(e => `- ${e.message}`)
+          .join("\n")}\n\nAction: classify as infra; add retries/backoff; consider log drain.`,
         created: new Date().toISOString()
       };
       await insertRoadmap([item]);
@@ -100,11 +100,11 @@ export async function ingestLogs(): Promise<void> {
     }
 
     if (appEntries.length === 0) {
-        console.log("No application log entries to process.");
-        await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
-        await appendChangelog("Ingestion run found no application logs.");
-        await appendDecision("No app logs to process from latest deployment.");
-        return;
+      console.log("No application log entries to process.");
+      await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+      await appendChangelog("Ingestion run found no application logs.");
+      await appendDecision("No app logs to process from latest deployment.");
+      return;
     }
 
     const grouped = new Map<string, LogEntryForBug[]>();
@@ -122,6 +122,7 @@ export async function ingestLogs(): Promise<void> {
     }
 
     const items: RoadmapItem[] = [];
+
     for (const [_, entriesForSummary] of grouped) {
       const summary = await summarizeLogToBug(entriesForSummary);
       if (!summary) continue;

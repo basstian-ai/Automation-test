@@ -3,16 +3,16 @@ import { acquireLock, releaseLock } from "../lib/lock.js";
 import { getLatestDeployment, getRuntimeLogs } from "../lib/vercel.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { summarizeLogToBug } from "../lib/prompts.js";
-import { insertRoadmap } from "../lib/supabase.js";
+import { insertRoadmap } from "../lib/roadmap.js";
 function getLogSignature(message) {
     return message
-        .replace(/\[\w+\]/g, "") // remove [GET], [POST] etc
-        .replace(/\b\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\b/g, "[UUID]") // remove UUIDs
-        .replace(/\b[0-9a-f]{24}\b/g, "[ID]") // remove 24-char hex IDs
-        .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, "[TIMESTAMP]") // remove timestamps
-        .replace(/ip=\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/g, "ip=[IP]") // remove IP
-        .replace(/duration=\d+ms/g, "duration=[DURATION]") // remove duration
-        .replace(/:\d{2,5}/g, ":[PORT]") // remove port numbers
+        .replace(/\[\w+\]/g, "")
+        .replace(/\b\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\b/g, "[UUID]")
+        .replace(/\b[0-9a-f]{24}\b/g, "[ID]")
+        .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, "[TIMESTAMP]")
+        .replace(/ip=\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/g, "ip=[IP]")
+        .replace(/duration=\d+ms/g, "duration=[DURATION]")
+        .replace(/:\d{2,5}/g, ":[PORT]")
         .trim();
 }
 function isInfraLog(e) {
@@ -70,8 +70,7 @@ export async function ingestLogs() {
                 details: `Examples:\n${infraEntries
                     .slice(0, 3)
                     .map(e => `- ${e.message}`)
-                    .join("\n")}\n\n` +
-                    "Action: classify as infra; add retries/backoff; consider log drain.",
+                    .join("\n")}\n\nAction: classify as infra; add retries/backoff; consider log drain.`,
                 created: new Date().toISOString()
             };
             await insertRoadmap([item]);

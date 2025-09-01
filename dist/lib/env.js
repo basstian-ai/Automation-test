@@ -16,7 +16,6 @@ export const ENV = {
     BRANCH: process.env.GITHUB_REF_NAME || process.env.GITHUB_HEAD_REF || "",
     ALLOW_PATHS: (process.env.ALLOW_PATHS || "").split(",").map(s => s.trim()).filter(Boolean),
 };
-
 // Call this inside commands to assert only what they need.
 export function requireEnv(names) {
     for (const n of names) {
@@ -25,3 +24,4 @@ export function requireEnv(names) {
         }
     }
 }
+// Avoid requiring SUPABASE variables for commands that don't need them.
