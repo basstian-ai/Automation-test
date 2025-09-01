@@ -141,9 +141,22 @@ export async function commitMany(
     commit_sha: latestCommitSha
   });
 
+  const { data: existingTree } = await git.getTree({
+    owner,
+    repo,
+    tree_sha: latestCommit.data.tree.sha,
+    recursive: "true"
+  });
+  const modeByPath = new Map<string, string>();
+  for (const entry of existingTree.tree) {
+    if (entry.type === "blob" && entry.path && entry.mode) {
+      modeByPath.set(entry.path, entry.mode);
+    }
+  }
+
   const treeEntries: Array<{
     path: string;
-    mode: "100644";
+    mode: "100644" | "100755" | "040000" | "160000" | "120000";
     type: "blob";
     sha: string;
   }> = [];
@@ -155,9 +168,17 @@ export async function commitMany(
       content: f.content,
       encoding: "utf-8"
     });
+    const mode =
+      (modeByPath.get(safePath) as
+        | "100644"
+        | "100755"
+        | "040000"
+        | "160000"
+        | "120000"
+        | undefined) || "100644";
     treeEntries.push({
       path: safePath,
-      mode: "100644",
+      mode,
       type: "blob",
       sha: blob.data.sha
     });
