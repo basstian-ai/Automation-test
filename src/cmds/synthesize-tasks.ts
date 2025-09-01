@@ -14,12 +14,12 @@ function isMeta(t: Task) { return /batch task synthesis/i.test(t?.title || "") |
 export async function synthesizeTasks() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(["SUPABASE_URL", "SUPABASE_KEY"]);
+    requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
 
     const vision = (await readFile("roadmap/vision.md")) || "";
     const doneMd  = (await readFile("roadmap/done.md"))  || "";
 
-    const headers = { apikey: ENV.SUPABASE_KEY, Authorization: `Bearer ${ENV.SUPABASE_KEY}` };
+    const headers = { apikey: ENV.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${ENV.SUPABASE_SERVICE_ROLE_KEY}` };
     const url = ENV.SUPABASE_URL;
     const res = await fetch(`${url}/rest/v1/roadmap_items?select=*`, { headers });
     if (!res.ok) throw new Error(`Supabase fetch failed: ${res.status}`);
