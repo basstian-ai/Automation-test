@@ -1,46 +1,32 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createClient } from "@supabase/supabase-js";
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch, upsertFile } from "../lib/github.js";
-import yaml from "js-yaml";
-import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
+import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
-import { ENV } from "../lib/env.js";
+import { ENV, requireEnv } from "../lib/env.js";
 
 type Task = { id?: string; title?: string; desc?: string; type?: string; priority?: number };
-
-function extractTasks(md: string): any[] {
-  const a = readYamlBlock<{ items: any[] }>(md, { items: [] });
-  if (a.items?.length) return a.items;
-  const m = md.match(/```yaml\s*?\n([\s\S]*?)\n```/);
-  if (m) {
-    try {
-      const parsed = yaml.load(m[1]) as any;
-      if (parsed?.items?.length) return parsed.items;
-    } catch {}
-  }
-  return [];
-}
-function isMeta(t: any) {
-  return /batch task synthesis/i.test(t?.title || "") || /```/.test(t?.desc || "");
-}
 
 export async function implementTopTask() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    // Load roadmap
-    const vision = (await readFile("roadmap/vision.md")) || "";
-    const done   = (await readFile("roadmap/done.md")) || "";
-    const tRaw   = (await readFile("roadmap/tasks.md")) || "";
-    const tasks = extractTasks(tRaw).filter(t => !isMeta(t));
-    if (!tasks.length) {
-      console.log("No tasks (none after filtering). Ensure tasks.md has one fenced yaml block with `items:`.");
-      return;
-    }
+    requireEnv(["SUPABASE_URL", "SUPABASE_KEY"]);
+    const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_KEY);
 
-    // Pick highest priority
-    const sorted = [...tasks].sort((a,b) => (a.priority??999)-(b.priority??999));
-    const top = sorted[0];
+    // Load vision for context
+    const vision = (await readFile("roadmap/vision.md")) || "";
+
+    // Retrieve top priority task from Supabase
+    const { data: rows, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .neq("type", "done")
+      .order("priority", { ascending: true })
+      .limit(1);
+    if (error) { console.error("Failed to fetch tasks", error); return; }
+    const top = rows?.[0] as Task | undefined;
+    if (!top) { console.log("No tasks available."); return; }
 
     const writeMode = (ENV.WRITE_MODE || "commit").toLowerCase();
     let targetBranch: string | undefined;
@@ -57,8 +43,8 @@ export async function implementTopTask() {
     }
 
     // Optional path guard
-    const repoTree: string[] = []; // (keep empty for now, or list via GH if you want)
-    const planJson = await implementPlan({ vision, done, topTask: top, repoTree });
+    const repoTree: string[] = [];
+    const planJson = await implementPlan({ vision, done: "", topTask: top, repoTree });
     let plan: any = {};
     try { plan = JSON.parse(planJson); } catch { plan = {}; }
 
@@ -86,7 +72,7 @@ export async function implementTopTask() {
     if (!filtered.length) {
       // Fallback: create a minimal test placeholder if none proposed
       filtered.push({
-        path: "ROADMAP_NOTES.md",
+        path: "TASK_NOTES.md",
         action: "update",
         content: `- ${new Date().toISOString()} Implemented: ${top.title}\n`
       });
@@ -99,12 +85,6 @@ export async function implementTopTask() {
       files.push({ path: op.path, content: op.content ?? "" });
     }
 
-    // Prepare roadmap changes
-    const remaining = tasks.filter(i => i !== top);
-    const nextTasks = writeYamlBlock(tRaw, { items: remaining });
-    const doneLine = `- ${new Date().toISOString()}: ✅ ${top.id || ""} — ${plan.commitTitle || top.title}\n`;
-    const nextDone = done + doneLine;
-
     if (files.length) {
       // Build commit body describing root cause, scope, and validation
       const cb: any = typeof plan.commitBody === "object" ? plan.commitBody : {};
@@ -112,12 +92,13 @@ export async function implementTopTask() {
       const scope = cb.scope || files.map(f => f.path).join(", ");
       const validation = cb.validation || plan.testHint || "n/a";
       const logLink = cb.logUrl || cb.logs || cb.log || undefined;
-      const commitBody = [
+      const bodyParts = [
         `Root Cause: ${rootCause}`,
         `Scope: ${scope}`,
         `Validation: ${validation}`,
-        `Links:\n- [Roadmap](roadmap/tasks.md)` + (logLink ? `\n- Logs: ${logLink}` : "")
-      ].join("\n\n");
+      ];
+      if (logLink) bodyParts.push(`Links:\n- Logs: ${logLink}`);
+      const commitBody = bodyParts.join("\n\n");
 
       let title = plan.commitTitle || ((top.type === "bug" ? "fix" : "feat") + `: ${top.title || top.id}`);
       if (!/^[a-z]+:\s/.test(title)) {
@@ -137,13 +118,15 @@ export async function implementTopTask() {
       }
       try {
         await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
-        await upsertFile("roadmap/tasks.md", () => nextTasks, "bot: remove completed task", { branch: targetBranch });
-        await upsertFile(
-          "roadmap/done.md",
-          () => nextDone,
-          { title: "chore: append done item", body: commitBody },
-          { branch: targetBranch }
-        );
+
+        await supabase.from("tasks").update({ status: "done", type: "done" }).eq("id", top.id);
+        await supabase.from("tasks").insert({
+          title: top.title,
+          desc: top.desc,
+          type: "done",
+          priority: top.priority,
+          parent: top.id,
+        });
 
         console.log("Implement complete.");
       } catch (err) {
