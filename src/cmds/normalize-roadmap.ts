@@ -1,6 +1,7 @@
+import { createClient } from "@supabase/supabase-js";
 import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { readFile, upsertFile } from "../lib/github.js";
+import { upsertFile } from "../lib/github.js";
 
 type Task = {
   id?: string;
@@ -15,20 +16,6 @@ type Task = {
 function normTitle(t = "") {
   return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim();
 }
-function yamlBlock(obj: any) {
-  return "```yaml\n" + yaml.dump(obj, { lineWidth: 120 }) + "```";
-}
-function extractAllItems(md: string): Task[] {
-  const blocks = [...md.matchAll(/```yaml\s*?\n([\s\S]*?)\n```/g)];
-  const out: Task[] = [];
-  for (const m of blocks) {
-    try {
-      const parsed = yaml.load(m[1]) as any;
-      if (parsed && Array.isArray(parsed.items)) out.push(...parsed.items);
-    } catch { /* ignore */ }
-  }
-  return out;
-}
 function isMeta(t: Task) {
   return /batch task synthesis/i.test(t?.title || "") || /```/.test(t?.desc || "");
 }
@@ -36,9 +23,12 @@ function isMeta(t: Task) {
 export async function normalizeRoadmap() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    const path = "roadmap/tasks.md";
-    const raw = (await readFile(path)) || "# Tasks (single source of truth)\n\n```yaml\nitems: []\n```";
-    let items = extractAllItems(raw);
+    const supabaseUrl = process.env.SUPABASE_URL!;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data, error } = await supabase.from("tasks").select("*");
+    if (error) throw error;
+    let items = (data || []) as Task[];
 
     // Drop synthetic/meta tasks
     items = items.filter(t => t?.title && !isMeta(t));
@@ -46,13 +36,15 @@ export async function normalizeRoadmap() {
     // Dedupe by id else (type+title)
     const seen = new Set<string>();
     const deduped: Task[] = [];
+    const dupIds: string[] = [];
     for (const t of items) {
       const key = (t.id && `id:${t.id.toLowerCase().trim()}`) ||
                   `tt:${(t.type||"").toLowerCase()}|${normTitle(t.title!)}`;
-      if (seen.has(key)) continue;
+      if (seen.has(key)) { if (t.id) dupIds.push(t.id); continue; }
       seen.add(key);
       deduped.push(t);
     }
+    if (dupIds.length) await supabase.from("tasks").delete().in("id", dupIds);
 
     // Sort & assign unique priorities (cap 100)
     deduped.sort((a, b) => {
@@ -62,12 +54,15 @@ export async function normalizeRoadmap() {
       if (ca !== cb) return ca.localeCompare(cb);
       return normTitle(a.title!).localeCompare(normTitle(b.title!));
     });
-    const limited = deduped.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
+    const updates = deduped.map((t, i) => ({ id: t.id!, priority: i < 100 ? i + 1 : null }));
+    if (updates.length) await supabase.from("tasks").upsert(updates, { onConflict: "id" });
 
     const header = "# Tasks (single source of truth)\n\n";
-    const next = header + yamlBlock({ items: limited }) + "\n";
-    await upsertFile(path, () => next, "bot: normalize tasks (single block, dedupe, unique priorities)");
-    console.log(`Normalized tasks.md — kept ${limited.length} items.`);
+    const fileTasks = deduped.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
+    const block = "```yaml\n" + yaml.dump({ items: fileTasks }, { lineWidth: 120 }) + "```\n";
+    await upsertFile("roadmap/tasks.md", () => header + block, "bot: normalize tasks (supabase source)");
+
+    console.log(`Normalized tasks — enforced priorities for ${Math.min(deduped.length, 100)} items.`);
   } finally {
     await releaseLock();
   }
