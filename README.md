@@ -18,7 +18,7 @@ Inputs & Outputs
 Inputs
 	•	Build signals: Deploy status + logs (e.g., Vercel API), parsed into issues[] and trimmedLogs.
 	•	Repo snapshot: repoFiles[], repoTree[], export facts, package manifests.
-	•	Roadmap: roadmap/vision.md (protected), roadmap/new.md (backlog), and any roadmap/*.md.
+	•	Roadmap: roadmap/vision.md (protected) with tasks tracked in Supabase.
 	•	Constraints: allowedOps[], commitStyle, protected paths, diff size limits.
 	•	Context: Framework/language hints, package manager, test commands.
 
@@ -39,7 +39,7 @@ A) Red path — Repair first
 	•	If repair fails after N attempts: open an Issue with a concise reproduction + proposed fix plan; back off.
 
 B) Green path — Continuous improvement
-	•	Prioritize from roadmap/new.md (or synthesize from repo gaps if empty).
+	•	Prioritize from Supabase tasks (or synthesize from repo gaps if empty).
 	•	Pick a thin vertical slice (tests + code + docs).
 	•	Implement in small, deployable steps; keep the app green after each step.
 	•	Update backlog item status, link to commit/PR, and write brief rationale in agent/DECISIONS.md.
@@ -64,7 +64,7 @@ Guardrails & safety
 	•	Small, reversible steps: diff size limits; rollbacks on post-merge failure.
 	•	Style conformity: enforces formatter/linter/tsc/tests before committing.
         •       Automated validation: `npm run check` and `npm test` run before a commit and the commit is aborted on failure.
-	•	Traceability: every commit links to the problem (log line/issue id) or roadmap item.
+	•	Traceability: every commit links to the problem (log line/issue id) or corresponding Supabase task.
 	•	Fallbacks: if blocked by permissions/credentials (e.g., 400/403 from deploy API), it files an actionable Issue rather than guessing.
 
 Files & conventions the agent uses
@@ -72,11 +72,11 @@ Files & conventions the agent uses
 	•	agent/STATE.json – last run metadata (what happened, next intent).
 	•	agent/DECISIONS.md – short “why” notes per run.
 	•	AGENT_CHANGELOG.md – human-readable summary of changes.
-	•	roadmap/new.md – backlog the agent pulls from (the agent can propose ~30 items if empty).
-	•	reports/repo_summary.md – ephemeral repo overview (kept out of new.md to avoid your deletion rule).
+	•	Supabase tasks table – backlog the agent pulls from (the agent can propose ~30 items if empty).
+	•	reports/repo_summary.md – ephemeral repo overview (kept out of the tasks table to avoid your deletion rule).
 	•	.github/workflows/ai-dev-agent.yml – schedule (e.g., every 4h) and permissions.
 
-Note on your earlier conflict: instead of writing to new.md, the agent should write its scan to reports/repo_summary.md, and only append concise, actionable backlog items to roadmap/new.md. That prevents agent.synthesize-tasks from nuking the summary.
+Note: backlog items are stored in Supabase; the agent writes repo scans to reports/repo_summary.md to keep tasks separate.
 
 Triggers & cadence
 	•	Cron (e.g., hourly/4-hourly) and on push to default branch.
@@ -84,7 +84,7 @@ Triggers & cadence
 
 Commit & PR etiquette
 	•	Conventional commits (e.g., fix(api): handle 413 from upload endpoint)
-	•	Body must include: root cause, scope, validation steps, and links to logs/issue/roadmap item.
+	•	Body must include: root cause, scope, validation steps, and links to logs/issue/Supabase task.
 	•	PR template auto-filled with test evidence and risk notes.
 
 Observability
@@ -100,7 +100,7 @@ Failure & recovery strategy
 Project-agnostic behavior
 	•	Auto-detects language/framework (Next.js, Node, TS/JS, Python, etc.) and chooses idiomatic patterns.
 	•	If no tests exist, proposes and adds the first test around the touched module to start a testing baseline.
-	•	If no roadmap, seeds roadmap/new.md with ~30 value-centric items (performance, DX, tests, docs, UX polish) tagged by effort/impact.
+	•	If no tasks exist, seeds the Supabase tasks table with ~30 value-centric items (performance, DX, tests, docs, UX polish) tagged by effort/impact.
 
 Setup requirements (minimal)
 	•	Credentials: GitHub token (repo), Deploy provider token (e.g., Vercel) + project id.
@@ -113,5 +113,5 @@ Example run (narrative)
 	3.	Parser maps error to bff/utils/fetchData.js and a missing header guard; proposes a 6-line fix + unit test.
 	4.	Runs linter/tsc/tests → green. Commits with linked log snippet.
 	5.	Redeploy kicks → green.
-	6.	Green path: picks “Add API timeout & retry with exponential backoff” from roadmap/new.md.
+	6.      Green path: picks “Add API timeout & retry with exponential backoff” from the Supabase tasks backlog.
 	7.	Implements small, feature-flagged change + tests + docs; opens PR with validation steps; updates agent/DECISIONS.md.

@@ -92,12 +92,16 @@ export async function implementTopTask() {
       const scope = cb.scope || files.map(f => f.path).join(", ");
       const validation = cb.validation || plan.testHint || "n/a";
       const logLink = cb.logUrl || cb.logs || cb.log || undefined;
+      const taskLink = cb.taskUrl || cb.task || (top.id ? `${ENV.SUPABASE_URL}/rest/v1/tasks?id=eq.${top.id}` : undefined);
       const bodyParts = [
         `Root Cause: ${rootCause}`,
         `Scope: ${scope}`,
         `Validation: ${validation}`,
       ];
-      if (logLink) bodyParts.push(`Links:\n- Logs: ${logLink}`);
+      const linkLines: string[] = [];
+      if (taskLink) linkLines.push(`Task: ${taskLink}`);
+      if (logLink) linkLines.push(`Logs: ${logLink}`);
+      if (linkLines.length) bodyParts.push(`Links:\n- ${linkLines.join("\n- ")}`);
       const commitBody = bodyParts.join("\n\n");
 
       let title = plan.commitTitle || ((top.type === "bug" ? "fix" : "feat") + `: ${top.title || top.id}`);
