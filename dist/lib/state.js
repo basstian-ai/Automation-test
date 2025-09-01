@@ -18,11 +18,14 @@ async function sbRequest(path, init = {}) {
     if (!res.ok) {
         throw new Error(`Supabase error: ${res.status} ${res.statusText}`);
     }
+    if (res.status === 204 || res.headers.get("Content-Length") === "0") {
+        return undefined;
+    }
     return res.json();
 }
 export async function loadState() {
     const data = (await sbRequest("agent_state?select=data&limit=1"));
-    const row = data[0];
+    const row = data?.[0];
     return row?.data || {};
 }
 export async function saveState(next) {
