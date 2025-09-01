@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
-import { insertRoadmap, type RoadmapItem } from "../src/lib/roadmap.js";
+import { createHash } from "node:crypto";
+import { upsertRoadmap, type RoadmapItem } from "../src/lib/roadmap.js";
 import { readYamlBlock } from "../src/lib/md.js";
 
 type Task = {
@@ -44,13 +44,18 @@ async function main() {
     return;
   }
   const items: RoadmapItem[] = tasks.map(t => ({
-    id: t.id ?? randomUUID(),
+    id:
+      t.id ||
+      createHash("sha1")
+        .update(t.title ?? "")
+        .update(t.desc ?? "")
+        .digest("hex"),
     type: t.type === "bug" ? "bug" : "idea",
     title: t.title ?? "",
     details: t.desc ?? "",
     created: t.created ?? new Date().toISOString(),
   }));
-  await insertRoadmap(items);
+  await upsertRoadmap(items);
   console.log(`Migrated ${items.length} tasks to Supabase.`);
 }
 
