@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { upsertFile } from "../lib/github.js";
+import { ENV } from "../lib/env.js";
 function normTitle(t = "") {
     return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim();
 }
@@ -14,9 +15,7 @@ export async function normalizeRoadmap() {
         return;
     }
     try {
-        const supabaseUrl = process.env.SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY);
         const { data, error } = await supabase.from("tasks").select("*");
         if (error)
             throw error;
