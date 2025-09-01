@@ -1,7 +1,7 @@
 // src/cmds/ingest-logs.ts
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { getLatestDeployment, getRuntimeLogs } from "../lib/vercel.js";
-import { loadState, saveState } from "../lib/state.js";
+import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { readFile, upsertFile } from "../lib/github.js";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
 import { summarizeLogToBug, type LogEntryForBug } from "../lib/prompts.js";
@@ -94,6 +94,8 @@ export async function ingestLogs(): Promise<void> {
       const nextNew = writeYamlBlock(currentNew, newYaml);
       await upsertFile(newPath, () => nextNew, "bot: route infra ingestion issues → new.md");
       await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+      await appendChangelog("Handled infra-only logs during ingestion.");
+      await appendDecision("Routed infra-related logs to new.md instead of bugs.md.");
       console.log("Infra-only logs detected; routed to new.md instead of bugs.md.");
       return;
     }
@@ -101,6 +103,8 @@ export async function ingestLogs(): Promise<void> {
     if (appEntries.length === 0) {
         console.log("No application log entries to process.");
         await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+        await appendChangelog("Ingestion run found no application logs.");
+        await appendDecision("No app logs to process from latest deployment.");
         return;
     }
 
@@ -142,6 +146,8 @@ export async function ingestLogs(): Promise<void> {
     await upsertFile(bugsPath, () => next, "bot: ingest logs → bugs.md");
 
     await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+    await appendChangelog("Ingested runtime logs and updated bugs.md.");
+    await appendDecision("Processed runtime logs and updated state after ingestion.");
     console.log("Ingest complete.");
   } finally {
     await releaseLock();

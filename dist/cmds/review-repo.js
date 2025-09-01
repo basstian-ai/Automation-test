@@ -2,7 +2,7 @@ import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, parseRepo, gh, upsertFile } from "../lib/github.js";
 import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
 import { reviewToIdeas, reviewToSummary } from "../lib/prompts.js";
-import { loadState, saveState } from "../lib/state.js";
+import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { requireEnv, ENV } from "../lib/env.js";
 import yaml from "js-yaml";
 export async function reviewRepo() {
@@ -54,6 +54,8 @@ export async function reviewRepo() {
         await upsertFile(newPath, () => nextNewMd, "bot: review repo → new.md");
         const headSha = commitsData[0]?.sha;
         await saveState({ ...state, lastReviewedSha: headSha });
+        await appendChangelog("Reviewed repository and recorded summary.");
+        await appendDecision(`Updated lastReviewedSha to ${headSha}.`);
         console.log("Review complete.");
     }
     finally {
