@@ -10,7 +10,7 @@ export async function reviewRepo() {
         return;
     }
     try {
-        requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_KEY", "SUPABASE_SERVICE_ROLE_KEY"]);
+        requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
         async function fetchRoadmap(type) {
             const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=content&type=eq.${type}`;
             const resp = await fetch(url, {
