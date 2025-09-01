@@ -11,8 +11,8 @@ type Task = { id?: string; title?: string; desc?: string; type?: string; priorit
 export async function implementTopTask() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(["SUPABASE_URL", "SUPABASE_KEY"]);
-    const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_KEY);
+    requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+    const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY);
 
     // Load vision for context
     const vision = (await readFile("roadmap/vision.md")) || "";
