@@ -4,13 +4,13 @@ import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
 import { ENV } from "../lib/env.js";
-import { supabase } from "../lib/supabase.js";
 
 type Task = { id?: string; title?: string; desc?: string; type?: string; priority?: number };
 
 export async function implementTopTask() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
+    const { supabase } = await import("../lib/supabase.js");
     // Load vision for context
     const vision = (await readFile("roadmap/vision.md")) || "";
 
