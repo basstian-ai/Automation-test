@@ -19,7 +19,7 @@
     "js-yaml": "^4.1.0",
     "octokit": "^3.x",
     "openai": "^4.58.0",
-    "@supabase/supabase-js": "^2.43.5"
+    "@supabase/supabase-js": "^2.45.4"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
