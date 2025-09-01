@@ -25,8 +25,9 @@ jobs:
           fi
       - run: npm ci --no-audit --no-fund
       - run: npm run build
-      - run: node dist/cli.js ingest-logs
+      - run: node dist/orchestrator.js
         env:
+          RUN_TASK: ingest-logs
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
           TARGET_REPO: ${{ secrets.TARGET_REPO }}
