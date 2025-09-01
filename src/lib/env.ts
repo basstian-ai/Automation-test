@@ -26,4 +26,4 @@ export function requireEnv(names: string[]) {
   }
 }
 
-requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+// Avoid requiring SUPABASE variables for commands that don't need them.
