@@ -3,6 +3,7 @@ import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, upsertFile } from "../lib/github.js";
 import { readYamlBlock } from "../lib/md.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
+import { requireEnv } from "../lib/env.js";
 
 type Task = { id?: string; type?: string; title?: string; desc?: string; source?: string; created?: string; priority?: number };
 
@@ -13,10 +14,41 @@ function isMeta(t: Task) { return /batch task synthesis/i.test(t?.title || "") |
 export async function synthesizeTasks() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
+    requireEnv(["SUPABASE_URL", "SUPABASE_KEY"]);
+    async function fetchFreshIdeas() {
+      const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=id,content&type=eq.new`;
+      const resp = await fetch(url, {
+        headers: {
+          apikey: process.env.SUPABASE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_KEY!}`,
+        },
+      });
+      if (!resp.ok) return { ideas: "", ids: [] as string[] };
+      const data = await resp.json();
+      return {
+        ideas: data.map((r: { content: string }) => r.content).join("\n"),
+        ids: data.map((r: { id: string }) => r.id),
+      };
+    }
+    async function clearFreshIdeas(ids: string[]) {
+      if (ids.length === 0) return;
+      const inClause = ids.map(id => `"${id}"`).join(",");
+      const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?id=in.(${inClause})`;
+      await fetch(url, {
+        method: "DELETE",
+        headers: {
+          apikey: process.env.SUPABASE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_KEY!}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+      });
+    }
+
     const vision = (await readFile("roadmap/vision.md")) || "";
     const tasksMd = (await readFile("roadmap/tasks.md")) || "";
     const bugsMd  = (await readFile("roadmap/bugs.md"))  || "";
-    const ideasMd = (await readFile("roadmap/new.md"))   || "";
+    const { ideas: ideasMd, ids: freshIds } = await fetchFreshIdeas();
     const doneMd  = (await readFile("roadmap/done.md"))  || "";
 
     const proposal = await synthesizeTasksPrompt({ tasks: tasksMd, bugs: bugsMd, ideas: ideasMd, vision, done: doneMd });
@@ -61,8 +93,8 @@ export async function synthesizeTasks() {
       "bot: synthesize tasks (merge + dedupe + single block)"
     );
 
-    // Clear the ideas queue after merging so items aren't reprocessed
-    await upsertFile("roadmap/new.md", () => "", "bot: clear new.md after task synthesis");
+    // Clear processed ideas from Supabase so items aren't reprocessed
+    await clearFreshIdeas(freshIds);
 
     console.log(`Synthesis complete. Tasks: ${limited.length}`);
   } finally {
