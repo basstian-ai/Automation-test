@@ -101,11 +101,27 @@ export async function implementTopTask() {
         const doneLine = `- ${new Date().toISOString()}: ✅ ${top.id || ""} — ${plan.commitTitle || top.title}\n`;
         const nextDone = done + doneLine;
         if (files.length) {
-            const title = plan.commitTitle || ((top.type === "bug" ? "fix" : "feat") + `: ${top.title || top.id}`);
+            // Build commit body describing root cause, scope, and validation
+            const cb = typeof plan.commitBody === "object" ? plan.commitBody : {};
+            const rootCause = cb.rootCause || top.desc || "n/a";
+            const scope = cb.scope || files.map(f => f.path).join(", ");
+            const validation = cb.validation || plan.testHint || "n/a";
+            const logLink = cb.logUrl || cb.logs || cb.log || undefined;
+            const commitBody = [
+                `Root Cause: ${rootCause}`,
+                `Scope: ${scope}`,
+                `Validation: ${validation}`,
+                `Links:\n- [Roadmap](roadmap/tasks.md)` + (logLink ? `\n- Logs: ${logLink}` : "")
+            ].join("\n\n");
+            let title = plan.commitTitle || ((top.type === "bug" ? "fix" : "feat") + `: ${top.title || top.id}`);
+            if (!/^[a-z]+:\s/.test(title)) {
+                const prefix = top.type === "bug" ? "fix" : "feat";
+                title = `${prefix}: ${title}`;
+            }
             try {
-                await commitMany(files, title, { branch: targetBranch });
-                await upsertFile("roadmap/tasks.md", () => nextTasks, "bot: remove completed task", { branch: targetBranch });
-                await upsertFile("roadmap/done.md", () => nextDone, "bot: append done item", { branch: targetBranch });
+                await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
+                await upsertFile("roadmap/tasks.md", () => nextTasks, { title: "chore: remove completed task", body: commitBody }, { branch: targetBranch });
+                await upsertFile("roadmap/done.md", () => nextDone, { title: "chore: append done item", body: commitBody }, { branch: targetBranch });
                 console.log("Implement complete.");
             }
             catch (err) {

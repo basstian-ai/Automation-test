@@ -3,6 +3,12 @@ import { posix as pathPosix } from "node:path";
 import { ENV } from "./env.js";
 
 export type RepoRef = { owner: string; repo: string };
+export type CommitMessage = string | { title: string; body?: string };
+
+function formatMessage(msg: CommitMessage): string {
+  if (typeof msg === "string") return msg;
+  return msg.body ? `${msg.title}\n\n${msg.body}` : msg.title;
+}
 
 export function parseRepo(s: string): RepoRef {
   const [owner, repo] = s.split("/");
@@ -79,7 +85,7 @@ export async function readFile(path: string): Promise<string | undefined> {
 export async function upsertFile(
   path: string,
   updater: (old: string | undefined) => string,
-  message: string,
+  message: CommitMessage,
   opts?: { branch?: string }
 ) {
   const { owner, repo } = parseRepo(ENV.TARGET_REPO);
@@ -87,7 +93,8 @@ export async function upsertFile(
   const ref = opts?.branch;
   if (ENV.DRY_RUN) {
     const next = updater(undefined);
-    console.log(`[DRY_RUN] upsert ${safePath} on ${ref || "(default branch)"}: ${message}\n---\n${next}\n---`);
+    const msg = formatMessage(message);
+    console.log(`[DRY_RUN] upsert ${safePath} on ${ref || "(default branch)"}: ${msg}\n---\n${next}\n---`);
     return;
   }
   const { sha, content: old } = await getFile(owner, repo, safePath, ref);
@@ -96,7 +103,7 @@ export async function upsertFile(
     owner,
     repo,
     path: safePath,
-    message,
+    message: formatMessage(message),
     content: b64(next),
     sha,
     ...(ref ? { branch: ref } : {}),
@@ -107,13 +114,14 @@ export async function upsertFile(
 
 export async function commitMany(
   files: Array<{ path: string; content: string }>,
-  message: string,
+  message: CommitMessage,
   opts?: { branch?: string }
 ) {
   const { owner, repo } = parseRepo(ENV.TARGET_REPO);
   const ref = opts?.branch;
   if (ENV.DRY_RUN) {
-    console.log(`[DRY_RUN] commitMany ${files.length} files on ${ref || "(default branch)"}: ${message}`);
+    const msg = formatMessage(message);
+    console.log(`[DRY_RUN] commitMany ${files.length} files on ${ref || "(default branch)"}: ${msg}`);
     return;
   }
   for (const f of files) {
@@ -123,7 +131,7 @@ export async function commitMany(
       owner,
       repo,
       path: safePath,
-      message,
+      message: formatMessage(message),
       content: b64(f.content),
       sha,
       ...(ref ? { branch: ref } : {}),
