@@ -136,10 +136,8 @@ export async function implementTopTask() {
         return;
       }
       try {
-        await commitMany(files, title, { branch: targetBranch });
+        await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
         await upsertFile("roadmap/tasks.md", () => nextTasks, "bot: remove completed task", { branch: targetBranch });
-        await upsertFile("roadmap/done.md", () => nextDone, "bot: append done item", { branch: targetBranch });
-
         await upsertFile(
           "roadmap/done.md",
           () => nextDone,
