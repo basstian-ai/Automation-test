@@ -1,5 +1,6 @@
 import { readFile, upsertFile } from "./github.js";
 const STATE_PATH = "agent/STATE.json";
+const LEGACY_STATE_PATH = "roadmap/.state/agent-state.json";
 const CHANGELOG_PATH = "AGENT_CHANGELOG.md";
 const DECISIONS_PATH = "agent/DECISIONS.md";
 
@@ -9,7 +10,7 @@ export type AgentState = {
 };
 
 export async function loadState(): Promise<AgentState> {
-  const raw = await readFile(STATE_PATH);
+  const raw = (await readFile(STATE_PATH)) ?? (await readFile(LEGACY_STATE_PATH));
   if (!raw) return {};
   try { return JSON.parse(raw) as AgentState; } catch { return {}; }
 }
