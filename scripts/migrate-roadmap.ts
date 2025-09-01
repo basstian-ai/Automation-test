@@ -1,9 +1,10 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
-import { supabase } from "../src/lib/supabase.js";
+import { randomUUID } from "node:crypto";
+import { insertRoadmap, type RoadmapItem } from "../src/lib/roadmap.js";
 import { readYamlBlock } from "../src/lib/md.js";
 
-export type Task = {
+type Task = {
   id?: string;
   type?: "bug" | "improvement" | "feature" | string;
   title?: string;
@@ -42,9 +43,15 @@ async function main() {
     console.log("No roadmap files found; nothing to migrate.");
     return;
   }
-  const { error } = await supabase.from("tasks").upsert(tasks, { onConflict: "id" });
-  if (error) throw error;
-  console.log(`Migrated ${tasks.length} tasks to Supabase.`);
+  const items: RoadmapItem[] = tasks.map(t => ({
+    id: t.id ?? randomUUID(),
+    type: t.type === "bug" ? "bug" : "idea",
+    title: t.title ?? "",
+    details: t.desc ?? "",
+    created: t.created ?? new Date().toISOString(),
+  }));
+  await insertRoadmap(items);
+  console.log(`Migrated ${items.length} tasks to Supabase.`);
 }
 
 main().catch(err => {
