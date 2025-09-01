@@ -1,6 +1,5 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { readFile, parseRepo, gh, upsertFile } from "../lib/github.js";
-import { readYamlBlock, writeYamlBlock } from "../lib/md.js";
+import { parseRepo, gh, upsertFile } from "../lib/github.js";
 import { reviewToIdeas, reviewToSummary } from "../lib/prompts.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { requireEnv, ENV } from "../lib/env.js";
@@ -11,12 +10,25 @@ export async function reviewRepo() {
         return;
     }
     try {
-        requireEnv(["TARGET_REPO"]);
-        const vision = (await readFile("roadmap/vision.md")) || "";
-        const tasks = (await readFile("roadmap/tasks.md")) || "";
-        const bugs = (await readFile("roadmap/bugs.md")) || "";
-        const done = (await readFile("roadmap/done.md")) || "";
-        const fresh = (await readFile("roadmap/new.md")) || "";
+        requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_KEY", "SUPABASE_SERVICE_ROLE_KEY"]);
+        async function fetchRoadmap(type) {
+            const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=content&type=eq.${type}`;
+            const resp = await fetch(url, {
+                headers: {
+                    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+                    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+                },
+            });
+            if (!resp.ok)
+                return "";
+            const data = await resp.json();
+            return data.map((r) => r.content).join("\n");
+        }
+        const vision = await fetchRoadmap("vision");
+        const tasks = await fetchRoadmap("tasks");
+        const bugs = await fetchRoadmap("bugs");
+        const done = await fetchRoadmap("done");
+        const fresh = await fetchRoadmap("new");
         const state = await loadState();
         const { owner, repo } = parseRepo(ENV.TARGET_REPO);
         const commitsResp = await gh().rest.repos.listCommits({ owner, repo, per_page: 10 });
@@ -38,20 +50,26 @@ export async function reviewRepo() {
         // 2. Generate actionable ideas from summary
         const ideasInput = { summary, vision, tasks, bugs, done, fresh };
         const ideasYaml = await reviewToIdeas(ideasInput);
-        // 3. Append new ideas to roadmap/new.md
-        const newPath = "roadmap/new.md";
-        const currentNewMd = (await readFile(newPath)) || "";
-        const currentIdeas = readYamlBlock(currentNewMd, { queue: [] });
+        // 3. Insert new ideas into Supabase
         const newIdeas = yaml.load(ideasYaml)?.queue || [];
         for (const idea of newIdeas) {
-            currentIdeas.queue.push({
-                ...idea,
+            const payload = {
                 id: idea.id || `IDEA-${Date.now()}`,
-                created: idea.created || new Date().toISOString()
+                type: "new",
+                content: yaml.dump(idea),
+                created: idea.created || new Date().toISOString(),
+            };
+            await fetch(`${process.env.SUPABASE_URL}/rest/v1/roadmap_items`, {
+                method: "POST",
+                headers: {
+                    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+                    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+                    "Content-Type": "application/json",
+                    Prefer: "return=minimal",
+                },
+                body: JSON.stringify(payload),
             });
         }
-        const nextNewMd = writeYamlBlock(currentNewMd, currentIdeas);
-        await upsertFile(newPath, () => nextNewMd, "bot: review repo → new.md");
         const headSha = commitsData[0]?.sha;
         await saveState({ ...state, lastReviewedSha: headSha });
         await appendChangelog("Reviewed repository and recorded summary.");
