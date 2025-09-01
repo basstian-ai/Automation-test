@@ -13,6 +13,8 @@ export const ENV = {
   DRY_RUN: process.env.DRY_RUN === "1",
   BRANCH: process.env.GITHUB_REF_NAME || process.env.GITHUB_HEAD_REF || "",
   ALLOW_PATHS: (process.env.ALLOW_PATHS || "").split(",").map(s => s.trim()).filter(Boolean),
+  SUPABASE_URL: process.env.SUPABASE_URL || "",
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
 };
 
 // Call this inside commands to assert only what they need.
@@ -23,3 +25,5 @@ export function requireEnv(names: string[]) {
     }
   }
 }
+
+requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
