@@ -88,7 +88,7 @@ export async function implementTopTask() {
       const scope = cb.scope || files.map(f => f.path).join(", ");
       const validation = cb.validation || plan.testHint || "n/a";
       const logLink = cb.logUrl || cb.logs || cb.log || undefined;
-      const taskLink = cb.taskUrl || cb.task || (top.id ? `${supabase.supabaseUrl}/rest/v1/tasks?id=eq.${top.id}` : undefined);
+      const taskLink = cb.taskUrl || cb.task || (top.id ? `${ENV.SUPABASE_URL}/rest/v1/tasks?id=eq.${top.id}` : undefined);
       const bodyParts = [
         `Root Cause: ${rootCause}`,
         `Scope: ${scope}`,
@@ -118,28 +118,8 @@ export async function implementTopTask() {
       }
       try {
         await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
-
-        const { error: updateError } = await supabase
-          .from("tasks")
-          .update({ status: "done", type: "done" })
-          .eq("id", top.id);
-        if (updateError) {
-          console.error("Failed to update task status", updateError);
-          return;
-        }
-
-        const { error: insertError } = await supabase.from("tasks").insert({
-          title: top.title,
-          desc: top.desc,
-          type: "done",
-          priority: top.priority,
-          parent: top.id,
-        });
-        if (insertError) {
-          console.error("Failed to insert completed task record", insertError);
-          return;
-        }
-
+        const { completeTask } = await import("../lib/tasks.js");
+        await completeTask(top);
         console.log("Implement complete.");
       } catch (err) {
         console.error("Bulk commit failed; no changes were applied.", err);
