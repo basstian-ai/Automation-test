@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch, upsertFile } from "../lib/github.js";
 import yaml from "js-yaml";
@@ -105,6 +106,13 @@ export async function implementTopTask() {
 
     if (files.length) {
       const title = plan.commitTitle || ((top.type === "bug" ? "fix" : "feat") + `: ${top.title || top.id}`);
+      try {
+        execSync("npm run check", { stdio: "inherit" });
+        execSync("npm test", { stdio: "inherit" });
+      } catch (err) {
+        console.error("Checks or tests failed; aborting commit.", err);
+        return;
+      }
       try {
         await commitMany(files, title, { branch: targetBranch });
         await upsertFile("roadmap/tasks.md", () => nextTasks, "bot: remove completed task", { branch: targetBranch });

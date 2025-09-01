@@ -63,6 +63,7 @@ Guardrails & safety
 	•	Allowed ops whitelist: file types and directories it may touch; dependency changes gated behind explicit flag.
 	•	Small, reversible steps: diff size limits; rollbacks on post-merge failure.
 	•	Style conformity: enforces formatter/linter/tsc/tests before committing.
+        •       Automated validation: `npm run check` and `npm test` run before a commit and the commit is aborted on failure.
 	•	Traceability: every commit links to the problem (log line/issue id) or roadmap item.
 	•	Fallbacks: if blocked by permissions/credentials (e.g., 400/403 from deploy API), it files an actionable Issue rather than guessing.
 
