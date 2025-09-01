@@ -7,6 +7,7 @@ import { ENV, requireEnv } from "../lib/env.js";
 type Task = { id?: string; type?: string; title?: string; desc?: string; source?: string; created?: string; priority?: number };
 
 function normTitle(t = "") { return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim(); }
+function normType(t = "") { return t.toLowerCase() === "idea" ? "idea" : "task"; }
 function yamlBlock(obj: any) { return "```yaml\n" + yaml.dump(obj, { lineWidth: 120 }) + "```"; }
 function isMeta(t: Task) { return /batch task synthesis/i.test(t?.title || "") || /```/.test(t?.desc || ""); }
 
@@ -51,7 +52,7 @@ export async function synthesizeTasks() {
     const merged: Task[] = [];
     for (const t of [...existing, ...proposed]) {
       const key = (t.id && `id:${t.id.toLowerCase().trim()}`) ||
-                  `tt:${(t.type||"").toLowerCase()}|${normTitle(t.title!)}`;
+                  `tt:${normType(t.type)}|${normTitle(t.title!)}`;
       if (seen.has(key)) continue;
       seen.add(key);
       merged.push(t);
