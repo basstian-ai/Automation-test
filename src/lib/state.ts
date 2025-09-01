@@ -1,8 +1,8 @@
 import { ENV } from "./env.js";
 import { readFile, upsertFile } from "./github.js";
 
-const { SUPABASE_URL, SUPABASE_KEY } = ENV;
-const HAS_SUPABASE = !!SUPABASE_URL && !!SUPABASE_KEY;
+const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = ENV;
+const HAS_SUPABASE = !!SUPABASE_URL && !!SUPABASE_SERVICE_ROLE_KEY;
 
 const STATE_PATH = "agent/STATE.json";
 const LEGACY_STATE_PATH = "roadmap/.state/agent-state.json";
@@ -15,8 +15,8 @@ async function sbRequest(path: string, init: RequestInit = {}) {
   }
   const url = `${SUPABASE_URL}/rest/v1/${path}`;
   const headers: Record<string, string> = {
-    apikey: SUPABASE_KEY!,
-    Authorization: `Bearer ${SUPABASE_KEY}`,
+    apikey: SUPABASE_SERVICE_ROLE_KEY!,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
     "Content-Type": "application/json",
     ...(init.headers as Record<string, string>),
   };
