@@ -4,8 +4,7 @@ import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
 import { ENV } from "../lib/env.js";
-
-type Task = { id?: string; title?: string; desc?: string; type?: string; priority?: number };
+import type { Task } from "../lib/types.js";
 
 export async function implementTopTask() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }

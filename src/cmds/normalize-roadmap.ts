@@ -1,16 +1,7 @@
 import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { upsertFile } from "../lib/github.js";
-
-type Task = {
-  id?: string;
-  type?: "bug" | "improvement" | "feature" | string;
-  title?: string;
-  desc?: string;
-  source?: string;
-  created?: string;
-  priority?: number;
-};
+import type { Task } from "../lib/types.js";
 
 function normTitle(t = "") {
   return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim();
