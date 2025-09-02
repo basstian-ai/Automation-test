@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import type { Task } from "../lib/types.js";
 import { ENV } from "../lib/env.js";
+import yaml from "js-yaml";
 
 function normTitle(t = "") {
   return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim();
@@ -17,12 +18,29 @@ export async function normalizeRoadmap() {
     const { data, error } = await supabase
       .from("roadmap_items")
       .select("*")
-      .eq("type", "task");
+      .in("type", ["task", "new"]);
     if (error) throw error;
-    let items = (data || []).map((t: any) => ({
-      ...t,
-      created: t.created ?? t.created_at,
-    })) as Task[];
+    let items = (data || []).map((t: any) => {
+      let item: Task = {
+        ...t,
+        created: t.created ?? t.created_at,
+      };
+      if (t.type === "new") {
+        try {
+          const parsed = yaml.load(t.content) as any;
+          item = {
+            ...item,
+            type: "task",
+            title: parsed?.title || t.title,
+            desc: parsed?.details || parsed?.desc,
+            created: parsed?.created || item.created,
+          };
+        } catch {
+          item = { ...item, type: "task" };
+        }
+      }
+      return item;
+    }) as Task[];
 
     // Drop synthetic/meta tasks
     items = items.filter(t => t?.title && !isMeta(t));
@@ -41,7 +59,6 @@ export async function normalizeRoadmap() {
     if (dupIds.length) await supabase
       .from("roadmap_items")
       .delete()
-      .eq("type", "task")
       .in("id", dupIds);
 
     // Sort & assign unique priorities (cap 100)
@@ -60,6 +77,9 @@ export async function normalizeRoadmap() {
     if (updates.length) await supabase
       .from("roadmap_items")
       .upsert(updates, { onConflict: "id" });
+
+    // Remove any residual "new" entries after conversion
+    await supabase.from("roadmap_items").delete().eq("type", "new");
 
     console.log(
       `Normalized tasks — enforced priorities for ${Math.min(deduped.length, 100)} items in Supabase.`
