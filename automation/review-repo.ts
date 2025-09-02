@@ -13,8 +13,8 @@ let PROTECTED_PATHS: string[];
 try {
   PROTECTED_PATHS = JSON.parse(process.env.PROTECTED_PATHS || "[]");
 } catch (err) {
-  console.warn("Ignoring invalid PROTECTED_PATHS env var", err);
-  PROTECTED_PATHS = [];
+  console.error("Invalid PROTECTED_PATHS env var", err);
+  process.exit(1);
 }
 
 const IGNORE_DIRS = new Set([
