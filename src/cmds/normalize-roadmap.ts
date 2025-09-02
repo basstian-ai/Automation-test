@@ -11,6 +11,15 @@ function isMeta(t: Task) {
   return /batch task synthesis/i.test(t?.title || "") || /```/.test(t?.desc || "");
 }
 
+export function compareTasks(a: Task, b: Task) {
+  const pa = a.priority ?? 1e9, pb = b.priority ?? 1e9;
+  if (pa !== pb) return pa - pb;
+  const ca = a.created instanceof Date ? a.created.toISOString() : String(a.created ?? "");
+  const cb = b.created instanceof Date ? b.created.toISOString() : String(b.created ?? "");
+  if (ca !== cb) return ca.localeCompare(cb);
+  return normTitle(a.title!).localeCompare(normTitle(b.title!));
+}
+
 export async function normalizeRoadmap() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
@@ -62,13 +71,7 @@ export async function normalizeRoadmap() {
       .in("id", dupIds);
 
     // Sort & assign unique priorities (cap 100)
-    deduped.sort((a, b) => {
-      const pa = a.priority ?? 1e9, pb = b.priority ?? 1e9;
-      if (pa !== pb) return pa - pb;
-      const ca = a.created || "", cb = b.created || "";
-      if (ca !== cb) return ca.localeCompare(cb);
-      return normTitle(a.title!).localeCompare(normTitle(b.title!));
-    });
+    deduped.sort(compareTasks);
     const updates = deduped.map((t, i) => ({
       id: t.id!,
       type: "task",
