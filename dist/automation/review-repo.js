@@ -8,7 +8,14 @@ const MAX_SAMPLED_FILES = Number(process.env.MAX_SAMPLED_FILES || 80);
 const MAX_BYTES = Number(process.env.MAX_BYTES_PER_FILE || 1500);
 const MAX_INPUT_CHARS = Number(process.env.MAX_INPUT_CHARS || 80000);
 const MAX_TASKS = parseInt(process.env.MAX_TASKS_PER_RUN || "5", 10);
-const PROTECTED_PATHS = JSON.parse(process.env.PROTECTED_PATHS || "[]");
+let PROTECTED_PATHS;
+try {
+    PROTECTED_PATHS = JSON.parse(process.env.PROTECTED_PATHS || "[]");
+}
+catch (err) {
+    console.warn("Ignoring invalid PROTECTED_PATHS env var", err);
+    PROTECTED_PATHS = [];
+}
 const IGNORE_DIRS = new Set([
     "node_modules",
     ".git",
