@@ -53,7 +53,7 @@ export async function reviewToIdeas(input) {
         {
             role: "system",
             content: "You are an experienced software architect. Based on the provided summary and other context, propose concise, actionable items for a code bot. Include tasks that make visible progress for the end user." +
-                "Return ONLY YAML in a code block with the shape:\n```yaml\nqueue:\n  - id: <leave blank or omit>\n    title: <short>\n    details: <1-3 lines>\n    created: <ISO>\n```" +
+                "Return ONLY YAML with the shape:\nqueue:\n  - id: <leave blank or omit>\n    title: <short>\n    details: <1-3 lines>\n    created: <ISO>\n" +
                 "\nAvoid duplicates vs the provided lists. Focus on the opportunities identified in the summary."
         },
         { role: "user", content: JSON.stringify(input, null, 2) }

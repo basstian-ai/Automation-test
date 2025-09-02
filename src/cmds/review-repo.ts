@@ -53,9 +53,16 @@ export async function reviewRepo() {
     // 2. Generate actionable ideas from summary
     const ideasInput = { summary, vision, tasks, bugs, done, ideas };
     const ideasYaml = await reviewToIdeas(ideasInput);
+    // Normalize by removing fenced code block markers if present
+    const normalizedIdeasYaml = ideasYaml
+      .trim()
+      .replace(/^```(?:yaml)?\n?/i, "")
+      .replace(/\n?```$/, "")
+      .trim();
 
     // 3. Insert new ideas into Supabase
-    const newIdeas = (yaml.load(ideasYaml) as { queue: any[] })?.queue || [];
+    const newIdeas =
+      (yaml.load(normalizedIdeasYaml) as { queue: any[] })?.queue || [];
     for (const idea of newIdeas) {
       const payload = {
         id: idea.id || `IDEA-${Date.now()}`,

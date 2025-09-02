@@ -77,16 +77,16 @@ export async function reviewToIdeas(input: {
   ideas: string; // current ideas queue content
 }): Promise<string> {
   const openai = getOpenAI();
-  const messages = [
-    {
-      role: "system" as const,
-      content:
-        "You are an experienced software architect. Based on the provided summary and other context, propose concise, actionable items for a code bot. Include tasks that make visible progress for the end user." +
-        "Return ONLY YAML in a code block with the shape:\n```yaml\nqueue:\n  - id: <leave blank or omit>\n    title: <short>\n    details: <1-3 lines>\n    created: <ISO>\n```" +
-        "\nAvoid duplicates vs the provided lists. Focus on the opportunities identified in the summary."
-    },
-    { role: "user" as const, content: JSON.stringify(input, null, 2) }
-  ];
+    const messages = [
+      {
+        role: "system" as const,
+        content:
+          "You are an experienced software architect. Based on the provided summary and other context, propose concise, actionable items for a code bot. Include tasks that make visible progress for the end user." +
+          "Return ONLY YAML with the shape:\nqueue:\n  - id: <leave blank or omit>\n    title: <short>\n    details: <1-3 lines>\n    created: <ISO>\n" +
+          "\nAvoid duplicates vs the provided lists. Focus on the opportunities identified in the summary."
+      },
+      { role: "user" as const, content: JSON.stringify(input, null, 2) }
+    ];
   const r = await openai.chat.completions.create({
     model: ENV.OPENAI_MODEL,
     messages
