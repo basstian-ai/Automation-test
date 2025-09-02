@@ -14,7 +14,7 @@ type Task = {
   priority?: number;
 };
 
-async function readTasksFrom(dir: string): Promise<Task[]> {
+async function readTasksFrom(dir: string, warnings: string[]): Promise<Task[]> {
   let tasks: Task[] = [];
   let entries: string[];
   try {
@@ -29,8 +29,10 @@ async function readTasksFrom(dir: string): Promise<Task[]> {
       const raw = await fs.readFile(fp, "utf8");
       const parsed = readYamlBlock<{ items?: Task[] }>(raw, { items: [] });
       tasks = tasks.concat(parsed.items || []);
-    } catch {
-      // ignore bad files
+    } catch (err) {
+      const msg = `Failed to read ${fp}: ${(err as Error).message}`;
+      warnings.push(msg);
+      console.warn(msg);
     }
   }
   return tasks;
@@ -38,7 +40,8 @@ async function readTasksFrom(dir: string): Promise<Task[]> {
 
 async function main() {
   const dir = join(process.cwd(), "roadmap");
-  const tasks = await readTasksFrom(dir);
+  const warnings: string[] = [];
+  const tasks = await readTasksFrom(dir, warnings);
   if (!tasks.length) {
     console.log("No roadmap files found; nothing to migrate.");
     return;
@@ -57,6 +60,10 @@ async function main() {
   }));
   await upsertRoadmap(items);
   console.log(`Migrated ${items.length} tasks to Supabase.`);
+  if (warnings.length) {
+    console.warn("Skipped files during migration:");
+    for (const w of warnings) console.warn(`- ${w}`);
+  }
 }
 
 main().catch(err => {
