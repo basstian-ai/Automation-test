@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ai-dev-agent-global
@@ -40,5 +40,5 @@ jobs:
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          DRY_RUN: "1"
+          DRY_RUN: "0"
           ALLOW_PATHS: ""
