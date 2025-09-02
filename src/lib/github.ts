@@ -2,6 +2,8 @@ import { Octokit } from "octokit";
 import { posix as pathPosix } from "node:path";
 import { ENV } from "./env.js";
 
+export const gh = new Octokit({ auth: ENV.PAT_TOKEN });
+
 export type RepoRef = { owner: string; repo: string };
 export type CommitMessage = string | { title: string; body?: string };
 
@@ -16,18 +18,13 @@ export function parseRepo(s: string): RepoRef {
   return { owner, repo };
 }
 
-export function gh() {
-  return new Octokit({ auth: ENV.PAT_TOKEN });
-}
-
 function b64(s: string) {
   return Buffer.from(s, "utf8").toString("base64");
 }
 
 async function getFile(owner: string, repo: string, path: string, ref?: string) {
-  const client = gh();
   try {
-    const res = await client.rest.repos.getContent({ owner, repo, path, ref });
+    const res = await gh.rest.repos.getContent({ owner, repo, path, ref });
     const data = res.data as any;
     if (Array.isArray(data)) throw new Error(`Expected file at ${path}, got directory`);
     const sha = data.sha as string | undefined;
@@ -41,7 +38,7 @@ async function getFile(owner: string, repo: string, path: string, ref?: string) 
 
 export async function getDefaultBranch(): Promise<string> {
   const { owner, repo } = parseRepo(ENV.TARGET_REPO);
-  const { data } = await gh().rest.repos.get({ owner, repo });
+  const { data } = await gh.rest.repos.get({ owner, repo });
   return data.default_branch;
 }
 
@@ -49,15 +46,15 @@ export async function ensureBranch(branch: string, baseBranch?: string): Promise
   const { owner, repo } = parseRepo(ENV.TARGET_REPO);
   const ref = `heads/${branch}`;
   try {
-    await gh().rest.git.getRef({ owner, repo, ref });
+    await gh.rest.git.getRef({ owner, repo, ref });
     return;
   } catch (e: any) {
     if (e?.status !== 404) throw e;
   }
   const base = baseBranch || await getDefaultBranch();
-  const baseRef = await gh().rest.git.getRef({ owner, repo, ref: `heads/${base}` });
+  const baseRef = await gh.rest.git.getRef({ owner, repo, ref: `heads/${base}` });
   const baseSha = baseRef.data.object.sha;
-  await gh().rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: baseSha });
+  await gh.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: baseSha });
 }
 
 export function resolveRepoPath(p: string): string {
@@ -99,7 +96,7 @@ export async function upsertFile(
   }
   const { sha, content: old } = await getFile(owner, repo, safePath, ref);
   const next = updater(old);
-  await gh().rest.repos.createOrUpdateFileContents({
+  await gh.rest.repos.createOrUpdateFileContents({
     owner,
     repo,
     path: safePath,
@@ -132,7 +129,7 @@ export async function commitMany(
   }
 
   const branch = ref || (await getDefaultBranch());
-  const git = gh().rest.git;
+  const git = gh.rest.git;
   const headRef = await git.getRef({ owner, repo, ref: `heads/${branch}` });
   const latestCommitSha = headRef.data.object.sha;
   const latestCommit = await git.getCommit({
