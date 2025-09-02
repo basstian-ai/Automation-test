@@ -75,7 +75,7 @@ export async function reviewRepo() {
       id: idea.id || crypto.randomUUID(),
       type: "task",
       title: idea.title,
-      details: idea.details,
+      content: idea.details,
       source: "review",
       created: idea.created || new Date().toISOString(),
     }));
