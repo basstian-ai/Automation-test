@@ -22,7 +22,7 @@ async function resolveModel(client: OpenAI): Promise<string> {
 
 export async function planRepo(input: {
   manifest: any;
-  roadmap: { tasks: string; fresh: string };
+  roadmap: { tasks: string; ideas: string };
   vision: { path: string; content: string };
   maxTasks: number;
   protected: string[];
