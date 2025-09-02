@@ -5,6 +5,7 @@ import { loadState, saveState, appendChangelog, appendDecision } from "../lib/st
 import { requireEnv, ENV } from "../lib/env.js";
 import { sbRequest } from "../lib/supabase.js";
 import yaml from "js-yaml";
+import crypto from "node:crypto";
 export async function reviewRepo() {
     if (!(await acquireLock())) {
         console.log("Lock taken; exiting.");
@@ -62,22 +63,23 @@ export async function reviewRepo() {
                 yaml.load(normalizedIdeasYaml)?.queue || [];
         }
         catch (err) {
-            console.warn("Failed to parse ideas YAML; defaulting to empty array.", err);
-            console.warn("Offending YAML:\n" + normalizedIdeasYaml);
+            console.error("Failed to parse ideas YAML.", err);
+            console.error("Offending YAML:\n" + normalizedIdeasYaml);
+            throw new Error("Failed to parse ideas YAML");
         }
-        for (const idea of newIdeas) {
-            const payload = {
-                id: idea.id || `IDEA-${Date.now()}`,
-                type: "task",
-                title: idea.title,
-                desc: idea.details,
-                source: "review",
-                created: idea.created || new Date().toISOString(),
-            };
+        const payloads = newIdeas.map((idea) => ({
+            id: idea.id || crypto.randomUUID(),
+            type: "task",
+            title: idea.title,
+            desc: idea.details,
+            source: "review",
+            created: idea.created || new Date().toISOString(),
+        }));
+        if (payloads.length > 0) {
             await sbRequest("roadmap_items", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(payloads),
             });
         }
         const headSha = commitsData[0]?.sha;

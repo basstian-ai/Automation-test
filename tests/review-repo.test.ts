@@ -7,6 +7,8 @@ const envVars = {
 };
 
 let saveState: ReturnType<typeof vi.fn>;
+let reviewToIdeas: ReturnType<typeof vi.fn>;
+let sbRequest: ReturnType<typeof vi.fn>;
 
 vi.mock('../src/lib/lock.js', () => ({
   acquireLock: vi.fn().mockResolvedValue(true),
@@ -15,13 +17,24 @@ vi.mock('../src/lib/lock.js', () => ({
 
 vi.mock('../src/lib/github.js', () => ({
   parseRepo: vi.fn().mockReturnValue({ owner: 'o', repo: 'r' }),
-  gh: { rest: { repos: { listCommits: vi.fn().mockResolvedValue({ data: [{ sha: '1234567', commit: { message: 'msg' } }] }) } } },
+  gh: {
+    rest: {
+      repos: {
+        listCommits: vi.fn().mockResolvedValue({
+          data: [{ sha: '1234567', commit: { message: 'msg' } }],
+        }),
+      },
+    },
+  },
 }));
 
-vi.mock('../src/lib/prompts.js', () => ({
-  reviewToSummary: vi.fn().mockResolvedValue('summary'),
-  reviewToIdeas: vi.fn().mockResolvedValue('queue:\n  - id: 1\n    title: "Test'),
-}));
+vi.mock('../src/lib/prompts.js', () => {
+  reviewToIdeas = vi.fn();
+  return {
+    reviewToSummary: vi.fn().mockResolvedValue('summary'),
+    reviewToIdeas,
+  };
+});
 
 vi.mock('../src/lib/state.js', () => {
   saveState = vi.fn();
@@ -33,12 +46,12 @@ vi.mock('../src/lib/state.js', () => {
   };
 });
 
-vi.mock('../src/lib/supabase.js', () => ({
-  sbRequest: vi.fn().mockResolvedValue([]),
-}));
+vi.mock('../src/lib/supabase.js', () => {
+  sbRequest = vi.fn().mockResolvedValue([]);
+  return { sbRequest };
+});
 
 beforeEach(() => {
-  vi.resetModules();
   vi.clearAllMocks();
   process.env.TARGET_REPO = envVars.TARGET_REPO;
   process.env.SUPABASE_URL = envVars.SUPABASE_URL;
@@ -53,7 +66,24 @@ afterEach(() => {
 
 test('reviewRepo throws on invalid ideas YAML', async () => {
   const { reviewRepo } = await import('../src/cmds/review-repo.ts');
+  reviewToIdeas.mockResolvedValue('queue:\n  - id: 1\n    title: "Test');
   await expect(reviewRepo()).rejects.toThrow('Failed to parse ideas YAML');
   expect(saveState).not.toHaveBeenCalled();
 });
 
+test('reviewRepo batches ideas and generates unique IDs', async () => {
+  const { reviewRepo } = await import('../src/cmds/review-repo.ts');
+  reviewToIdeas.mockResolvedValue(
+    'queue:\n  - title: One\n    details: first\n  - title: Two\n    details: second\n',
+  );
+  await reviewRepo();
+  const postCalls = sbRequest.mock.calls.filter(([, init]) => init?.method === 'POST');
+  expect(postCalls).toHaveLength(2);
+  const ideasBody = JSON.parse(postCalls[1][1].body);
+  expect(ideasBody).toHaveLength(2);
+  const [first, second] = ideasBody;
+  const uuidRegex = /^[0-9a-f-]{36}$/i;
+  expect(first.id).toMatch(uuidRegex);
+  expect(second.id).toMatch(uuidRegex);
+  expect(first.id).not.toBe(second.id);
+});
