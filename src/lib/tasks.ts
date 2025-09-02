@@ -14,7 +14,17 @@ export async function completeTask(task: Task) {
     ...(task.type != null ? { type: task.type } : {}),
   };
 
-  const { error } = await supabase.rpc("complete_roadmap_task", params);
-  if (error) throw error;
+  // Try the canonical function name first
+  let { error } = await supabase.rpc("complete_task", params);
+  if (error && /not found|No function/i.test(String(error.message))) {
+    // Backward compatibility for older database schemas
+    const { error: fallbackError } = await supabase.rpc(
+      "complete_roadmap_task",
+      params,
+    );
+    if (fallbackError) throw fallbackError;
+  } else if (error) {
+    throw error;
+  }
 }
 

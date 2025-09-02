@@ -59,12 +59,12 @@ create table roadmap_item_log (
 
 ## RPCs
 
-### complete_roadmap_task
+### complete_task
 
 Marks a roadmap item as completed and records the action in `roadmap_item_log`.
 
 ```sql
-create or replace function complete_roadmap_task(
+create or replace function complete_task(
   item_id bigint,
   title text,
   details text,
@@ -73,14 +73,14 @@ create or replace function complete_roadmap_task(
 ) returns void as $$
 begin
   update roadmap_items
-    set title = coalesce(complete_roadmap_task.title, roadmap_items.title),
-        details = complete_roadmap_task.details,
-        type = complete_roadmap_task.type,
-        priority = complete_roadmap_task.priority,
+    set title = coalesce(complete_task.title, roadmap_items.title),
+        details = complete_task.details,
+        type = complete_task.type,
+        priority = complete_task.priority,
         status = 'completed'
-    where id = complete_roadmap_task.item_id;
+    where id = complete_task.item_id;
 
-  insert into roadmap_item_log(item_id) values (complete_roadmap_task.item_id);
+  insert into roadmap_item_log(item_id) values (complete_task.item_id);
 end;
 $$ language plpgsql;
 ```
