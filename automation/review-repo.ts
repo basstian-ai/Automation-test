@@ -184,7 +184,7 @@ async function main() {
     }
   };
   const roadmapIdeas = await fetchRoadmap("new");
-  const roadmapTasks = await fetchRoadmap("tasks");
+  const roadmapTasks = await fetchRoadmap("task");
   const vision = await (async () => {
     for (const rel of ["vision.md", "roadmap/vision.md"]) {
       try { return { path: rel, content: trim(await fs.readFile(path.join(TARGET_PATH, rel), "utf8"), READ_LIMIT) }; } catch {}
