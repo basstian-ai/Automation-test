@@ -16,11 +16,10 @@ export async function reviewRepo() {
       )) as { content: string }[] | undefined;
       return data ? data.map((r) => r.content).join("\n") : "";
     }
-    const vision = await fetchRoadmap("vision");
-    const tasks  = await fetchRoadmap("tasks");
-    const bugs   = await fetchRoadmap("bugs");
-    const done   = await fetchRoadmap("done");
-    const ideas  = await fetchRoadmap("new");
+    const roadmapTypes = ["vision", "tasks", "bugs", "done", "new"];
+    const [vision, tasks, bugs, done, ideas] = await Promise.all(
+      roadmapTypes.map(fetchRoadmap),
+    );
 
     const state = await loadState();
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
