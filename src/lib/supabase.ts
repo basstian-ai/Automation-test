@@ -37,7 +37,18 @@ export async function sbRequest(path: string, init: RequestInit = {}) {
   };
   const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
-    throw new Error(`Supabase error: ${res.status} ${res.statusText}`);
+    let body = "";
+    try {
+      body = await res.text();
+    } catch {
+      // ignore
+    }
+    const snippet = body.slice(0, 100);
+    throw new Error(
+      `Supabase error: ${res.status} ${res.statusText}${
+        snippet ? ` - ${snippet}` : ""
+      }`
+    );
   }
   if (res.status === 204 || res.headers.get("Content-Length") === "0") {
     return undefined;
