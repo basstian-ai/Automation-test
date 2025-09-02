@@ -3,6 +3,7 @@ import { parseRepo, gh } from "../lib/github.js";
 import { reviewToIdeas, reviewToSummary } from "../lib/prompts.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { requireEnv, ENV } from "../lib/env.js";
+import { sbRequest } from "../lib/supabase.js";
 import yaml from "js-yaml";
 
 export async function reviewRepo() {
@@ -10,16 +11,10 @@ export async function reviewRepo() {
   try {
     requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
     async function fetchRoadmap(type: string) {
-      const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=content&type=eq.${type}`;
-      const resp = await fetch(url, {
-        headers: {
-          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
-        },
-      });
-      if (!resp.ok) return "";
-      const data = await resp.json();
-      return data.map((r: { content: string }) => r.content).join("\n");
+      const data = (await sbRequest(
+        `roadmap_items?select=content&type=eq.${type}`,
+      )) as { content: string }[] | undefined;
+      return data ? data.map((r) => r.content).join("\n") : "";
     }
     const vision = await fetchRoadmap("vision");
     const tasks  = await fetchRoadmap("tasks");
@@ -44,14 +39,9 @@ export async function reviewRepo() {
     // 1. Generate high-level summary
     const summaryInput = { commits: recent, vision, tasks, bugs, done, ideas };
     const summary = await reviewToSummary(summaryInput);
-    await fetch(`${process.env.SUPABASE_URL}/rest/v1/roadmap_items`, {
+    await sbRequest("roadmap_items", {
       method: "POST",
-      headers: {
-        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
+      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
       body: JSON.stringify({
         id: `SUMMARY-${Date.now()}`,
         type: "summary",
@@ -74,14 +64,9 @@ export async function reviewRepo() {
         content: yaml.dump(idea),
         created: idea.created || new Date().toISOString(),
       };
-      await fetch(`${process.env.SUPABASE_URL}/rest/v1/roadmap_items`, {
+      await sbRequest("roadmap_items", {
         method: "POST",
-        headers: {
-          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
-          "Content-Type": "application/json",
-          Prefer: "return=minimal",
-        },
+        headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify(payload),
       });
     }
