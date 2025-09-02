@@ -238,7 +238,7 @@ async function main() {
         "Content-Type": "application/json",
         Prefer: "return=minimal",
     };
-    await fetch(`${process.env.SUPABASE_URL}/rest/v1/roadmap_items`, {
+    const resp = await fetch(`${process.env.SUPABASE_URL}/rest/v1/roadmap_items`, {
         method: "POST",
         headers: supabaseHeaders,
         body: JSON.stringify({
@@ -248,6 +248,10 @@ async function main() {
             created: new Date().toISOString(),
         }),
     });
+    if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`Failed to insert ideas into Supabase: ${resp.status} ${text}`);
+    }
     const taskCount = (output.match(/^\s*-/gm) || []).length;
     console.log(`Inserted ${taskCount} ideas into Supabase.`);
 }
