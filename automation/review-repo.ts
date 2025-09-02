@@ -168,10 +168,23 @@ async function main() {
   // Trim roadmap/vision inputs and enforce a global budget
   const trim = (s: string, n: number) => (s && s.length > n ? s.slice(0, n) : (s || ""));
   const READ_LIMIT = 8000;
-  const readOr = async (p: string) => { try { return trim(await fs.readFile(p, "utf8"), READ_LIMIT); } catch { return ""; } };
-  const roadmapDir = path.join(TARGET_PATH, "roadmap");
-  const roadmapIdeas = await readOr(path.join(roadmapDir, "new.md"));
-  const roadmapTasks = await readOr(path.join(roadmapDir, "tasks.md"));
+  const fetchRoadmap = async (type: string) => {
+    const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=content&type=eq.${type}`;
+    const headers = {
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`,
+    };
+    try {
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) return "";
+      const data = await resp.json();
+      return trim(data.map((r: { content: string }) => r.content).join("\n"), READ_LIMIT);
+    } catch {
+      return "";
+    }
+  };
+  const roadmapIdeas = await fetchRoadmap("new");
+  const roadmapTasks = await fetchRoadmap("tasks");
   const vision = await (async () => {
     for (const rel of ["vision.md", "roadmap/vision.md"]) {
       try { return { path: rel, content: trim(await fs.readFile(path.join(TARGET_PATH, rel), "utf8"), READ_LIMIT) }; } catch {}
@@ -230,9 +243,30 @@ async function main() {
     throw new Error("Planner output missing bare section headings");
   }
 
-  await writeFileSafe(path.join(roadmapDir, "new.md"), output);
+  const supabaseHeaders = {
+    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`,
+    "Content-Type": "application/json",
+    Prefer: "return=minimal",
+  };
+  const resp = await fetch(`${process.env.SUPABASE_URL}/rest/v1/roadmap_items`, {
+    method: "POST",
+    headers: supabaseHeaders,
+    body: JSON.stringify({
+      id: `IDEA-${Date.now()}`,
+      type: "new",
+      content: output,
+      created: new Date().toISOString(),
+    }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(
+      `Failed to insert ideas into Supabase: ${resp.status} ${text}`
+    );
+  }
   const taskCount = (output.match(/^\s*-/gm) || []).length;
-  console.log(`roadmap/new.md tasks: ${taskCount}`);
+  console.log(`Inserted ${taskCount} ideas into Supabase.`);
 }
 
 main().catch(err => { console.error(err); process.exit(1); });
