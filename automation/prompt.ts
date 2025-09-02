@@ -8,6 +8,18 @@ function requireEnv(names: string[]): void {
   }
 }
 
+async function resolveModel(client: OpenAI): Promise<string> {
+  const defaultModel = "gpt-4o-mini";
+  const preferred = process.env.PLANNER_MODEL || defaultModel;
+  try {
+    await client.models.retrieve(preferred);
+    return preferred;
+  } catch (err) {
+    console.warn(`Falling back to ${defaultModel} due to`, err);
+    return defaultModel;
+  }
+}
+
 export async function planRepo(input: {
   manifest: any;
   roadmap: { tasks: string; fresh: string };
@@ -18,7 +30,7 @@ export async function planRepo(input: {
   requireEnv(["OPENAI_API_KEY"]);
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-  const model = process.env.PLANNER_MODEL || "gpt-5";
+  const model = await resolveModel(client);
   const maxTokens =
     Number(process.env.MAX_TOKENS || process.env.MAX_OUTPUT_TOKENS || 1200);
 
