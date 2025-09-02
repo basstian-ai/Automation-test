@@ -66,8 +66,9 @@ export async function reviewRepo() {
       newIdeas =
         (yaml.load(normalizedIdeasYaml) as { queue: any[] })?.queue || [];
     } catch (err) {
-      console.warn("Failed to parse ideas YAML; defaulting to empty array.", err);
-      console.warn("Offending YAML:\n" + normalizedIdeasYaml);
+      console.error("Failed to parse ideas YAML.", err);
+      console.error("Offending YAML:\n" + normalizedIdeasYaml);
+      throw new Error("Failed to parse ideas YAML");
     }
     for (const idea of newIdeas) {
       const payload = {
