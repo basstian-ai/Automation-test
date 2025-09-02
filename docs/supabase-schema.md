@@ -1,5 +1,7 @@
 # Supabase Schema
 
+The `roadmap_items` table is the canonical backlog and replaces the older `tasks` table.
+
 ## roadmap_items
 
 | Column     | Type                                                | Notes |
