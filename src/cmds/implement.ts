@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
-import { ENV } from "../lib/env.js";
+import { ENV, requireEnv } from "../lib/env.js";
 
 type RoadmapItem = {
   id?: string;
@@ -17,6 +17,7 @@ type RoadmapItem = {
 export async function implementTopTask() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
+    requireEnv(['TARGET_REPO']);
     const { supabase } = await import("../lib/supabase.js");
     // Load vision for context
     const vision = (await readFile("roadmap/vision.md")) || "";

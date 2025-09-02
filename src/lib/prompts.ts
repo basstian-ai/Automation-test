@@ -2,6 +2,15 @@
 import OpenAI from "openai";
 import { ENV, requireEnv } from "./env.js";
 
+// OpenAI requires a model name; default to a small one if unset.
+const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+
+/** Ensure a non-empty model value before sending requests. */
+export function getModel(): string {
+  // Fall back to DEFAULT_OPENAI_MODEL so requests are always valid.
+  return ENV.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
+}
+
 /** Lazily get an OpenAI client only when needed */
 function getOpenAI() {
   requireEnv(["OPENAI_API_KEY", "OPENAI_MODEL"]);
@@ -31,7 +40,7 @@ export async function summarizeLogToBug(entries: LogEntryForBug[]): Promise<stri
     { role: "user" as const, content: JSON.stringify(entries, null, 2) }
   ];
   const r = await openai.chat.completions.create({
-    model: ENV.OPENAI_MODEL,
+    model: getModel(),
     messages
   });
   return r.choices[0]?.message?.content ?? "";
@@ -58,7 +67,7 @@ export async function reviewToSummary(input: {
     { role: "user" as const, content: JSON.stringify(input, null, 2) }
   ];
   const r = await openai.chat.completions.create({
-    model: ENV.OPENAI_MODEL,
+    model: getModel(),
     messages
   });
   return r.choices[0]?.message?.content ?? "";
@@ -88,7 +97,7 @@ export async function reviewToIdeas(input: {
       { role: "user" as const, content: JSON.stringify(input, null, 2) }
     ];
   const r = await openai.chat.completions.create({
-    model: ENV.OPENAI_MODEL,
+    model: getModel(),
     messages
   });
   return r.choices[0]?.message?.content ?? "";
@@ -117,7 +126,7 @@ export async function synthesizeTasksPrompt(input: {
     { role: "user" as const, content: JSON.stringify(input, null, 2) }
   ];
   const r = await openai.chat.completions.create({
-    model: ENV.OPENAI_MODEL,
+    model: getModel(),
     messages
   });
   return r.choices[0]?.message?.content ?? "";
@@ -152,7 +161,7 @@ export async function implementPlan(input: {
     { role: "user" as const, content: JSON.stringify(input, null, 2) }
   ];
   const r = await openai.chat.completions.create({
-    model: ENV.OPENAI_MODEL,
+    model: getModel(),
     messages
   });
   return r.choices[0]?.message?.content ?? "{}";
