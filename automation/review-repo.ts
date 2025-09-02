@@ -187,7 +187,8 @@ async function main() {
     });
     if (!resp.ok) return "";
     const data = await resp.json();
-    return data.map((r: { content: string }) => r.content).join("\n");
+    const content = data.map((r: { content: string }) => r.content).join("\n");
+    return trim(content, READ_LIMIT);
   }
   const roadmapFresh = await fetchRoadmap("new");
   const roadmapTasks = await fetchRoadmap("task");
