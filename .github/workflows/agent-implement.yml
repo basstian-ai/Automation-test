@@ -24,6 +24,8 @@ jobs:
             npm install --package-lock-only --no-audit --no-fund
           fi
       - run: npm ci --no-audit --no-fund
+      - run: npm run check
+      - run: npm test
       - run: npm run build
       - run: node dist/orchestrator.js
         env:
