@@ -75,7 +75,7 @@ Files & conventions the agent uses
 	•	Supabase tasks table – backlog the agent pulls from (the agent can propose ~30 items if empty).
 	•	.github/workflows/ai-dev-agent.yml – schedule (e.g., every 4h) and permissions.
 
-Note: Repo summaries and roadmap items are stored exclusively in Supabase.
+Note: repo summaries and roadmap items are stored exclusively in Supabase.
 
 Triggers & cadence
 	•	Cron (e.g., hourly/4-hourly) and on push to default branch.
