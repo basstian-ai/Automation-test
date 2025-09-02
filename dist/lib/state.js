@@ -1,28 +1,4 @@
-import { ENV } from "./env.js";
-const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = ENV;
-function requireSupabase() {
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error("Missing Supabase credentials: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is undefined");
-    }
-}
-async function sbRequest(path, init = {}) {
-    requireSupabase();
-    const url = `${SUPABASE_URL}/rest/v1/${path}`;
-    const headers = {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        "Content-Type": "application/json",
-        ...init.headers,
-    };
-    const res = await fetch(url, { ...init, headers });
-    if (!res.ok) {
-        throw new Error(`Supabase error: ${res.status} ${res.statusText}`);
-    }
-    if (res.status === 204 || res.headers.get("Content-Length") === "0") {
-        return undefined;
-    }
-    return res.json();
-}
+import { sbRequest } from "./supabase.js";
 export async function loadState() {
     const data = (await sbRequest("agent_state?select=data&limit=1"));
     const row = data?.[0];
