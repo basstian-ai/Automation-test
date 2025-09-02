@@ -16,7 +16,7 @@ export async function reviewRepo() {
             const data = (await sbRequest(`roadmap_items?select=content&type=eq.${type}`));
             return data ? data.map((r) => r.content).join("\n") : "";
         }
-        const roadmapTypes = ["vision", "tasks", "bugs", "done", "new"];
+        const roadmapTypes = ["vision", "task", "bugs", "done", "new"];
         const [vision, tasks, bugs, done, ideas] = await Promise.all(roadmapTypes.map(fetchRoadmap));
         const state = await loadState();
         const { owner, repo } = parseRepo(ENV.TARGET_REPO);
