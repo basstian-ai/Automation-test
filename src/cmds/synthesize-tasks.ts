@@ -14,7 +14,14 @@ function isMeta(t: Task) { return /batch task synthesis/i.test(t?.title || "") |
 export async function synthesizeTasks() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+    try {
+      requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "TARGET_REPO"]);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("TARGET_REPO")) {
+        throw new Error("Missing env: TARGET_REPO. Set TARGET_REPO before running this command.");
+      }
+      throw err;
+    }
 
     const vision = (await readFile("roadmap/vision.md")) || "";
     const doneMd  = (await readFile("roadmap/done.md"))  || "";
