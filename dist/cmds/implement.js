@@ -4,7 +4,6 @@ import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
 import { ENV } from "../lib/env.js";
-import { completeTask } from "../lib/tasks.js";
 export async function implementTopTask() {
     if (!(await acquireLock())) {
         console.log("Lock taken; exiting.");
@@ -16,9 +15,10 @@ export async function implementTopTask() {
         const vision = (await readFile("roadmap/vision.md")) || "";
         // Retrieve top priority task from Supabase
         const { data: rows, error } = await supabase
-            .from("tasks")
+            .from("roadmap_items")
             .select("*")
-            .neq("type", "done")
+            .eq("type", "task")
+            .neq("status", "done")
             .order("priority", { ascending: true })
             .limit(1);
         if (error) {
@@ -72,11 +72,19 @@ export async function implementTopTask() {
             : normalized;
         if (!filtered.length) {
             // Fallback: create a minimal test placeholder if none proposed
-            filtered.push({
+            const fallback = {
                 path: "TASK_NOTES.md",
                 action: "update",
                 content: `- ${new Date().toISOString()} Implemented: ${top.title}\n`
-            });
+            };
+            if (ENV.ALLOW_PATHS.length) {
+                const allows = ENV.ALLOW_PATHS.map(a => a.replace(/^\/+/, "").replace(/^\.\//, ""));
+                if (!allows.some(allow => fallback.path.startsWith(allow))) {
+                    console.error("Fallback path TASK_NOTES.md is not permitted by ALLOW_PATHS; aborting.");
+                    return;
+                }
+            }
+            filtered.push(fallback);
         }
         // Build file list from normalized ops
         const files = [];
@@ -88,11 +96,11 @@ export async function implementTopTask() {
         if (files.length) {
             // Build commit body describing root cause, scope, and validation
             const cb = typeof plan.commitBody === "object" ? plan.commitBody : {};
-            const rootCause = cb.rootCause || top.desc || "n/a";
+            const rootCause = cb.rootCause || top.details || "n/a";
             const scope = cb.scope || files.map(f => f.path).join(", ");
             const validation = cb.validation || plan.testHint || "n/a";
             const logLink = cb.logUrl || cb.logs || cb.log || undefined;
-            const taskLink = cb.taskUrl || cb.task || (top.id ? `${ENV.SUPABASE_URL}/rest/v1/tasks?id=eq.${top.id}` : undefined);
+            const taskLink = cb.taskUrl || cb.task || (top.id ? `${ENV.SUPABASE_URL}/rest/v1/roadmap_items?id=eq.${top.id}` : undefined);
             const bodyParts = [
                 `Root Cause: ${rootCause}`,
                 `Scope: ${scope}`,
@@ -124,7 +132,8 @@ export async function implementTopTask() {
             }
             try {
                 await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
-                await completeTask(top);
+                const { completeTask } = await import("../lib/tasks.js");
+                await completeTask({ id: top.id, title: top.title, desc: top.details, priority: top.priority });
                 console.log("Implement complete.");
             }
             catch (err) {

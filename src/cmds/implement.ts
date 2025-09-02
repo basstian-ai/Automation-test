@@ -4,7 +4,15 @@ import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
 import { ENV } from "../lib/env.js";
-import type { Task } from "../lib/types.js";
+
+type RoadmapItem = {
+  id?: string;
+  title?: string;
+  details?: string;
+  priority?: number;
+  status?: string;
+  type?: string;
+};
 
 export async function implementTopTask() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
@@ -15,13 +23,14 @@ export async function implementTopTask() {
 
     // Retrieve top priority task from Supabase
     const { data: rows, error } = await supabase
-      .from("tasks")
+      .from("roadmap_items")
       .select("*")
-      .neq("type", "done")
+      .eq("type", "task")
+      .neq("status", "done")
       .order("priority", { ascending: true })
       .limit(1);
     if (error) { console.error("Failed to fetch tasks", error); return; }
-    const top = rows?.[0] as Task | undefined;
+    const top = rows?.[0] as RoadmapItem | undefined;
     if (!top) { console.log("No tasks available."); return; }
 
     const writeMode = (ENV.WRITE_MODE || "commit").toLowerCase();
@@ -92,11 +101,11 @@ export async function implementTopTask() {
     if (files.length) {
       // Build commit body describing root cause, scope, and validation
       const cb: any = typeof plan.commitBody === "object" ? plan.commitBody : {};
-      const rootCause = cb.rootCause || top.desc || "n/a";
+      const rootCause = cb.rootCause || top.details || "n/a";
       const scope = cb.scope || files.map(f => f.path).join(", ");
       const validation = cb.validation || plan.testHint || "n/a";
       const logLink = cb.logUrl || cb.logs || cb.log || undefined;
-      const taskLink = cb.taskUrl || cb.task || (top.id ? `${ENV.SUPABASE_URL}/rest/v1/tasks?id=eq.${top.id}` : undefined);
+      const taskLink = cb.taskUrl || cb.task || (top.id ? `${ENV.SUPABASE_URL}/rest/v1/roadmap_items?id=eq.${top.id}` : undefined);
       const bodyParts = [
         `Root Cause: ${rootCause}`,
         `Scope: ${scope}`,
@@ -127,7 +136,7 @@ export async function implementTopTask() {
       try {
         await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
         const { completeTask } = await import("../lib/tasks.js");
-        await completeTask(top);
+        await completeTask({ id: top.id, title: top.title, desc: top.details, priority: top.priority });
         console.log("Implement complete.");
       } catch (err) {
         console.error("Bulk commit failed; no changes were applied.", err);
