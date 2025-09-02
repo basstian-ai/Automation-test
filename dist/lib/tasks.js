@@ -4,10 +4,11 @@ import { supabase } from "./supabase.js";
  * Uses a stored procedure or upsert to ensure both actions occur atomically.
  */
 export async function completeTask(task) {
-    const { error } = await supabase.rpc("complete_task", {
-        task_id: task.id,
+    const { error } = await supabase.rpc("complete_roadmap_task", {
+        item_id: task.id,
         title: task.title,
-        desc: task.desc,
+        details: task.desc,
+        type: task.type,
         priority: task.priority,
     });
     if (error)
