@@ -19,7 +19,10 @@ export async function normalizeRoadmap() {
       .select("*")
       .eq("type", "task");
     if (error) throw error;
-    let items = (data || []) as Task[];
+    let items = (data || []).map((t: any) => ({
+      ...t,
+      created: t.created ?? t.created_at,
+    })) as Task[];
 
     // Drop synthetic/meta tasks
     items = items.filter(t => t?.title && !isMeta(t));
