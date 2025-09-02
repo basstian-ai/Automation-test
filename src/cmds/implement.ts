@@ -26,7 +26,7 @@ export async function implementTopTask() {
       .from("roadmap_items")
       .select("*")
       .eq("type", "task")
-      .neq("status", "done")
+      .or("status.is.null,status.neq.done")
       .order("priority", { ascending: true })
       .limit(1);
     if (error) { console.error("Failed to fetch tasks", error); return; }
