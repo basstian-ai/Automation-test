@@ -1,7 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { upsertFile } from "../lib/github.js";
 import { ENV } from "../lib/env.js";
 function normTitle(t = "") {
     return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim();
@@ -52,11 +50,7 @@ export async function normalizeRoadmap() {
         const updates = deduped.map((t, i) => ({ id: t.id, priority: i < 100 ? i + 1 : null }));
         if (updates.length)
             await supabase.from("tasks").upsert(updates, { onConflict: "id" });
-        const header = "# Tasks (single source of truth)\n\n";
-        const fileTasks = deduped.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
-        const block = "```yaml\n" + yaml.dump({ items: fileTasks }, { lineWidth: 120 }) + "```\n";
-        await upsertFile("roadmap/tasks.md", () => header + block, "bot: normalize tasks (supabase source)");
-        console.log(`Normalized tasks — enforced priorities for ${Math.min(deduped.length, 100)} items.`);
+        console.log(`Normalized tasks — enforced priorities for ${Math.min(deduped.length, 100)} items in Supabase.`);
     }
     finally {
         await releaseLock();
