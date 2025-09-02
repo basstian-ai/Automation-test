@@ -4,8 +4,8 @@ import { ENV, requireEnv } from "./env.js";
 
 /** Lazily get an OpenAI client only when needed */
 function getOpenAI() {
-  requireEnv(["OPENAI_API_KEY"]);
-  return new OpenAI({ apiKey: ENV.OPENAI_API_KEY });
+  requireEnv(["OPENAI_API_KEY", "OPENAI_MODEL"]);
+  return new OpenAI({ apiKey: ENV.OPENAI_API_KEY, model: ENV.OPENAI_MODEL } as any);
 }
 
 /** Types */
