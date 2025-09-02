@@ -71,12 +71,11 @@ Guardrails & safety
 
 Files & conventions the agent uses
 	•	agent/config.json – project hints (framework, package manager, test scripts), and guardrails.
-	•	Supabase tables – run metadata, decisions, and changelog entries.
+	•	Supabase tables – run metadata, decisions, changelog entries, repo summaries, and roadmap items.
 	•	Supabase tasks table – backlog the agent pulls from (the agent can propose ~30 items if empty).
-	•	reports/repo_summary.md – ephemeral repo overview (kept out of the tasks table to avoid your deletion rule).
 	•	.github/workflows/ai-dev-agent.yml – schedule (e.g., every 4h) and permissions.
 
-Note: backlog items are stored in Supabase; the agent writes repo scans to reports/repo_summary.md to keep tasks separate.
+Note: repo summaries and roadmap items are stored exclusively in Supabase.
 
 Triggers & cadence
 	•	Cron (e.g., hourly/4-hourly) and on push to default branch.
