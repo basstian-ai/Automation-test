@@ -4,12 +4,21 @@ import { readFile } from "../lib/github.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
 import { ENV, requireEnv } from "../lib/env.js";
 
-type Task = { id?: string; type?: string; title?: string; desc?: string; content?: string; source?: string; created?: string; priority?: number };
+type Task = { id?: string; type?: string; title?: string; desc?: string; content?: string; source?: string; created?: string | number | Date; priority?: number };
 
 function normTitle(t = "") { return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim(); }
 function normType(t = "") { return t.toLowerCase() === "idea" ? "idea" : "task"; }
 function yamlBlock(obj: any) { return "```yaml\n" + yaml.dump(obj, { lineWidth: 120 }) + "```"; }
 function isMeta(t: Task) { return /batch task synthesis/i.test(t?.title || "") || /```/.test(t?.desc || ""); }
+
+export function compareTasks(a: Task, b: Task) {
+  const pa = a.priority ?? 1e9, pb = b.priority ?? 1e9;
+  if (pa !== pb) return pa - pb;
+  const ca = a.created instanceof Date ? a.created.toISOString() : String(a.created ?? "");
+  const cb = b.created instanceof Date ? b.created.toISOString() : String(b.created ?? "");
+  if (ca !== cb) return ca.localeCompare(cb);
+  return normTitle(a.title!).localeCompare(normTitle(b.title!));
+}
 
 export async function synthesizeTasks() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
@@ -64,13 +73,7 @@ export async function synthesizeTasks() {
     }
 
     // Unique priorities
-    merged.sort((a, b) => {
-      const pa = a.priority ?? 1e9, pb = b.priority ?? 1e9;
-      if (pa !== pb) return pa - pb;
-      const ca = a.created || "", cb = b.created || "";
-      if (ca !== cb) return ca.localeCompare(cb);
-      return normTitle(a.title!).localeCompare(normTitle(b.title!));
-    });
+    merged.sort(compareTasks);
     const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
 
     // Upsert tasks in Supabase
