@@ -44,8 +44,10 @@ async function scanRepo(root: string) {
   const byBasename = new Map<string, Array<{ path: string; sig: string }>>();
 
   async function walk(cur: string) {
+    if (files.length >= MAX_FILES || files.length >= MAX_SAMPLED_FILES) return;
     const entries = await fs.readdir(cur, { withFileTypes: true });
     for (const e of entries) {
+      if (files.length >= MAX_FILES || files.length >= MAX_SAMPLED_FILES) break;
       const full = path.join(cur, e.name);
       const rel = path.relative(root, full).replace(/\\/g, "/");
       if (IGNORE_DIRS.has(e.name)) continue;
@@ -60,6 +62,7 @@ async function scanRepo(root: string) {
         arr.push({ path: rel, sig });
         byBasename.set(e.name, arr);
         await walk(full);
+        if (files.length >= MAX_FILES || files.length >= MAX_SAMPLED_FILES) break;
       } else if (e.isFile()) {
         try {
           const stat = await fs.stat(full);
@@ -104,7 +107,8 @@ async function writeFileSafe(p: string, content: string) {
 
 async function main() {
   const { files, dirs, duplicates } = await scanRepo(TARGET_PATH);
-  console.log(`Scanned ${files.length} files in ${dirs.length} dirs`);
+  const truncated = files.length >= MAX_FILES || files.length >= MAX_SAMPLED_FILES;
+  console.log(`Scanned ${files.length} files in ${dirs.length} dirs${truncated ? " (truncated)" : ""}`);
   if (duplicates.length) {
     console.log(`Duplicate dirs: ${duplicates.map(d => d.base).join(", ")}`);
   }
@@ -114,16 +118,28 @@ async function main() {
   const dupLines = duplicates.length
     ? duplicates.flatMap(d => [`- ${d.base}`, ...d.members.map(m => `  - ${m}`)])
     : ["- none"];
-  const auditContent = [
+  const auditLines = [
     `# Repo Structure`,
-    `Scanned ${files.length} files across ${dirs.length} directories.`,
+    `Scanned ${files.length} files across ${dirs.length} directories${truncated ? " (truncated)" : ""}.`,
+  ];
+  if (truncated) {
+    auditLines.push(
+      `Stopped after reaching ${
+        files.length >= MAX_FILES
+          ? `MAX_FILES (${MAX_FILES})`
+          : `MAX_SAMPLED_FILES (${MAX_SAMPLED_FILES})`
+      } limit.`
+    );
+  }
+  auditLines.push(
     "",
     "## Top-level",
     ...topLevel.map(d => `- ${d}`),
     "",
     "## Duplicate dir candidates",
     ...dupLines
-  ].join("\n");
+  );
+  const auditContent = auditLines.join("\n");
   await writeFileSafe(auditPath, auditContent);
 
   // PRIORITIZE routes/config/docs; sample only a subset
