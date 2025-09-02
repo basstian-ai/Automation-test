@@ -13,9 +13,16 @@ export async function synthesizeTasks() {
         return;
     }
     try {
-        requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+        try {
+            requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "TARGET_REPO"]);
+        }
+        catch (err) {
+            if (err instanceof Error && err.message.includes("TARGET_REPO")) {
+                throw new Error("Missing env: TARGET_REPO. Set TARGET_REPO before running this command.");
+            }
+            throw err;
+        }
         const vision = (await readFile("roadmap/vision.md")) || "";
-        const doneMd = (await readFile("roadmap/done.md")) || "";
         const headers = { apikey: ENV.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${ENV.SUPABASE_SERVICE_ROLE_KEY}` };
         const url = ENV.SUPABASE_URL;
         const res = await fetch(`${url}/rest/v1/roadmap_items?select=*`, { headers });
@@ -25,12 +32,13 @@ export async function synthesizeTasks() {
         const tasks = rows.filter(r => r.type === "task");
         const bugs = rows.filter(r => r.type === "bug");
         const ideas = rows.filter(r => r.type === "idea");
+        const done = rows.filter(r => r.type === "done").map(r => r.content || "").join("\n");
         const proposal = await synthesizeTasksPrompt({
             tasks: yamlBlock({ items: tasks }),
             bugs: yamlBlock({ items: bugs }),
             ideas: yamlBlock({ items: ideas }),
             vision,
-            done: doneMd
+            done
         });
         // Extract YAML
         const m = proposal.match(/```yaml\s*?\n([\s\S]*?)\n```/);

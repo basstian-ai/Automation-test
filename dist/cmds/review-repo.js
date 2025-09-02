@@ -1,5 +1,5 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { parseRepo, gh, upsertFile } from "../lib/github.js";
+import { parseRepo, gh } from "../lib/github.js";
 import { reviewToIdeas, reviewToSummary } from "../lib/prompts.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { requireEnv, ENV } from "../lib/env.js";
@@ -28,7 +28,7 @@ export async function reviewRepo() {
         const tasks = await fetchRoadmap("tasks");
         const bugs = await fetchRoadmap("bugs");
         const done = await fetchRoadmap("done");
-        const fresh = await fetchRoadmap("new");
+        const ideas = await fetchRoadmap("new");
         const state = await loadState();
         const { owner, repo } = parseRepo(ENV.TARGET_REPO);
         const commitsResp = await gh().rest.repos.listCommits({ owner, repo, per_page: 10 });
@@ -44,11 +44,26 @@ export async function reviewRepo() {
         }
         const recent = commitsData.map((c) => `${c.sha.slice(0, 7)} ${c.commit.message.split("\n")[0]}`);
         // 1. Generate high-level summary
-        const summaryInput = { commits: recent, vision, tasks, bugs, done, fresh };
+        const summaryInput = { commits: recent, vision, tasks, bugs, done, ideas };
         const summary = await reviewToSummary(summaryInput);
-        await upsertFile("reports/repo_summary.md", () => summary, "bot: update repo summary");
+        await fetch(`${process.env.SUPABASE_URL}/rest/v1/roadmap_items`, {
+            method: "POST",
+            headers: {
+                apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+                Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+                "Content-Type": "application/json",
+                Prefer: "return=minimal",
+            },
+            body: JSON.stringify({
+                id: `SUMMARY-${Date.now()}`,
+                type: "summary",
+                content: summary,
+                created: new Date().toISOString(),
+            }),
+        });
+        console.log("Stored repo summary in Supabase.");
         // 2. Generate actionable ideas from summary
-        const ideasInput = { summary, vision, tasks, bugs, done, fresh };
+        const ideasInput = { summary, vision, tasks, bugs, done, ideas };
         const ideasYaml = await reviewToIdeas(ideasInput);
         // 3. Insert new ideas into Supabase
         const newIdeas = yaml.load(ideasYaml)?.queue || [];
@@ -72,7 +87,7 @@ export async function reviewRepo() {
         }
         const headSha = commitsData[0]?.sha;
         await saveState({ ...state, lastReviewedSha: headSha });
-        await appendChangelog("Reviewed repository and recorded summary.");
+        await appendChangelog("Reviewed repository and stored summary in Supabase.");
         await appendDecision(`Updated lastReviewedSha to ${headSha}.`);
         console.log("Review complete.");
     }
