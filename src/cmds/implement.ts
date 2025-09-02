@@ -67,11 +67,19 @@ export async function implementTopTask() {
 
     if (!filtered.length) {
       // Fallback: create a minimal test placeholder if none proposed
-      filtered.push({
+      const fallback = {
         path: "TASK_NOTES.md",
-        action: "update",
+        action: "update" as const,
         content: `- ${new Date().toISOString()} Implemented: ${top.title}\n`
-      });
+      };
+      if (ENV.ALLOW_PATHS.length) {
+        const allows = ENV.ALLOW_PATHS.map(a => a.replace(/^\/+/, "").replace(/^\.\//, ""));
+        if (!allows.some(allow => fallback.path.startsWith(allow))) {
+          console.error("Fallback path TASK_NOTES.md is not permitted by ALLOW_PATHS; aborting.");
+          return;
+        }
+      }
+      filtered.push(fallback);
     }
 
     // Build file list from normalized ops
