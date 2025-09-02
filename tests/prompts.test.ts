@@ -10,13 +10,25 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unmock('openai');
   delete process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_MODEL;
 });
 
-test('summarizeLogToBug throws when OPENAI_MODEL missing', async () => {
+test('summarizeLogToBug uses default model when OPENAI_MODEL missing', async () => {
+  vi.mock('openai', () => {
+    const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
+    class OpenAIStub {
+      chat = { completions: { create } };
+      static createMock = create;
+    }
+    return { default: OpenAIStub };
+  });
   const { summarizeLogToBug } = await import('../src/lib/prompts.ts');
-  await expect(summarizeLogToBug([])).rejects.toThrowError('Missing env: OPENAI_MODEL');
+  const result = await summarizeLogToBug([]);
+  expect(result).toBe('ok');
+  const { default: OpenAIStub }: any = await import('openai');
+  expect(OpenAIStub.createMock).toHaveBeenCalledWith({ model: 'gpt-4o-mini', messages: expect.any(Array) });
 });
 
 test('getModel falls back to default when env is empty', async () => {

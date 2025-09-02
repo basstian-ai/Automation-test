@@ -4,7 +4,7 @@ export interface Task {
   title?: string;
   desc?: string;
   source?: string;
-  created?: string;
+  created?: string | number | Date;
   priority?: number;
 }
 
