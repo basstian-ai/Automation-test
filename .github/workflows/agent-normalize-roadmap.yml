@@ -43,3 +43,10 @@ jobs:
           AI_BOT_WRITE_MODE: commit
           DRY_RUN: "0"
           ALLOW_PATHS: ""
+      - name: Check prioritized tasks
+        run: |
+          npx tsc scripts/check-priorities.ts --outDir dist/scripts --module NodeNext --target ES2022 --esModuleInterop --skipLibCheck
+          node dist/scripts/check-priorities.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
