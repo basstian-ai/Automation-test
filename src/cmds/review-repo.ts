@@ -61,8 +61,14 @@ export async function reviewRepo() {
       .trim();
 
     // 3. Insert new ideas into Supabase
-    const newIdeas =
-      (yaml.load(normalizedIdeasYaml) as { queue: any[] })?.queue || [];
+    let newIdeas: any[] = [];
+    try {
+      newIdeas =
+        (yaml.load(normalizedIdeasYaml) as { queue: any[] })?.queue || [];
+    } catch (err) {
+      console.warn("Failed to parse ideas YAML; defaulting to empty array.", err);
+      console.warn("Offending YAML:\n" + normalizedIdeasYaml);
+    }
     for (const idea of newIdeas) {
       const payload = {
         id: idea.id || `IDEA-${Date.now()}`,
