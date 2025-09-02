@@ -9,14 +9,20 @@ export type RoadmapItem = {
 };
 
 export async function insertRoadmap(items: RoadmapItem[]) {
-  const { error } = await supabase.from("roadmap").insert(items);
+  const { data, error } = await supabase
+    .from("roadmap_items")
+    .insert(items)
+    .select();
   if (error) throw error;
+  return data ?? [];
 }
 
 export async function upsertRoadmap(items: RoadmapItem[]) {
-  const { error } = await supabase
-    .from("roadmap")
-    .upsert(items, { onConflict: "id" });
+  const { data, error } = await supabase
+    .from("roadmap_items")
+    .upsert(items, { onConflict: "id" })
+    .select();
   if (error) throw error;
+  return data ?? [];
 }
 
