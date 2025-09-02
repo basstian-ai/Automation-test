@@ -17,6 +17,14 @@ try {
   process.exit(1);
 }
 
+function requireEnv(vars: string[]): void {
+  for (const v of vars) {
+    if (!process.env[v]) {
+      throw new Error(`Missing env: ${v}`);
+    }
+  }
+}
+
 const IGNORE_DIRS = new Set([
   "node_modules",
   ".git",
@@ -168,10 +176,21 @@ async function main() {
   // Trim roadmap/vision inputs and enforce a global budget
   const trim = (s: string, n: number) => (s && s.length > n ? s.slice(0, n) : (s || ""));
   const READ_LIMIT = 8000;
-  const readOr = async (p: string) => { try { return trim(await fs.readFile(p, "utf8"), READ_LIMIT); } catch { return ""; } };
-  const roadmapDir = path.join(TARGET_PATH, "roadmap");
-  const roadmapFresh = await readOr(path.join(roadmapDir, "new.md"));
-  const roadmapTasks = await readOr(path.join(roadmapDir, "tasks.md"));
+  requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+  async function fetchRoadmap(type: string) {
+    const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=content&type=eq.${type}`;
+    const resp = await fetch(url, {
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+      },
+    });
+    if (!resp.ok) return "";
+    const data = await resp.json();
+    return data.map((r: { content: string }) => r.content).join("\n");
+  }
+  const roadmapFresh = await fetchRoadmap("new");
+  const roadmapTasks = await fetchRoadmap("task");
   const vision = await (async () => {
     for (const rel of ["vision.md", "roadmap/vision.md"]) {
       try { return { path: rel, content: trim(await fs.readFile(path.join(TARGET_PATH, rel), "utf8"), READ_LIMIT) }; } catch {}
@@ -230,9 +249,33 @@ async function main() {
     throw new Error("Planner output missing bare section headings");
   }
 
-  await writeFileSafe(path.join(roadmapDir, "new.md"), output);
-  const taskCount = (output.match(/^\s*-/gm) || []).length;
-  console.log(`roadmap/new.md tasks: ${taskCount}`);
+  const m = output.match(/^TASKS\s*\n([\s\S]*?)(?:\n[A-Z_]+\s*$|$)/m);
+  const taskBlock = m ? m[1].trim() : "";
+  const tasks = taskBlock.split(/\n-\s+/).slice(1).map(s => s.trim());
+  const headers = {
+    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+    "Content-Type": "application/json",
+    Prefer: "return=minimal",
+  };
+  const base = process.env.SUPABASE_URL!;
+  const now = Date.now();
+  let inserted = 0;
+  for (let i = 0; i < tasks.length; i++) {
+    const payload = {
+      id: `IDEA-${now}-${i}`,
+      type: "new",
+      content: tasks[i],
+      created: new Date().toISOString(),
+    };
+    const res = await fetch(`${base}/rest/v1/roadmap_items`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) inserted++;
+  }
+  console.log(`Inserted ${inserted} ideas into Supabase`);
 }
 
 main().catch(err => { console.error(err); process.exit(1); });
