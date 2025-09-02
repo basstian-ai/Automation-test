@@ -65,7 +65,7 @@ export async function reviewToIdeas(input) {
     return r.choices[0]?.message?.content ?? "";
 }
 /**
- * Promote items from roadmap/new.md (ideas queue) → tasks with unique priorities (1..N).
+ * Promote Supabase ideas into tasks with unique priorities (1..N).
  * Return YAML (items: [...]) in a code block; caller merges & enforces limits.
  */
 export async function synthesizeTasksPrompt(input) {
@@ -73,7 +73,7 @@ export async function synthesizeTasksPrompt(input) {
     const messages = [
         {
             role: "system",
-            content: "Promote items from roadmap/new.md (ideas queue) into tasks.\n" +
+            content: "Promote Supabase ideas into tasks.\n" +
                 "Return ONLY YAML in a code block with the shape:\n```yaml\nitems:\n  - id: <leave blank or omit>\n    type: bug|improvement|feature\n    title: <short>\n    desc: <2–4 lines>\n    source: logs|review|user|vision\n    created: <ISO>\n    priority: <int>\n```\n" +
                 "Rules: no duplicates vs existing tasks; unique priorities 1..N; prefer critical bugs and user-impactful work; cap at ~100."
         },
@@ -101,7 +101,7 @@ export async function implementPlan(input) {
     const messages = [
         {
             role: "system",
-            content: "You are a senior developer. Develope task and deliver in a safe diff. " +
+            content: "You are a senior developer. Develop the task and deliver a safe diff. " +
                 "Output ONLY JSON with keys: operations (array of {path, action:create|update, content?}), testHint, commitTitle, commitBody. " +
                 "Keep diffs tangible; only files relevant to the task; include at least one test file if a test harness exists; avoid broad refactors."
         },

@@ -28,7 +28,7 @@ export async function reviewRepo() {
         const tasks = await fetchRoadmap("tasks");
         const bugs = await fetchRoadmap("bugs");
         const done = await fetchRoadmap("done");
-        const fresh = await fetchRoadmap("new");
+        const ideas = await fetchRoadmap("new");
         const state = await loadState();
         const { owner, repo } = parseRepo(ENV.TARGET_REPO);
         const commitsResp = await gh().rest.repos.listCommits({ owner, repo, per_page: 10 });
@@ -44,11 +44,11 @@ export async function reviewRepo() {
         }
         const recent = commitsData.map((c) => `${c.sha.slice(0, 7)} ${c.commit.message.split("\n")[0]}`);
         // 1. Generate high-level summary
-        const summaryInput = { commits: recent, vision, tasks, bugs, done, fresh };
+        const summaryInput = { commits: recent, vision, tasks, bugs, done, ideas };
         const summary = await reviewToSummary(summaryInput);
         await upsertFile("reports/repo_summary.md", () => summary, "bot: update repo summary");
         // 2. Generate actionable ideas from summary
-        const ideasInput = { summary, vision, tasks, bugs, done, fresh };
+        const ideasInput = { summary, vision, tasks, bugs, done, ideas };
         const ideasYaml = await reviewToIdeas(ideasInput);
         // 3. Insert new ideas into Supabase
         const newIdeas = yaml.load(ideasYaml)?.queue || [];

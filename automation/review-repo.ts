@@ -170,7 +170,7 @@ async function main() {
   const READ_LIMIT = 8000;
   const readOr = async (p: string) => { try { return trim(await fs.readFile(p, "utf8"), READ_LIMIT); } catch { return ""; } };
   const roadmapDir = path.join(TARGET_PATH, "roadmap");
-  const roadmapFresh = await readOr(path.join(roadmapDir, "new.md"));
+  const roadmapIdeas = await readOr(path.join(roadmapDir, "new.md"));
   const roadmapTasks = await readOr(path.join(roadmapDir, "tasks.md"));
   const vision = await (async () => {
     for (const rel of ["vision.md", "roadmap/vision.md"]) {
@@ -180,7 +180,7 @@ async function main() {
   })();
 
   const sizeOf = (obj: any) => JSON.stringify(obj).length
-    + roadmapFresh.length + roadmapTasks.length + vision.content.length;
+    + roadmapIdeas.length + roadmapTasks.length + vision.content.length;
   while (sizeOf(manifest) > MAX_INPUT_CHARS) {
     const idx = manifest.files.findLastIndex((f: any) => !!f.sample);
     if (idx === -1) break;
@@ -191,7 +191,7 @@ async function main() {
 
   const plan = await planRepo({
     manifest,
-    roadmap: { tasks: roadmapTasks, fresh: roadmapFresh },
+    roadmap: { tasks: roadmapTasks, ideas: roadmapIdeas },
     vision,
     maxTasks: MAX_TASKS,
     protected: PROTECTED_PATHS,
