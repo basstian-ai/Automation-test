@@ -16,7 +16,7 @@ export async function reviewRepo() {
       )) as { content: string }[] | undefined;
       return data ? data.map((r) => r.content).join("\n") : "";
     }
-    const roadmapTypes = ["vision", "tasks", "bugs", "done", "new"];
+    const roadmapTypes = ["vision", "task", "bugs", "done", "new"];
     const [vision, tasks, bugs, done, ideas] = await Promise.all(
       roadmapTypes.map(fetchRoadmap),
     );
