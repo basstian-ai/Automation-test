@@ -14,7 +14,10 @@ export async function normalizeRoadmap() {
     }
     try {
         const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY);
-        const { data, error } = await supabase.from("tasks").select("*");
+        const { data, error } = await supabase
+            .from("roadmap_items")
+            .select("*")
+            .eq("type", "task");
         if (error)
             throw error;
         let items = (data || []);
@@ -36,7 +39,11 @@ export async function normalizeRoadmap() {
             deduped.push(t);
         }
         if (dupIds.length)
-            await supabase.from("tasks").delete().in("id", dupIds);
+            await supabase
+                .from("roadmap_items")
+                .delete()
+                .eq("type", "task")
+                .in("id", dupIds);
         // Sort & assign unique priorities (cap 100)
         deduped.sort((a, b) => {
             const pa = a.priority ?? 1e9, pb = b.priority ?? 1e9;
@@ -47,9 +54,15 @@ export async function normalizeRoadmap() {
                 return ca.localeCompare(cb);
             return normTitle(a.title).localeCompare(normTitle(b.title));
         });
-        const updates = deduped.map((t, i) => ({ id: t.id, priority: i < 100 ? i + 1 : null }));
+        const updates = deduped.map((t, i) => ({
+            id: t.id,
+            type: "task",
+            priority: i < 100 ? i + 1 : null
+        }));
         if (updates.length)
-            await supabase.from("tasks").upsert(updates, { onConflict: "id" });
+            await supabase
+                .from("roadmap_items")
+                .upsert(updates, { onConflict: "id" });
         console.log(`Normalized tasks — enforced priorities for ${Math.min(deduped.length, 100)} items in Supabase.`);
     }
     finally {
