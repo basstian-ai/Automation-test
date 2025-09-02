@@ -4,7 +4,7 @@ import { readFile } from "../lib/github.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
 import { ENV, requireEnv } from "../lib/env.js";
 
-type Task = { id?: string; type?: string; title?: string; desc?: string; source?: string; created?: string; priority?: number };
+type Task = { id?: string; type?: string; title?: string; desc?: string; content?: string; source?: string; created?: string; priority?: number };
 
 function normTitle(t = "") { return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim(); }
 function normType(t = "") { return t.toLowerCase() === "idea" ? "idea" : "task"; }
@@ -24,7 +24,6 @@ export async function synthesizeTasks() {
     }
 
     const vision = (await readFile("roadmap/vision.md")) || "";
-    const doneMd  = (await readFile("roadmap/done.md"))  || "";
 
     const headers = { apikey: ENV.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${ENV.SUPABASE_SERVICE_ROLE_KEY}` };
     const url = ENV.SUPABASE_URL;
@@ -35,13 +34,14 @@ export async function synthesizeTasks() {
     const tasks = rows.filter(r => r.type === "task");
     const bugs  = rows.filter(r => r.type === "bug");
     const ideas = rows.filter(r => r.type === "idea");
+    const done  = rows.filter(r => r.type === "done").map(r => r.content || "").join("\n");
 
     const proposal = await synthesizeTasksPrompt({
       tasks: yamlBlock({ items: tasks }),
       bugs: yamlBlock({ items: bugs }),
       ideas: yamlBlock({ items: ideas }),
       vision,
-      done: doneMd
+      done
     });
 
     // Extract YAML

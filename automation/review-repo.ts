@@ -200,7 +200,7 @@ async function main() {
   })();
 
   const sizeOf = (obj: any) => JSON.stringify(obj).length
-    + roadmapFresh.length + roadmapTasks.length + vision.content.length;
+    + roadmapIdeas.length + roadmapTasks.length + vision.content.length;
   while (sizeOf(manifest) > MAX_INPUT_CHARS) {
     const idx = manifest.files.findLastIndex((f: any) => !!f.sample);
     if (idx === -1) break;
@@ -211,7 +211,7 @@ async function main() {
 
   const plan = await planRepo({
     manifest,
-    roadmap: { tasks: roadmapTasks, fresh: roadmapFresh },
+    roadmap: { tasks: roadmapTasks, ideas: roadmapIdeas },
     vision,
     maxTasks: MAX_TASKS,
     protected: PROTECTED_PATHS,
