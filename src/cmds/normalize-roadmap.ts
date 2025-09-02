@@ -33,6 +33,7 @@ export async function normalizeRoadmap() {
       let item: Task = {
         ...t,
         created: t.created ?? t.created_at,
+        desc: t.desc ?? t.details ?? t.content,
       };
       if (t.type === "new") {
         try {
