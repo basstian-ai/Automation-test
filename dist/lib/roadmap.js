@@ -1,13 +1,19 @@
 import { supabase } from "./supabase.js";
 export async function insertRoadmap(items) {
-    const { error } = await supabase.from("roadmap").insert(items);
+    const { data, error } = await supabase
+        .from("roadmap_items")
+        .insert(items)
+        .select();
     if (error)
         throw error;
+    return data ?? [];
 }
 export async function upsertRoadmap(items) {
-    const { error } = await supabase
-        .from("roadmap")
-        .upsert(items, { onConflict: "id" });
+    const { data, error } = await supabase
+        .from("roadmap_items")
+        .upsert(items, { onConflict: "id" })
+        .select();
     if (error)
         throw error;
+    return data ?? [];
 }
