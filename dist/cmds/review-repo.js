@@ -56,12 +56,22 @@ export async function reviewRepo() {
             .replace(/\n?```$/, "")
             .trim();
         // 3. Insert new ideas into Supabase
-        const newIdeas = yaml.load(normalizedIdeasYaml)?.queue || [];
+        let newIdeas = [];
+        try {
+            newIdeas =
+                yaml.load(normalizedIdeasYaml)?.queue || [];
+        }
+        catch (err) {
+            console.warn("Failed to parse ideas YAML; defaulting to empty array.", err);
+            console.warn("Offending YAML:\n" + normalizedIdeasYaml);
+        }
         for (const idea of newIdeas) {
             const payload = {
                 id: idea.id || `IDEA-${Date.now()}`,
-                type: "new",
-                content: yaml.dump(idea),
+                type: "task",
+                title: idea.title,
+                desc: idea.details,
+                source: "review",
                 created: idea.created || new Date().toISOString(),
             };
             await sbRequest("roadmap_items", {

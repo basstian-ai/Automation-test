@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { ENV } from "../lib/env.js";
+import yaml from "js-yaml";
 function normTitle(t = "") {
     return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim();
 }
@@ -17,10 +18,31 @@ export async function normalizeRoadmap() {
         const { data, error } = await supabase
             .from("roadmap_items")
             .select("*")
-            .eq("type", "task");
+            .in("type", ["task", "new"]);
         if (error)
             throw error;
-        let items = (data || []);
+        let items = (data || []).map((t) => {
+            let item = {
+                ...t,
+                created: t.created ?? t.created_at,
+            };
+            if (t.type === "new") {
+                try {
+                    const parsed = yaml.load(t.content);
+                    item = {
+                        ...item,
+                        type: "task",
+                        title: parsed?.title || t.title,
+                        desc: parsed?.details || parsed?.desc,
+                        created: parsed?.created || item.created,
+                    };
+                }
+                catch {
+                    item = { ...item, type: "task" };
+                }
+            }
+            return item;
+        });
         // Drop synthetic/meta tasks
         items = items.filter(t => t?.title && !isMeta(t));
         // Dedupe by id else (type+title)
@@ -42,7 +64,6 @@ export async function normalizeRoadmap() {
             await supabase
                 .from("roadmap_items")
                 .delete()
-                .eq("type", "task")
                 .in("id", dupIds);
         // Sort & assign unique priorities (cap 100)
         deduped.sort((a, b) => {
@@ -57,12 +78,14 @@ export async function normalizeRoadmap() {
         const updates = deduped.map((t, i) => ({
             id: t.id,
             type: "task",
-            priority: i < 100 ? i + 1 : null
+            priority: i < 100 ? i + 1 : null,
         }));
         if (updates.length)
             await supabase
                 .from("roadmap_items")
                 .upsert(updates, { onConflict: "id" });
+        // Remove any residual "new" entries after conversion
+        await supabase.from("roadmap_items").delete().eq("type", "new");
         console.log(`Normalized tasks — enforced priorities for ${Math.min(deduped.length, 100)} items in Supabase.`);
     }
     finally {

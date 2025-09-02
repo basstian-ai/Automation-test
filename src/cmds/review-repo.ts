@@ -72,8 +72,10 @@ export async function reviewRepo() {
     for (const idea of newIdeas) {
       const payload = {
         id: idea.id || `IDEA-${Date.now()}`,
-        type: "new",
-        content: yaml.dump(idea),
+        type: "task",
+        title: idea.title,
+        desc: idea.details,
+        source: "review",
         created: idea.created || new Date().toISOString(),
       };
       await sbRequest("roadmap_items", {
