@@ -56,10 +56,13 @@ export async function normalizeRoadmap() {
       seen.add(key);
       deduped.push(t);
     }
-    if (dupIds.length) await supabase
-      .from("roadmap_items")
-      .delete()
-      .in("id", dupIds);
+    if (dupIds.length) {
+      const { error: delError } = await supabase
+        .from("roadmap_items")
+        .delete()
+        .in("id", dupIds);
+      if (delError) throw delError;
+    }
 
     // Sort & assign unique priorities (cap 100)
     deduped.sort((a, b) => {
@@ -74,12 +77,19 @@ export async function normalizeRoadmap() {
       type: "task",
       priority: i < 100 ? i + 1 : null,
     }));
-    if (updates.length) await supabase
-      .from("roadmap_items")
-      .upsert(updates, { onConflict: "id" });
+    if (updates.length) {
+      const { error: upsertError } = await supabase
+        .from("roadmap_items")
+        .upsert(updates, { onConflict: "id" });
+      if (upsertError) throw upsertError;
+    }
 
     // Remove any residual "new" entries after conversion
-    await supabase.from("roadmap_items").delete().eq("type", "new");
+    const { error: finalDelError } = await supabase
+      .from("roadmap_items")
+      .delete()
+      .eq("type", "new");
+    if (finalDelError) throw finalDelError;
 
     console.log(
       `Normalized tasks — enforced priorities for ${Math.min(deduped.length, 100)} items in Supabase.`
