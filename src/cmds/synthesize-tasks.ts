@@ -80,17 +80,16 @@ export async function synthesizeTasks() {
     const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
 
     const toRow = (t: Task) => {
-      const row: any = {};
-      if (t.id) row.id = t.id;
-
-      row.title = t.title!;
-      row.type = "task";
-      if (t.content || t.desc) row.content = t.content ?? t.desc;
-      if (t.priority != null) row.priority = t.priority;
       const created = (t as any).created ?? (t as any).created_at;
-      if (created) row.created_at = new Date(created).toISOString();
-      if (t.source) row.source = t.source;
-      return row;
+      return {
+        id: t.id ?? null,
+        title: t.title ?? null,
+        type: "task",
+        content: t.content ?? t.desc ?? null,
+        priority: t.priority ?? null,
+        created_at: created ? new Date(created).toISOString() : null,
+        source: t.source ?? null,
+      };
     };
 
     // Upsert tasks in Supabase only if new tasks were synthesized

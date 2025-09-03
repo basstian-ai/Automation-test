@@ -80,19 +80,16 @@ export async function synthesizeTasks() {
         merged.sort(compareTasks);
         const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
         const toRow = (t) => {
-            const row = t.id ? { ...t } : {};
-            row.title = t.title;
-            row.type = "task";
-            if (t.content || t.desc)
-                row.content = t.content ?? t.desc;
-            if (t.priority != null)
-                row.priority = t.priority;
             const created = t.created ?? t.created_at;
-            if (created)
-                row.created_at = new Date(created).toISOString();
-            delete row.created;
-            delete row.desc;
-            return row;
+            return {
+                id: t.id ?? null,
+                title: t.title ?? null,
+                type: "task",
+                content: t.content ?? t.desc ?? null,
+                priority: t.priority ?? null,
+                created_at: created ? new Date(created).toISOString() : null,
+                source: t.source ?? null,
+            };
         };
         // Upsert tasks in Supabase only if new tasks were synthesized
         if (proposed.length > 0) {
@@ -101,8 +98,10 @@ export async function synthesizeTasks() {
                 headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
                 body: JSON.stringify(limited.map(toRow)),
             });
-            if (!upsert.ok)
-                throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
+            if (!upsert.ok) {
+                const text = (await upsert.text()).slice(0, 200);
+                throw new Error(`Supabase upsert tasks failed (${upsert.status}): ${text}`);
+            }
             const idsToDelete = tasks
                 .filter(t => t.id && !limited.some(l => l.id === t.id))
                 .map(t => `'${t.id}'`);

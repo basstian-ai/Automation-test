@@ -49,11 +49,37 @@ test('merges tasks and orders by date', async () => {
 
   const upsertCall = fetchMock.mock.calls[1];
   const body = JSON.parse(upsertCall[1].body);
+  const keys = ['id', 'title', 'type', 'content', 'priority', 'created_at', 'source'];
   expect(body).toEqual([
-    { id: '1', title: 'Existing', type: 'task', priority: 1, created_at: new Date('2024-01-05').toISOString(), source: 'codex' },
-    { title: 'Old', type: 'task', priority: 2, created_at: new Date('2024-01-03').toISOString() },
-    { title: 'Newer', type: 'task', priority: 3, created_at: new Date('2024-01-04').toISOString() },
+    {
+      id: '1',
+      title: 'Existing',
+      type: 'task',
+      content: null,
+      priority: 1,
+      created_at: new Date('2024-01-05').toISOString(),
+      source: 'codex',
+    },
+    {
+      id: null,
+      title: 'Old',
+      type: 'task',
+      content: null,
+      priority: 2,
+      created_at: new Date('2024-01-03').toISOString(),
+      source: null,
+    },
+    {
+      id: null,
+      title: 'Newer',
+      type: 'task',
+      content: null,
+      priority: 3,
+      created_at: new Date('2024-01-04').toISOString(),
+      source: null,
+    },
   ]);
+  expect(body.every(o => Object.keys(o).length === keys.length && keys.every(k => k in o))).toBe(true);
 });
 
 test('filters out extra properties from existing tasks', async () => {
@@ -83,14 +109,17 @@ test('filters out extra properties from existing tasks', async () => {
   await synthesizeTasks();
 
   const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+  const keys = ['id', 'title', 'type', 'content', 'priority', 'created_at', 'source'];
   expect(body[0]).toEqual({
     id: '1',
     title: 'Existing',
     type: 'task',
+    content: null,
     priority: 1,
     created_at: new Date('2024-01-05').toISOString(),
     source: 'codex',
   });
+  expect(Object.keys(body[0])).toEqual(keys);
 });
 
 test('skips Supabase update when no tasks generated even with existing tasks', async () => {
