@@ -7,21 +7,19 @@ create table if not exists roadmap_item_log (
 
 -- Canonical function name is complete_task; legacy name complete_roadmap_task is retained for compatibility.
 create or replace function complete_task(
-  item_id bigint,
+  task_id bigint,
   title text,
-  content text,
-  type roadmap_item_type,
+  description text,
   priority int
 ) returns void as $$
 begin
   update roadmap_items
     set title = coalesce(complete_task.title, roadmap_items.title),
-        content = complete_task.content,
-        type = complete_task.type,
+        content = complete_task.description,
         priority = complete_task.priority,
-        status = 'completed'
-    where id = complete_task.item_id;
+        type = 'done'
+    where id = complete_task.task_id;
 
-  insert into roadmap_item_log(item_id) values (complete_task.item_id);
+  insert into roadmap_item_log(item_id) values (complete_task.task_id);
 end;
 $$ language plpgsql;
