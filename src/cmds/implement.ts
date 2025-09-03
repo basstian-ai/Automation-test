@@ -28,6 +28,7 @@ export async function implementTopTask() {
       .from("roadmap_items")
       .select("*")
       .eq("type", "task")
+      .eq("repo", ENV.TARGET_REPO)
       .or("status.is.null,status.neq.done")
       .order("priority", { ascending: true })
       .limit(1);

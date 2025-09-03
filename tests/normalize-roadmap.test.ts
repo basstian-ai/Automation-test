@@ -12,9 +12,12 @@ function setup(opts: {
 } = {}) {
   // Hold references so we can assert on call args later
   let selectIn!: ReturnType<typeof vi.fn>;
+  let selectEq!: ReturnType<typeof vi.fn>;
   let deleteIn!: ReturnType<typeof vi.fn>;
-  let upsert!: ReturnType<typeof vi.fn>;
+  let deleteInEq!: ReturnType<typeof vi.fn>;
   let deleteEq!: ReturnType<typeof vi.fn>;
+  let deleteEq2!: ReturnType<typeof vi.fn>;
+  let upsert!: ReturnType<typeof vi.fn>;
 
   // Lock mock
   vi.doMock('../src/lib/lock.js', () => ({
@@ -24,7 +27,7 @@ function setup(opts: {
 
   // Supabase client mock
   vi.doMock('@supabase/supabase-js', () => {
-    selectIn = vi.fn().mockResolvedValue({
+    selectEq = vi.fn().mockResolvedValue({
       data: opts.rows ?? [
         { id: '1', type: 'task', title: 'Task A', priority: 2, created: '2023-02-01' },
         { id: '1', type: 'task', title: 'Task A duplicate', priority: 5, created: '2023-02-02' },
@@ -34,8 +37,10 @@ function setup(opts: {
       ],
       error: null,
     });
+    selectIn = vi.fn().mockReturnValue({ eq: selectEq });
 
-    deleteIn = vi.fn().mockResolvedValue({ data: null, error: opts.delError ?? null });
+    deleteInEq = vi.fn().mockResolvedValue({ data: null, error: opts.delError ?? null });
+    deleteIn = vi.fn().mockReturnValue({ eq: deleteInEq });
 
     if (opts.upsertReject) {
       upsert = vi.fn().mockRejectedValue(opts.upsertReject);
@@ -43,7 +48,8 @@ function setup(opts: {
       upsert = vi.fn().mockResolvedValue({ data: null, error: opts.upsertErrorProp ?? null });
     }
 
-    deleteEq = vi.fn().mockResolvedValue({ data: null, error: opts.finalDelError ?? null });
+    deleteEq2 = vi.fn().mockResolvedValue({ data: null, error: opts.finalDelError ?? null });
+    deleteEq = vi.fn().mockReturnValue({ eq: deleteEq2 });
 
     return {
       createClient: vi.fn(() => ({
@@ -56,19 +62,29 @@ function setup(opts: {
     };
   });
 
-  return { selectIn: () => selectIn, deleteIn: () => deleteIn, upsert: () => upsert, deleteEq: () => deleteEq };
+  return {
+    selectIn: () => selectIn,
+    selectEq: () => selectEq,
+    deleteIn: () => deleteIn,
+    deleteInEq: () => deleteInEq,
+    upsert: () => upsert,
+    deleteEq: () => deleteEq,
+    deleteEq2: () => deleteEq2,
+  };
 }
 
 beforeEach(() => {
   vi.resetModules();
   process.env.SUPABASE_URL = 'http://example.local';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
+  process.env.TARGET_REPO = 'owner/repo';
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   delete process.env.SUPABASE_URL;
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.TARGET_REPO;
 });
 
 test('sorts and deduplicates roadmap items (happy path)', async () => {
@@ -77,11 +93,13 @@ test('sorts and deduplicates roadmap items (happy path)', async () => {
 
   await normalizeRoadmap();
 
-  // SELECT should ask for the types to normalize (task/new)
+  // SELECT should ask for the types to normalize (task/new) and filter by repo
   expect(m.selectIn()).toHaveBeenCalledWith('type', ['task', 'new']);
+  expect(m.selectEq()).toHaveBeenCalledWith('repo', expect.any(String));
 
-  // Duplicates of id '1' should be deleted explicitly
+  // Duplicates of id '1' should be deleted explicitly and scoped by repo
   expect(m.deleteIn()).toHaveBeenCalledWith('id', ['1']);
+  expect(m.deleteInEq()).toHaveBeenCalledWith('repo', expect.any(String));
 
   // Upsert should receive stable, re-prioritized items (1..n); adjust if your impl differs
   // We assert shape rather than exact array equality to be resilient to non-essential fields.
@@ -93,6 +111,11 @@ test('sorts and deduplicates roadmap items (happy path)', async () => {
   expect(upsertRows.map((r: any) => r.id)).toEqual(['3', '4', '2', '1']);
   expect(upsertRows.map((r: any) => r.type)).toEqual(['task', 'task', 'task', 'task']);
   expect(upsertRows.map((r: any) => r.priority)).toEqual([1, 2, 3, 4]);
+  expect(upsertRows.every((r: any) => r.repo)).toBe(true);
+
+  // Final cleanup delete scoped by repo
+  expect(m.deleteEq()).toHaveBeenCalledWith('type', 'new');
+  expect(m.deleteEq2()).toHaveBeenCalledWith('repo', expect.any(String));
 });
 
 test('propagates Supabase upsert rejection (promise rejects)', async () => {

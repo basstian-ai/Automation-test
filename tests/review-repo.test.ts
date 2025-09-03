@@ -77,8 +77,11 @@ test('reviewRepo batches ideas and generates unique IDs', async () => {
     'queue:\n  - title: One\n    details: first\n  - title: Two\n    details: second\n',
   );
   await reviewRepo();
+  expect(sbRequest.mock.calls[0][0]).toContain(`repo=eq.${envVars.TARGET_REPO}`);
   const postCalls = sbRequest.mock.calls.filter(([, init]) => init?.method === 'POST');
   expect(postCalls).toHaveLength(2);
+  const summaryBody = JSON.parse(postCalls[0][1].body);
+  expect(summaryBody.repo).toBe(envVars.TARGET_REPO);
   const ideasBody = JSON.parse(postCalls[1][1].body);
   expect(ideasBody).toHaveLength(2);
   const [first, second] = ideasBody;
@@ -86,6 +89,8 @@ test('reviewRepo batches ideas and generates unique IDs', async () => {
   expect(first.id).toMatch(uuidRegex);
   expect(second.id).toMatch(uuidRegex);
   expect(first.id).not.toBe(second.id);
+  expect(first.repo).toBe(envVars.TARGET_REPO);
+  expect(second.repo).toBe(envVars.TARGET_REPO);
 });
 
 test('reviewRepo handles colons in fields', async () => {
@@ -99,6 +104,7 @@ test('reviewRepo handles colons in fields', async () => {
   const ideasBody = JSON.parse(postCalls[1][1].body);
   expect(ideasBody[0].title).toBe('Example');
   expect(ideasBody[0].content).toBe('Includes colon: ok');
+  expect(ideasBody[0].repo).toBe(envVars.TARGET_REPO);
 });
 
 test('reviewRepo skips quoting YAML block scalars', async () => {
@@ -111,4 +117,5 @@ test('reviewRepo skips quoting YAML block scalars', async () => {
   expect(postCalls).toHaveLength(2);
   const ideasBody = JSON.parse(postCalls[1][1].body);
   expect(ideasBody[0].content).toBe('first\nsecond\n');
+  expect(ideasBody[0].repo).toBe(envVars.TARGET_REPO);
 });
