@@ -38,12 +38,12 @@ test('ingestLogs only fetches new log entries on repeat runs', async () => {
     getLatestDeployment.mockResolvedValue({ uid: 'dep1', createdAt: 1 });
     getBuildLogs
       .mockResolvedValueOnce([
-        { id: 'id1', type: 'stderr', text: 'a' },
-        { id: 'id2', type: 'stderr', text: 'b' },
+        { id: 'id1', type: 'stderr', level: 'info', text: 'a' },
+        { id: 'id2', type: 'stderr', level: 'info', text: 'b' },
       ])
       .mockResolvedValueOnce([
-        { id: 'id2', type: 'stderr', text: 'b' },
-        { id: 'id3', type: 'stderr', text: 'c' },
+        { id: 'id2', type: 'stderr', level: 'info', text: 'b' },
+        { id: 'id3', type: 'stderr', level: 'info', text: 'c' },
       ])
       .mockResolvedValueOnce([]);
 
