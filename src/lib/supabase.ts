@@ -37,16 +37,25 @@ export async function sbRequest(path: string, init: RequestInit = {}) {
   };
   const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
-    let body = "";
+    let bodyText = "";
     try {
-      body = await res.text();
+      bodyText = await res.text();
     } catch {
       // ignore
     }
-    const snippet = body.slice(0, 100);
+    let detail = "";
+    try {
+      const data = JSON.parse(bodyText);
+      detail = [data.message, data.hint].filter(Boolean).join(" - ");
+      if (!detail) {
+        detail = bodyText.slice(0, 100);
+      }
+    } catch {
+      detail = bodyText.slice(0, 100);
+    }
     throw new Error(
       `Supabase error: ${res.status} ${res.statusText}${
-        snippet ? ` - ${snippet}` : ""
+        detail ? ` - ${detail}` : ""
       }`
     );
   }

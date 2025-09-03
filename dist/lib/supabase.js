@@ -29,7 +29,25 @@ export async function sbRequest(path, init = {}) {
     };
     const res = await fetch(url, { ...init, headers });
     if (!res.ok) {
-        throw new Error(`Supabase error: ${res.status} ${res.statusText}`);
+        let bodyText = "";
+        try {
+            bodyText = await res.text();
+        }
+        catch {
+            // ignore
+        }
+        let detail = "";
+        try {
+            const data = JSON.parse(bodyText);
+            detail = [data.message, data.hint].filter(Boolean).join(" - ");
+            if (!detail) {
+                detail = bodyText.slice(0, 100);
+            }
+        }
+        catch {
+            detail = bodyText.slice(0, 100);
+        }
+        throw new Error(`Supabase error: ${res.status} ${res.statusText}${detail ? ` - ${detail}` : ""}`);
     }
     if (res.status === 204 || res.headers.get("Content-Length") === "0") {
         return undefined;
