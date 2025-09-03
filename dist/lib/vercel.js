@@ -21,10 +21,10 @@ export async function getLatestDeployment() {
     });
     return data.deployments?.[0];
 }
-export async function getRuntimeLogs(deploymentId, opts = {}) {
+export async function getBuildLogs(deploymentId, opts = {}) {
     if (!ENV.VERCEL_PROJECT_ID)
         return [];
-    const url = new URL(`${API}/v1/projects/${ENV.VERCEL_PROJECT_ID}/deployments/${deploymentId}/runtime-logs`);
+    const url = new URL(`${API}/v6/deployments/${deploymentId}/build-logs`);
     if (ENV.VERCEL_TEAM_ID)
         url.searchParams.set("teamId", ENV.VERCEL_TEAM_ID);
     const { fromId, from, until, limit, direction } = opts;
@@ -49,7 +49,7 @@ export async function getRuntimeLogs(deploymentId, opts = {}) {
     }
     catch (err) {
         if (err.name === "AbortError") {
-            console.warn("Vercel runtime-logs request timed out");
+            console.warn("Vercel build-logs request timed out");
         }
         throw err;
     }
@@ -57,7 +57,7 @@ export async function getRuntimeLogs(deploymentId, opts = {}) {
         clearTimeout(t);
     }
     if (!res.ok)
-        throw new Error(`Vercel runtime-logs failed: ${res.status}`);
+        throw new Error(`Vercel build-logs failed: ${res.status}`);
     const text = await res.text();
     return text
         .split("\n")
