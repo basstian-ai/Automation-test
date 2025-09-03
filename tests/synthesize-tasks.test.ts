@@ -41,19 +41,18 @@ test('merges tasks and orders by date', async () => {
       ],
     } as any)
     .mockResolvedValueOnce({ ok: true } as any)
+    .mockResolvedValueOnce({ ok: true } as any)
     .mockResolvedValueOnce({ ok: true } as any);
   vi.stubGlobal('fetch', fetchMock);
 
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
   await synthesizeTasks();
 
-  const upsertCall = fetchMock.mock.calls[1];
-  const body = JSON.parse(upsertCall[1].body);
-  const sortedKeys = (o: any) => Object.keys(o).filter(k => k !== 'id').sort();
-  const baseKeys = sortedKeys(body[0]);
-  expect(body.every(o => sortedKeys(o).join(',') === baseKeys.join(','))).toBe(true);
+  const updateBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+  const insertBody = JSON.parse(fetchMock.mock.calls[2][1].body);
   const keys = ['title', 'type', 'content', 'priority', 'created_at', 'source'];
-  expect(body).toEqual([
+
+  expect(updateBody).toEqual([
     {
       id: '1',
       title: 'Existing',
@@ -63,6 +62,10 @@ test('merges tasks and orders by date', async () => {
       created_at: new Date('2024-01-05').toISOString(),
       source: 'codex',
     },
+  ]);
+  expect(Object.keys(updateBody[0])).toEqual(['id', ...keys]);
+
+  expect(insertBody).toEqual([
     {
       title: 'Old',
       type: 'task',
@@ -80,9 +83,10 @@ test('merges tasks and orders by date', async () => {
       source: null,
     },
   ]);
-  expect(body[0]).toHaveProperty('id');
-  expect(body.slice(1).every(o => !('id' in o))).toBe(true);
-  expect(body.every(o => keys.every(k => k in o))).toBe(true);
+  const sortedKeys = (o: any) => Object.keys(o).sort();
+  const insertKeys = sortedKeys(insertBody[0]);
+  expect(insertBody.every(o => sortedKeys(o).join(',') === insertKeys.join(','))).toBe(true);
+  expect(insertKeys).toEqual([...keys].sort());
 });
 
 test('filters out extra properties from existing tasks', async () => {
@@ -104,6 +108,7 @@ test('filters out extra properties from existing tasks', async () => {
         { id: '1', type: 'task', title: 'Existing', created: '2024-01-05', priority: 5, source: 'codex', extra: 'x' },
       ],
     } as any)
+    .mockResolvedValueOnce({ ok: true } as any)
     .mockResolvedValueOnce({ ok: true } as any)
     .mockResolvedValueOnce({ ok: true } as any);
   vi.stubGlobal('fetch', fetchMock);
