@@ -87,3 +87,28 @@ test('reviewRepo batches ideas and generates unique IDs', async () => {
   expect(second.id).toMatch(uuidRegex);
   expect(first.id).not.toBe(second.id);
 });
+
+test('reviewRepo handles colons in fields', async () => {
+  const { reviewRepo } = await import('../src/cmds/review-repo.ts');
+  reviewToIdeas.mockResolvedValue(
+    'queue:\n  - title: Example\n    details: Includes colon: ok\n',
+  );
+  await reviewRepo();
+  const postCalls = sbRequest.mock.calls.filter(([, init]) => init?.method === 'POST');
+  expect(postCalls).toHaveLength(2);
+  const ideasBody = JSON.parse(postCalls[1][1].body);
+  expect(ideasBody[0].title).toBe('Example');
+  expect(ideasBody[0].content).toBe('Includes colon: ok');
+});
+
+test('reviewRepo skips quoting YAML block scalars', async () => {
+  const { reviewRepo } = await import('../src/cmds/review-repo.ts');
+  reviewToIdeas.mockResolvedValue(
+    'queue:\n  - title: Example\n    details: |\n      first\n      second\n',
+  );
+  await reviewRepo();
+  const postCalls = sbRequest.mock.calls.filter(([, init]) => init?.method === 'POST');
+  expect(postCalls).toHaveLength(2);
+  const ideasBody = JSON.parse(postCalls[1][1].body);
+  expect(ideasBody[0].content).toBe('first\nsecond\n');
+});
