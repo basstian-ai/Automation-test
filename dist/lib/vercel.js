@@ -50,7 +50,6 @@ export async function getRuntimeLogs(deploymentId, opts = {}) {
     catch (err) {
         if (err.name === "AbortError") {
             console.warn("Vercel runtime-logs request timed out");
-            return [];
         }
         throw err;
     }
