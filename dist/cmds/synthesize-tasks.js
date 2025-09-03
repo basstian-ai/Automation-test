@@ -79,26 +79,23 @@ export async function synthesizeTasks() {
         // Unique priorities
         merged.sort(compareTasks);
         const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
+        const toRow = (t) => {
+            const row = t.id ? { ...t } : {};
+            row.title = t.title;
+            row.type = "task";
+            if (t.content || t.desc)
+                row.content = t.content ?? t.desc;
+            if (t.priority != null)
+                row.priority = t.priority;
+            const created = t.created ?? t.created_at;
+            if (created)
+                row.created_at = new Date(created).toISOString();
+            delete row.created;
+            delete row.desc;
+            return row;
+        };
         // Upsert tasks in Supabase only if new tasks were synthesized
         if (proposed.length > 0) {
-            const delTasks = await fetch(`${url}/rest/v1/roadmap_items?type=eq.task`, { method: "DELETE", headers });
-            if (!delTasks.ok)
-                throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
-            const toRow = (t) => {
-                const row = t.id ? { ...t } : {};
-                row.title = t.title;
-                row.type = "task";
-                if (t.content || t.desc)
-                    row.content = t.content ?? t.desc;
-                if (t.priority != null)
-                    row.priority = t.priority;
-                const created = t.created ?? t.created_at;
-                if (created)
-                    row.created_at = new Date(created).toISOString();
-                delete row.created;
-                delete row.desc;
-                return row;
-            };
             const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
                 method: "POST",
                 headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
@@ -106,13 +103,21 @@ export async function synthesizeTasks() {
             });
             if (!upsert.ok)
                 throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
+            const idsToDelete = tasks
+                .filter(t => t.id && !limited.some(l => l.id === t.id))
+                .map(t => `'${t.id}'`);
+            if (idsToDelete.length) {
+                const delTasks = await fetch(`${url}/rest/v1/roadmap_items?id=in.(${idsToDelete.join(',')})`, { method: "DELETE", headers });
+                if (!delTasks.ok)
+                    throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
+            }
+            const delIdeas = await fetch(`${url}/rest/v1/roadmap_items?type=eq.idea`, { method: "DELETE", headers });
+            if (!delIdeas.ok)
+                throw new Error(`Supabase delete ideas failed: ${delIdeas.status}`);
         }
         else {
             console.log("No new tasks synthesized; skipping Supabase task update.");
         }
-        const delIdeas = await fetch(`${url}/rest/v1/roadmap_items?type=eq.idea`, { method: "DELETE", headers });
-        if (!delIdeas.ok)
-            throw new Error(`Supabase delete ideas failed: ${delIdeas.status}`);
         console.log(`Synthesis complete. Tasks: ${limited.length}`);
     }
     finally {

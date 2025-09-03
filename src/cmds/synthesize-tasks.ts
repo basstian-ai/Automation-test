@@ -96,25 +96,22 @@ export async function synthesizeTasks() {
 
     // Upsert tasks in Supabase only if new tasks were synthesized
     if (proposed.length > 0) {
-      const backup = tasks.map(toRow);
+      const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify(limited.map(toRow)),
+      });
+      if (!upsert.ok) throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
 
-      try {
-        const delTasks = await fetch(`${url}/rest/v1/roadmap_items?type=eq.task`, { method: "DELETE", headers });
+      const idsToDelete = tasks
+        .filter(t => t.id && !limited.some(l => l.id === t.id))
+        .map(t => `'${t.id}'`);
+      if (idsToDelete.length) {
+        const delTasks = await fetch(
+          `${url}/rest/v1/roadmap_items?id=in.(${idsToDelete.join(',')})`,
+          { method: "DELETE", headers }
+        );
         if (!delTasks.ok) throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
-
-        const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
-          method: "POST",
-          headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-          body: JSON.stringify(limited.map(toRow)),
-        });
-        if (!upsert.ok) throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
-      } catch (err) {
-        await fetch(`${url}/rest/v1/roadmap_items`, {
-          method: "POST",
-          headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-          body: JSON.stringify(backup),
-        });
-        throw err;
       }
 
       const delIdeas = await fetch(`${url}/rest/v1/roadmap_items?type=eq.idea`, { method: "DELETE", headers });
