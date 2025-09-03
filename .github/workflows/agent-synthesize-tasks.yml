@@ -1,7 +1,7 @@
 name: agent-synthesize-tasks
 on:
-  #schedule:
-   # - cron: "*/30 * * * *"     # 30 min)
+  schedule:
+    - cron: "44 */2 * * *"     # 30 min)
   workflow_dispatch:
 
 permissions:
