@@ -79,16 +79,18 @@ export async function ingestLogs(): Promise<void> {
     const entries: RawLog[] = raw
       .filter(r => {
         if (!r) return false;
-        const lvl = (r.level ?? r.type ?? "").toString().toLowerCase();
-        return lvl === "error" || lvl === "warning" || lvl === "stderr";
+        const level = (r.level ?? "").toString().toLowerCase();
+        const type = (r.type ?? "").toString().toLowerCase();
+        return level === "error" || level === "warning" || type === "stderr";
       })
       .filter(r => !prevIds.has(r.id))
       .map(r => {
-        const lvl = (r.level ?? r.type ?? "").toString().toLowerCase();
-        const normalizedLevel = lvl === "stderr" ? "error" : lvl;
+        const level = (r.level ?? "").toString().toLowerCase();
+        const type = (r.type ?? "").toString().toLowerCase();
+        const lvl = type === "stderr" ? "error" : level || type;
         return {
           id: r.id,
-          level: normalizedLevel,
+          level: lvl,
           message: r.message ?? r.text ?? "",
           requestPath: r.requestPath ?? "",
           timestamp: r.timestamp ?? ""
