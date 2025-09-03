@@ -41,14 +41,13 @@ test('merges tasks and orders by date', async () => {
       ],
     } as any)
     .mockResolvedValueOnce({ ok: true } as any)
-    .mockResolvedValueOnce({ ok: true } as any)
     .mockResolvedValueOnce({ ok: true } as any);
   vi.stubGlobal('fetch', fetchMock);
 
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
   await synthesizeTasks();
 
-  const upsertCall = fetchMock.mock.calls[2];
+  const upsertCall = fetchMock.mock.calls[1];
   const body = JSON.parse(upsertCall[1].body);
   expect(body).toEqual([
     { id: '1', title: 'Existing', type: 'task', priority: 1, created_at: new Date('2024-01-05').toISOString(), source: 'codex' },
@@ -87,7 +86,7 @@ test('skips Supabase update when no tasks generated even with existing tasks', a
   expect(fetchMock.mock.calls.some(c => c[1]?.method === 'POST')).toBe(false);
 });
 
-test('restores tasks if upsert fails', async () => {
+test('does not delete tasks if upsert fails', async () => {
   vi.doMock('../src/lib/lock.js', () => ({
     acquireLock: vi.fn().mockResolvedValue(true),
     releaseLock: vi.fn().mockResolvedValue(undefined),
@@ -100,33 +99,19 @@ test('restores tasks if upsert fails', async () => {
   }));
 
   const existing = { id: '1', type: 'task', title: 'Existing', created: '2024-01-05', priority: 5, source: 'codex' };
-  const backup = [{
-    id: '1',
-    title: 'Existing',
-    type: 'task',
-    priority: 5,
-    source: 'codex',
-    created_at: new Date('2024-01-05').toISOString(),
-  }];
 
   const fetchMock = vi.fn()
     .mockResolvedValueOnce({
       ok: true,
       json: async () => [existing],
     } as any)
-    .mockResolvedValueOnce({ ok: true } as any) // delete tasks
-    .mockResolvedValueOnce({ ok: false, status: 500 } as any) // upsert fails
-    .mockResolvedValueOnce({ ok: true } as any); // restoration
+    .mockResolvedValueOnce({ ok: false, status: 500 } as any);
   vi.stubGlobal('fetch', fetchMock);
 
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
   await expect(synthesizeTasks()).rejects.toThrow();
 
-  expect(fetchMock).toHaveBeenCalledTimes(4);
-  const restoreCall = fetchMock.mock.calls[3];
-  expect(restoreCall[1].method).toBe('POST');
-  expect(JSON.parse(restoreCall[1].body)).toEqual(backup);
-  expect(fetchMock.mock.calls.some(c => String(c[0]).includes('type=eq.idea'))).toBe(false);
-  expect(fetchMock.mock.calls.filter(c => String(c[0]).includes('type=eq.task') && c[1]?.method === 'DELETE').length).toBe(1);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock.mock.calls.some(c => c[1]?.method === 'DELETE')).toBe(false);
 });
 
