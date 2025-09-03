@@ -1,7 +1,7 @@
 name: agent-review-repo
 on:
-  #schedule:
-   # - cron: "0 */4 * * *"      # 
+  schedule:
+    - cron: "55 */2 * * *"      # 
   workflow_dispatch:
 
 permissions:
