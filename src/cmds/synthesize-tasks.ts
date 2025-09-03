@@ -82,7 +82,7 @@ export async function synthesizeTasks() {
     const toRow = (t: Task) => {
       const created = (t as any).created ?? (t as any).created_at;
       return {
-        id: t.id ?? null,
+        ...(t.id !== undefined ? { id: t.id } : {}),
         title: t.title ?? null,
         type: "task",
         content: t.content ?? t.desc ?? null,
