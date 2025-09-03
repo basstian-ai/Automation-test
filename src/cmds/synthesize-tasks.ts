@@ -38,7 +38,10 @@ export async function synthesizeTasks() {
     const url = ENV.SUPABASE_URL;
     const res = await fetch(`${url}/rest/v1/roadmap_items?select=*`, { headers });
     if (!res.ok) throw new Error(`Supabase fetch failed: ${res.status}`);
-    const rows: Task[] = await res.json();
+    const rows: Task[] = (await res.json()).map((r: any) => ({
+      ...r,
+      created: r.created ?? r.created_at,
+    }));
 
     const tasks = rows.filter(r => r.type === "task");
     const bugs  = rows.filter(r => r.type === "bug");
@@ -80,10 +83,25 @@ export async function synthesizeTasks() {
     const delTasks = await fetch(`${url}/rest/v1/roadmap_items?type=eq.task`, { method: "DELETE", headers });
     if (!delTasks.ok) throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
 
+    const toRow = (t: Task) => {
+      const row: any = t.id ? { ...t } : {};
+
+      row.title = t.title!;
+      row.type = "task";
+      if (t.content || t.desc) row.content = t.content ?? t.desc;
+      if (t.priority != null) row.priority = t.priority;
+      const created = (t as any).created ?? (t as any).created_at;
+      if (created) row.created_at = new Date(created).toISOString();
+
+      delete row.created;
+      delete row.desc;
+      return row;
+    };
+
     const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify(limited.map(t => ({ ...t, type: "task" }))),
+      body: JSON.stringify(limited.map(toRow)),
     });
     if (!upsert.ok) throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
 
