@@ -7,6 +7,16 @@ function normTitle(t = "") { return t.toLowerCase().replace(/\s+/g, " ").replace
 function normType(t = "") { return t.toLowerCase() === "idea" ? "idea" : "task"; }
 function yamlBlock(obj) { return "```yaml\n" + yaml.dump(obj, { lineWidth: 120 }) + "```"; }
 function isMeta(t) { return /batch task synthesis/i.test(t?.title || "") || /```/.test(t?.desc || ""); }
+export function compareTasks(a, b) {
+    const pa = a.priority ?? 1e9, pb = b.priority ?? 1e9;
+    if (pa !== pb)
+        return pa - pb;
+    const ca = a.created instanceof Date ? a.created.toISOString() : String(a.created ?? "");
+    const cb = b.created instanceof Date ? b.created.toISOString() : String(b.created ?? "");
+    if (ca !== cb)
+        return ca.localeCompare(cb);
+    return normTitle(a.title).localeCompare(normTitle(b.title));
+}
 export async function synthesizeTasks() {
     if (!(await acquireLock())) {
         console.log("Lock taken; exiting.");
@@ -28,7 +38,10 @@ export async function synthesizeTasks() {
         const res = await fetch(`${url}/rest/v1/roadmap_items?select=*`, { headers });
         if (!res.ok)
             throw new Error(`Supabase fetch failed: ${res.status}`);
-        const rows = await res.json();
+        const rows = (await res.json()).map((r) => ({
+            ...r,
+            created: r.created ?? r.created_at,
+        }));
         const tasks = rows.filter(r => r.type === "task");
         const bugs = rows.filter(r => r.type === "bug");
         const ideas = rows.filter(r => r.type === "idea");
@@ -64,24 +77,31 @@ export async function synthesizeTasks() {
             merged.push(t);
         }
         // Unique priorities
-        merged.sort((a, b) => {
-            const pa = a.priority ?? 1e9, pb = b.priority ?? 1e9;
-            if (pa !== pb)
-                return pa - pb;
-            const ca = a.created || "", cb = b.created || "";
-            if (ca !== cb)
-                return ca.localeCompare(cb);
-            return normTitle(a.title).localeCompare(normTitle(b.title));
-        });
+        merged.sort(compareTasks);
         const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
         // Upsert tasks in Supabase
         const delTasks = await fetch(`${url}/rest/v1/roadmap_items?type=eq.task`, { method: "DELETE", headers });
         if (!delTasks.ok)
             throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
+        const toRow = (t) => {
+            const row = {
+                title: t.title,
+                type: "task",
+            };
+            if (t.id)
+                row.id = t.id;
+            if (t.content || t.desc)
+                row.content = t.content ?? t.desc;
+            if (t.priority != null)
+                row.priority = t.priority;
+            if (t.created)
+                row.created_at = new Date(t.created).toISOString();
+            return row;
+        };
         const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
             method: "POST",
             headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-            body: JSON.stringify(limited.map(t => ({ ...t, type: "task" }))),
+            body: JSON.stringify(limited.map(toRow)),
         });
         if (!upsert.ok)
             throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);

@@ -51,9 +51,9 @@ test('merges tasks and orders by date', async () => {
   const upsertCall = fetchMock.mock.calls[2];
   const body = JSON.parse(upsertCall[1].body);
   expect(body).toEqual([
-    { id: '1', type: 'task', title: 'Existing', priority: 1, created: '2024-01-05' },
-    { title: 'Old', type: 'task', created: '2024-01-03', priority: 2 },
-    { title: 'Newer', type: 'task', created: '2024-01-04', priority: 3 },
+    { id: '1', title: 'Existing', type: 'task', priority: 1, created_at: new Date('2024-01-05').toISOString() },
+    { title: 'Old', type: 'task', priority: 2, created_at: new Date('2024-01-03').toISOString() },
+    { title: 'Newer', type: 'task', priority: 3, created_at: new Date('2024-01-04').toISOString() },
   ]);
 });
 
