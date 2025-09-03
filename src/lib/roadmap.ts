@@ -4,7 +4,7 @@ export type RoadmapItem = {
   id: string;
   type: "bug" | "idea";
   title: string;
-  details: string;
+  content: string;
   created: string;
 };
 
