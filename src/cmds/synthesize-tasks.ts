@@ -35,12 +35,31 @@ export async function synthesizeTasks() {
 
     const vision = (await readFile("roadmap/vision.md")) || "";
 
-    const rows: Task[] = ((await sbRequest(
-      `roadmap_items?select=*&repo=eq.${ENV.TARGET_REPO}`,
-    )) as any[]).map((r: any) => ({
-      ...r,
-      created: r.created,
-    }));
+    let hasRepoColumn = true;
+    let rows: Task[] = [];
+    try {
+      rows = ((await sbRequest(
+        `roadmap_items?select=*&repo=eq.${ENV.TARGET_REPO}`,
+      )) as any[]).map((r: any) => ({
+        ...r,
+        created: r.created,
+      }));
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        /column\s+roadmap_items\.repo/.test(err.message)
+      ) {
+        hasRepoColumn = false;
+        rows = ((await sbRequest(
+          `roadmap_items?select=*`,
+        )) as any[]).map((r: any) => ({
+          ...r,
+          created: r.created,
+        }));
+      } else {
+        throw err;
+      }
+    }
 
     const tasks = rows.filter(r => r.type === "task");
     const bugs  = rows.filter(r => r.type === "bug");
@@ -93,7 +112,7 @@ export async function synthesizeTasks() {
         priority: t.priority ?? null,
         created: createdIso,
         source: t.source ?? null,
-        repo: ENV.TARGET_REPO,
+        ...(hasRepoColumn ? { repo: ENV.TARGET_REPO } : {}),
       };
     };
 
@@ -134,15 +153,16 @@ export async function synthesizeTasks() {
       const idsToDelete = tasks
         .filter(t => t.id && !limited.some(l => l.id === t.id))
         .map(t => `'${t.id}'`);
+      const repoFilter = hasRepoColumn ? `&repo=eq.${ENV.TARGET_REPO}` : "";
       if (idsToDelete.length) {
         await sbRequest(
-          `roadmap_items?id=in.(${idsToDelete.join(',')})&repo=eq.${ENV.TARGET_REPO}`,
+          `roadmap_items?id=in.(${idsToDelete.join(',')})${repoFilter}`,
           { method: "DELETE" },
         );
       }
 
       await sbRequest(
-        `roadmap_items?type=eq.idea&repo=eq.${ENV.TARGET_REPO}`,
+        `roadmap_items?type=eq.idea${repoFilter}`,
         { method: "DELETE" },
       );
     } else {
