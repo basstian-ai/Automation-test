@@ -7,6 +7,7 @@ import { summarizeLogToBug, type LogEntryForBug } from "../lib/prompts.js";
 import { insertRoadmap, type RoadmapItem } from "../lib/roadmap.js";
 
 type RawLog = {
+  id?: string;
   level?: string;
   message?: string;
   text?: string;
@@ -57,18 +58,31 @@ export async function ingestLogs(): Promise<void> {
       return;
     }
 
-    if (state.ingest?.lastDeploymentTimestamp && dep.createdAt <= state.ingest.lastDeploymentTimestamp) {
+    if (state.ingest?.lastDeploymentTimestamp && dep.createdAt < state.ingest.lastDeploymentTimestamp) {
       console.log("No new deployment; exit.");
       return;
     }
 
-    const now = Date.now();
-    const from = new Date(now - 5 * 60 * 1000).toISOString();
-    const until = new Date(now).toISOString();
-    const raw = await getRuntimeLogs(dep.uid, { from, until, limit: 100, direction: "forward" });
-    const entries: RawLog[] = (raw as any[])
+    const sameDep = state.ingest?.lastDeploymentTimestamp === dep.createdAt;
+    const prevRowIds = sameDep ? state.ingest?.lastRowIds ?? [] : [];
+    let raw: any[] = [];
+    if (prevRowIds.length > 0) {
+      const fromId = prevRowIds[prevRowIds.length - 1];
+      raw = (await getRuntimeLogs(dep.uid, { fromId, limit: 100, direction: "forward" })) as any[];
+    } else {
+      const now = Date.now();
+      const from = new Date(now - 5 * 60 * 1000).toISOString();
+      const until = new Date(now).toISOString();
+      raw = (await getRuntimeLogs(dep.uid, { from, until, limit: 100, direction: "forward" })) as any[];
+    }
+    const rawIds = raw.map(r => r?.id).filter(Boolean) as string[];
+    const nextRowIds = rawIds.length > 0 ? rawIds : prevRowIds;
+    const prevIds = new Set(prevRowIds);
+    const entries: RawLog[] = raw
       .filter(r => r && (r.level === "error" || r.level === "warning"))
+      .filter(r => !prevIds.has(r.id))
       .map(r => ({
+        id: r.id,
         level: r.level,
         message: r.message ?? r.text ?? "",
         requestPath: r.requestPath ?? "",
@@ -77,7 +91,10 @@ export async function ingestLogs(): Promise<void> {
 
     if (entries.length === 0) {
       console.log("No relevant log entries.");
-      await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+      await saveState({
+        ...state,
+        ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: nextRowIds }
+      });
       return;
     }
 
@@ -96,7 +113,10 @@ export async function ingestLogs(): Promise<void> {
         created: new Date().toISOString()
       };
       await insertRoadmap([item]);
-      await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+      await saveState({
+        ...state,
+        ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: nextRowIds }
+      });
       await appendChangelog("Handled infra-only logs during ingestion.");
       await appendDecision("Routed infra-related logs to Supabase as ideas instead of bugs.");
       console.log("Infra-only logs detected; routed to Supabase as type=idea.");
@@ -105,7 +125,10 @@ export async function ingestLogs(): Promise<void> {
 
     if (appEntries.length === 0) {
       console.log("No application log entries to process.");
-      await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+      await saveState({
+        ...state,
+        ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: nextRowIds }
+      });
       await appendChangelog("Ingestion run found no application logs.");
       await appendDecision("No app logs to process from latest deployment.");
       return;
@@ -146,7 +169,10 @@ export async function ingestLogs(): Promise<void> {
 
     await insertRoadmap(items);
 
-    await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+    await saveState({
+      ...state,
+      ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: nextRowIds }
+    });
     await appendChangelog("Ingested runtime logs and inserted bugs into Supabase.");
     await appendDecision("Processed runtime logs and updated state after ingestion.");
     console.log("Ingest complete.");

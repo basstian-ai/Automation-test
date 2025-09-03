@@ -27,8 +27,10 @@ export async function getRuntimeLogs(deploymentId, opts = {}) {
     const url = new URL(`${API}/v1/projects/${ENV.VERCEL_PROJECT_ID}/deployments/${deploymentId}/runtime-logs`);
     if (ENV.VERCEL_TEAM_ID)
         url.searchParams.set("teamId", ENV.VERCEL_TEAM_ID);
-    const { from, until, limit, direction } = opts;
-    if (from)
+    const { fromId, from, until, limit, direction } = opts;
+    if (fromId)
+        url.searchParams.set("from", fromId);
+    else if (from)
         url.searchParams.set("from", from);
     if (until)
         url.searchParams.set("until", until);
