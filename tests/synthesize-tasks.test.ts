@@ -56,6 +56,43 @@ test('merges tasks and orders by date', async () => {
   ]);
 });
 
+test('filters out extra properties from existing tasks', async () => {
+  vi.doMock('../src/lib/lock.js', () => ({
+    acquireLock: vi.fn().mockResolvedValue(true),
+    releaseLock: vi.fn().mockResolvedValue(undefined),
+  }));
+  vi.doMock('../src/lib/github.js', () => ({
+    readFile: vi.fn().mockResolvedValue('vision'),
+  }));
+  vi.doMock('../src/lib/prompts.js', () => ({
+    synthesizeTasksPrompt: vi.fn().mockResolvedValue('items:\n  - title: New\n    type: task'),
+  }));
+
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: '1', type: 'task', title: 'Existing', created: '2024-01-05', priority: 5, source: 'codex', extra: 'x' },
+      ],
+    } as any)
+    .mockResolvedValueOnce({ ok: true } as any)
+    .mockResolvedValueOnce({ ok: true } as any);
+  vi.stubGlobal('fetch', fetchMock);
+
+  const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
+  await synthesizeTasks();
+
+  const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+  expect(body[0]).toEqual({
+    id: '1',
+    title: 'Existing',
+    type: 'task',
+    priority: 1,
+    created_at: new Date('2024-01-05').toISOString(),
+    source: 'codex',
+  });
+});
+
 test('skips Supabase update when no tasks generated even with existing tasks', async () => {
   vi.doMock('../src/lib/lock.js', () => ({
     acquireLock: vi.fn().mockResolvedValue(true),

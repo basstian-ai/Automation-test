@@ -80,7 +80,8 @@ export async function synthesizeTasks() {
     const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
 
     const toRow = (t: Task) => {
-      const row: any = t.id ? { ...t } : {};
+      const row: any = {};
+      if (t.id) row.id = t.id;
 
       row.title = t.title!;
       row.type = "task";
@@ -88,9 +89,7 @@ export async function synthesizeTasks() {
       if (t.priority != null) row.priority = t.priority;
       const created = (t as any).created ?? (t as any).created_at;
       if (created) row.created_at = new Date(created).toISOString();
-
-      delete row.created;
-      delete row.desc;
+      if (t.source) row.source = t.source;
       return row;
     };
 
