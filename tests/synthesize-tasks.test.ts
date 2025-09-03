@@ -57,7 +57,7 @@ test('merges tasks and orders by date', async () => {
   ]);
 });
 
-test('skips Supabase update when no tasks generated', async () => {
+test('skips Supabase update when no tasks generated even with existing tasks', async () => {
   vi.doMock('../src/lib/lock.js', () => ({
     acquireLock: vi.fn().mockResolvedValue(true),
     releaseLock: vi.fn().mockResolvedValue(undefined),
@@ -70,7 +70,12 @@ test('skips Supabase update when no tasks generated', async () => {
   }));
 
   const fetchMock = vi.fn()
-    .mockResolvedValueOnce({ ok: true, json: async () => [] } as any)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: '1', type: 'task', title: 'Existing', created: '2024-01-05' },
+      ],
+    } as any)
     .mockResolvedValueOnce({ ok: true } as any);
   vi.stubGlobal('fetch', fetchMock);
 

@@ -79,8 +79,8 @@ export async function synthesizeTasks() {
         // Unique priorities
         merged.sort(compareTasks);
         const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
-        // Upsert tasks in Supabase
-        if (limited.length > 0) {
+        // Upsert tasks in Supabase only if new tasks were synthesized
+        if (proposed.length > 0) {
             const delTasks = await fetch(`${url}/rest/v1/roadmap_items?type=eq.task`, { method: "DELETE", headers });
             if (!delTasks.ok)
                 throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
@@ -108,7 +108,7 @@ export async function synthesizeTasks() {
                 throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
         }
         else {
-            console.log("No tasks to upsert; skipping Supabase task update.");
+            console.log("No new tasks synthesized; skipping Supabase task update.");
         }
         const delIdeas = await fetch(`${url}/rest/v1/roadmap_items?type=eq.idea`, { method: "DELETE", headers });
         if (!delIdeas.ok)
