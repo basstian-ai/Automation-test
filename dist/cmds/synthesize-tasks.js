@@ -2,7 +2,8 @@ import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile } from "../lib/github.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
-import { ENV, requireEnv } from "../lib/env.js";
+import { requireEnv } from "../lib/env.js";
+import { sbRequest } from "../lib/supabase.js";
 function normTitle(t = "") { return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim(); }
 function normType(t = "") { return t.toLowerCase() === "idea" ? "idea" : "task"; }
 function yamlBlock(obj) { return "```yaml\n" + yaml.dump(obj, { lineWidth: 120 }) + "```"; }
@@ -33,12 +34,7 @@ export async function synthesizeTasks() {
             throw err;
         }
         const vision = (await readFile("roadmap/vision.md")) || "";
-        const headers = { apikey: ENV.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${ENV.SUPABASE_SERVICE_ROLE_KEY}` };
-        const url = ENV.SUPABASE_URL;
-        const res = await fetch(`${url}/rest/v1/roadmap_items?select=*`, { headers });
-        if (!res.ok)
-            throw new Error(`Supabase fetch failed: ${res.status}`);
-        const rows = (await res.json()).map((r) => ({
+        const rows = (await sbRequest("roadmap_items?select=*")).map((r) => ({
             ...r,
             created: r.created,
         }));
@@ -81,13 +77,18 @@ export async function synthesizeTasks() {
         const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
         const toRow = (t) => {
             const created = t.created;
+            let createdIso = null;
+            if (created) {
+                const d = new Date(created);
+                createdIso = Number.isNaN(d.valueOf()) ? null : d.toISOString();
+            }
             return {
                 id: t.id ?? null,
                 title: t.title ?? null,
                 type: "task",
                 content: t.content ?? t.desc ?? null,
                 priority: t.priority ?? null,
-                created: created ? new Date(created).toISOString() : null,
+                created: createdIso,
                 source: t.source ?? null,
             };
         };
@@ -109,38 +110,25 @@ export async function synthesizeTasks() {
                 throw new Error("Non-uniform keys in Supabase task payload");
             }
             if (toUpdate.length) {
-                const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
+                await sbRequest("roadmap_items", {
                     method: "POST",
-                    headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+                    headers: { Prefer: "resolution=merge-duplicates" },
                     body: JSON.stringify(toUpdate),
                 });
-                if (!upsert.ok) {
-                    const text = (await upsert.text()).slice(0, 200);
-                    throw new Error(`Supabase upsert tasks failed (${upsert.status}): ${text}`);
-                }
             }
             if (toInsert.length) {
-                const insert = await fetch(`${url}/rest/v1/roadmap_items`, {
+                await sbRequest("roadmap_items", {
                     method: "POST",
-                    headers: { ...headers, "Content-Type": "application/json" },
                     body: JSON.stringify(toInsert),
                 });
-                if (!insert.ok) {
-                    const text = (await insert.text()).slice(0, 200);
-                    throw new Error(`Supabase insert tasks failed (${insert.status}): ${text}`);
-                }
             }
             const idsToDelete = tasks
                 .filter(t => t.id && !limited.some(l => l.id === t.id))
                 .map(t => `'${t.id}'`);
             if (idsToDelete.length) {
-                const delTasks = await fetch(`${url}/rest/v1/roadmap_items?id=in.(${idsToDelete.join(',')})`, { method: "DELETE", headers });
-                if (!delTasks.ok)
-                    throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
+                await sbRequest(`roadmap_items?id=in.(${idsToDelete.join(',')})`, { method: "DELETE" });
             }
-            const delIdeas = await fetch(`${url}/rest/v1/roadmap_items?type=eq.idea`, { method: "DELETE", headers });
-            if (!delIdeas.ok)
-                throw new Error(`Supabase delete ideas failed: ${delIdeas.status}`);
+            await sbRequest("roadmap_items?type=eq.idea", { method: "DELETE" });
         }
         else {
             console.log("No new tasks synthesized; skipping Supabase task update.");
