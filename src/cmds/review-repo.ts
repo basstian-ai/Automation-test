@@ -66,6 +66,9 @@ export async function reviewRepo() {
       /^(\s*(?:-\s*)?(title|details):\s*)(.+)$/gm,
       (_m, prefix, _field, value) => {
         const trimmed = (value as string).trim();
+        // Skip quoting YAML block scalar indicators like `|` or `>`
+        const isBlockScalar = /^[|>][0-9+-]*(?:\s+#.*)?$/.test(trimmed);
+        if (isBlockScalar) return `${prefix}${trimmed}`;
         const startsWith = trimmed[0];
         const endsWith = trimmed[trimmed.length - 1];
         const isQuoted = startsWith === '"' || startsWith === "'";
