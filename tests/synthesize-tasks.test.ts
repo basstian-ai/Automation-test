@@ -39,10 +39,11 @@ test('merges tasks and orders by date', async () => {
         { id: 'x', type: 'idea', title: 'Idea', created: '2024-01-01' },
         { id: 'y', type: 'done', content: 'finished' },
       ],
+      headers: new Headers(),
     } as any)
-    .mockResolvedValueOnce({ ok: true } as any)
-    .mockResolvedValueOnce({ ok: true } as any)
-    .mockResolvedValueOnce({ ok: true } as any);
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any)
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any)
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any);
   vi.stubGlobal('fetch', fetchMock);
 
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
@@ -107,10 +108,11 @@ test('filters out extra properties from existing tasks', async () => {
       json: async () => [
         { id: '1', type: 'task', title: 'Existing', created: '2024-01-05', priority: 5, source: 'codex', extra: 'x' },
       ],
+      headers: new Headers(),
     } as any)
-    .mockResolvedValueOnce({ ok: true } as any)
-    .mockResolvedValueOnce({ ok: true } as any)
-    .mockResolvedValueOnce({ ok: true } as any);
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any)
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any)
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any);
   vi.stubGlobal('fetch', fetchMock);
 
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
@@ -150,10 +152,11 @@ test('sets created null for invalid dates', async () => {
       json: async () => [
         { id: '1', type: 'task', title: 'Existing', created: 'bad-date', source: 'codex' },
       ],
+      headers: new Headers(),
     } as any)
-    .mockResolvedValueOnce({ ok: true } as any)
-    .mockResolvedValueOnce({ ok: true } as any)
-    .mockResolvedValueOnce({ ok: true } as any);
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any)
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any)
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any);
   vi.stubGlobal('fetch', fetchMock);
 
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
@@ -184,8 +187,9 @@ test('skips Supabase update when no tasks generated even with existing tasks', a
       json: async () => [
         { id: '1', type: 'task', title: 'Existing', created: '2024-01-05' },
       ],
+      headers: new Headers(),
     } as any)
-    .mockResolvedValueOnce({ ok: true } as any);
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any);
   vi.stubGlobal('fetch', fetchMock);
 
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
@@ -214,8 +218,9 @@ test('does not delete tasks if upsert fails', async () => {
     .mockResolvedValueOnce({
       ok: true,
       json: async () => [existing],
+      headers: new Headers(),
     } as any)
-    .mockResolvedValueOnce({ ok: false, status: 500, text: async () => 'server error' } as any);
+    .mockResolvedValueOnce({ ok: false, status: 500, text: async () => 'server error', headers: new Headers() } as any);
   vi.stubGlobal('fetch', fetchMock);
 
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
@@ -238,11 +243,27 @@ test('includes Supabase response text when upsert fails', async () => {
   }));
 
   const fetchMock = vi.fn()
-    .mockResolvedValueOnce({ ok: true, json: async () => [] } as any)
-    .mockResolvedValueOnce({ ok: false, status: 400, text: async () => 'invalid row' } as any);
+    .mockResolvedValueOnce({ ok: true, json: async () => [], headers: new Headers() } as any)
+    .mockResolvedValueOnce({ ok: false, status: 400, text: async () => 'invalid row', headers: new Headers() } as any);
   vi.stubGlobal('fetch', fetchMock);
 
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
   await expect(synthesizeTasks()).rejects.toThrow(/400.*invalid row/);
+});
+
+test('propagates sbRequest errors', async () => {
+  vi.doMock('../src/lib/lock.js', () => ({
+    acquireLock: vi.fn().mockResolvedValue(true),
+    releaseLock: vi.fn().mockResolvedValue(undefined),
+  }));
+  vi.doMock('../src/lib/github.js', () => ({
+    readFile: vi.fn().mockResolvedValue('vision'),
+  }));
+  vi.doMock('../src/lib/supabase.js', () => ({
+    sbRequest: vi.fn().mockRejectedValue(new Error('sb failed')),
+  }));
+
+  const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
+  await expect(synthesizeTasks()).rejects.toThrow('sb failed');
 });
 
