@@ -2,7 +2,7 @@ import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile } from "../lib/github.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
-import { requireEnv } from "../lib/env.js";
+import { requireEnv, ENV } from "../lib/env.js";
 import { sbRequest } from "../lib/supabase.js";
 function normTitle(t = "") { return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim(); }
 function normType(t = "") { return t.toLowerCase() === "idea" ? "idea" : "task"; }
@@ -34,10 +34,27 @@ export async function synthesizeTasks() {
             throw err;
         }
         const vision = (await readFile("roadmap/vision.md")) || "";
-        const rows = (await sbRequest("roadmap_items?select=*")).map((r) => ({
-            ...r,
-            created: r.created,
-        }));
+        let hasRepoColumn = true;
+        let rows = [];
+        try {
+            rows = (await sbRequest(`roadmap_items?select=*&repo=eq.${ENV.TARGET_REPO}`)).map((r) => ({
+                ...r,
+                created: r.created,
+            }));
+        }
+        catch (err) {
+            if (err instanceof Error &&
+                /column\s+roadmap_items\.repo/.test(err.message)) {
+                hasRepoColumn = false;
+                rows = (await sbRequest(`roadmap_items?select=*`)).map((r) => ({
+                    ...r,
+                    created: r.created,
+                }));
+            }
+            else {
+                throw err;
+            }
+        }
         const tasks = rows.filter(r => r.type === "task");
         const bugs = rows.filter(r => r.type === "bug");
         const ideas = rows.filter(r => r.type === "idea");
@@ -90,6 +107,7 @@ export async function synthesizeTasks() {
                 priority: t.priority ?? null,
                 created: createdIso,
                 source: t.source ?? null,
+                ...(hasRepoColumn ? { repo: ENV.TARGET_REPO } : {}),
             };
         };
         // Upsert tasks in Supabase only if new tasks were synthesized
@@ -125,10 +143,11 @@ export async function synthesizeTasks() {
             const idsToDelete = tasks
                 .filter(t => t.id && !limited.some(l => l.id === t.id))
                 .map(t => `'${t.id}'`);
+            const repoFilter = hasRepoColumn ? `&repo=eq.${ENV.TARGET_REPO}` : "";
             if (idsToDelete.length) {
-                await sbRequest(`roadmap_items?id=in.(${idsToDelete.join(',')})`, { method: "DELETE" });
+                await sbRequest(`roadmap_items?id=in.(${idsToDelete.join(',')})${repoFilter}`, { method: "DELETE" });
             }
-            await sbRequest("roadmap_items?type=eq.idea", { method: "DELETE" });
+            await sbRequest(`roadmap_items?type=eq.idea${repoFilter}`, { method: "DELETE" });
         }
         else {
             console.log("No new tasks synthesized; skipping Supabase task update.");

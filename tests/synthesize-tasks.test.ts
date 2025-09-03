@@ -138,6 +138,50 @@ test('filters out extra properties from existing tasks', async () => {
   expect(Object.keys(body[0])).toEqual(keys);
 });
 
+test('falls back when repo column missing', async () => {
+  vi.doMock('../src/lib/lock.js', () => ({
+    acquireLock: vi.fn().mockResolvedValue(true),
+    releaseLock: vi.fn().mockResolvedValue(undefined),
+  }));
+  vi.doMock('../src/lib/github.js', () => ({
+    readFile: vi.fn().mockResolvedValue('vision'),
+  }));
+  vi.doMock('../src/lib/prompts.js', () => ({
+    synthesizeTasksPrompt: vi.fn().mockResolvedValue('items:\n  - title: New\n    type: task'),
+  }));
+
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () =>
+        JSON.stringify({ message: 'column roadmap_items.repo does not exist' }),
+      headers: new Headers(),
+    } as any)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: '1', type: 'task', title: 'Existing', created: '2024-01-05', priority: 5 },
+      ],
+      headers: new Headers(),
+    } as any)
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any)
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any)
+    .mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() } as any);
+  vi.stubGlobal('fetch', fetchMock);
+
+  const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
+  await synthesizeTasks();
+
+  expect(fetchMock.mock.calls[0][0]).toContain('repo=eq.owner/repo');
+  expect(fetchMock.mock.calls[1][0]).not.toContain('repo=eq.owner/repo');
+  const updateBody = JSON.parse(fetchMock.mock.calls[2][1].body);
+  const insertBody = JSON.parse(fetchMock.mock.calls[3][1].body);
+  expect(updateBody[0]).not.toHaveProperty('repo');
+  expect(insertBody[0]).not.toHaveProperty('repo');
+});
+
 test('sets created null for invalid dates', async () => {
   vi.doMock('../src/lib/lock.js', () => ({
     acquireLock: vi.fn().mockResolvedValue(true),
