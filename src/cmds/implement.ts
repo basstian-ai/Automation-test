@@ -24,14 +24,19 @@ export async function implementTopTask() {
     const vision = (await readFile("roadmap/vision.md")) || "";
 
     // Retrieve top priority task from Supabase
-    const { data: rows, error } = await supabase
-      .from("roadmap_items")
-      .select("*")
-      .eq("type", "task")
-      .eq("repo", ENV.TARGET_REPO)
-      .or("status.is.null,status.neq.done")
-      .order("priority", { ascending: true })
-      .limit(1);
+    const baseQuery = () =>
+      supabase
+        .from("roadmap_items")
+        .select("*")
+        .eq("type", "task")
+        .or("status.is.null,status.neq.done")
+        .order("priority", { ascending: true })
+        .limit(1);
+
+    let { data: rows, error } = await baseQuery().eq("repo", ENV.TARGET_REPO);
+    if ((error as any)?.code === "42703") {
+      ({ data: rows, error } = await baseQuery());
+    }
     if (error) { console.error("Failed to fetch tasks", error); return; }
     const top = rows?.[0] as RoadmapItem | undefined;
     if (!top) { console.log("No tasks available."); return; }
