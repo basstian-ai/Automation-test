@@ -19,14 +19,14 @@ afterEach(() => {
 });
 
 test('merges tasks and orders by date', async () => {
-  vi.mock('../src/lib/lock.js', () => ({
+  vi.doMock('../src/lib/lock.js', () => ({
     acquireLock: vi.fn().mockResolvedValue(true),
     releaseLock: vi.fn().mockResolvedValue(undefined),
   }));
-  vi.mock('../src/lib/github.js', () => ({
+  vi.doMock('../src/lib/github.js', () => ({
     readFile: vi.fn().mockResolvedValue('vision'),
   }));
-  vi.mock('../src/lib/prompts.js', () => ({
+  vi.doMock('../src/lib/prompts.js', () => ({
     synthesizeTasksPrompt: vi.fn().mockResolvedValue(
 `items:\n  - title: Newer\n    type: task\n    created: '2024-01-04'\n  - title: Old\n    type: task\n    created: '2024-01-03'\n  - title: Old\n    type: task\n    created: '2024-01-02'\n`),
   }));
@@ -55,5 +55,35 @@ test('merges tasks and orders by date', async () => {
     { title: 'Old', type: 'task', priority: 2, created_at: new Date('2024-01-03').toISOString() },
     { title: 'Newer', type: 'task', priority: 3, created_at: new Date('2024-01-04').toISOString() },
   ]);
+});
+
+test('skips Supabase update when no tasks generated even with existing tasks', async () => {
+  vi.doMock('../src/lib/lock.js', () => ({
+    acquireLock: vi.fn().mockResolvedValue(true),
+    releaseLock: vi.fn().mockResolvedValue(undefined),
+  }));
+  vi.doMock('../src/lib/github.js', () => ({
+    readFile: vi.fn().mockResolvedValue('vision'),
+  }));
+  vi.doMock('../src/lib/prompts.js', () => ({
+    synthesizeTasksPrompt: vi.fn().mockResolvedValue('items: []'),
+  }));
+
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: '1', type: 'task', title: 'Existing', created: '2024-01-05' },
+      ],
+    } as any)
+    .mockResolvedValueOnce({ ok: true } as any);
+  vi.stubGlobal('fetch', fetchMock);
+
+  const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
+  await synthesizeTasks();
+
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock.mock.calls.some(c => String(c[0]).includes('type=eq.task') && c[1]?.method === 'DELETE')).toBe(false);
+  expect(fetchMock.mock.calls.some(c => c[1]?.method === 'POST')).toBe(false);
 });
 
