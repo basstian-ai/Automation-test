@@ -40,7 +40,7 @@ export async function synthesizeTasks() {
             throw new Error(`Supabase fetch failed: ${res.status}`);
         const rows = (await res.json()).map((r) => ({
             ...r,
-            created: r.created ?? r.created_at,
+            created: r.created,
         }));
         const tasks = rows.filter(r => r.type === "task");
         const bugs = rows.filter(r => r.type === "bug");
@@ -80,27 +80,55 @@ export async function synthesizeTasks() {
         merged.sort(compareTasks);
         const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
         const toRow = (t) => {
-            const created = t.created ?? t.created_at;
+            const created = t.created;
             return {
-                ...(t.id !== undefined ? { id: t.id } : {}),
+                id: t.id ?? null,
                 title: t.title ?? null,
                 type: "task",
                 content: t.content ?? t.desc ?? null,
                 priority: t.priority ?? null,
-                created_at: created ? new Date(created).toISOString() : null,
+                created: created ? new Date(created).toISOString() : null,
                 source: t.source ?? null,
             };
         };
         // Upsert tasks in Supabase only if new tasks were synthesized
         if (proposed.length > 0) {
-            const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
-                method: "POST",
-                headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-                body: JSON.stringify(limited.map(toRow)),
-            });
-            if (!upsert.ok) {
-                const text = (await upsert.text()).slice(0, 200);
-                throw new Error(`Supabase upsert tasks failed (${upsert.status}): ${text}`);
+            const rows = limited.map(toRow);
+            const toUpdate = rows.filter(r => r.id !== null);
+            const toInsert = rows.filter(r => r.id === null).map(({ id, ...rest }) => rest);
+            const hasUniformKeys = (arr) => {
+                if (arr.length <= 1)
+                    return true;
+                const keys = Object.keys(arr[0]).sort();
+                return arr.every(r => {
+                    const k = Object.keys(r).sort();
+                    return k.length === keys.length && k.every((v, i) => v === keys[i]);
+                });
+            };
+            if (!hasUniformKeys(toUpdate) || !hasUniformKeys(toInsert)) {
+                throw new Error("Non-uniform keys in Supabase task payload");
+            }
+            if (toUpdate.length) {
+                const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
+                    method: "POST",
+                    headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+                    body: JSON.stringify(toUpdate),
+                });
+                if (!upsert.ok) {
+                    const text = (await upsert.text()).slice(0, 200);
+                    throw new Error(`Supabase upsert tasks failed (${upsert.status}): ${text}`);
+                }
+            }
+            if (toInsert.length) {
+                const insert = await fetch(`${url}/rest/v1/roadmap_items`, {
+                    method: "POST",
+                    headers: { ...headers, "Content-Type": "application/json" },
+                    body: JSON.stringify(toInsert),
+                });
+                if (!insert.ok) {
+                    const text = (await insert.text()).slice(0, 200);
+                    throw new Error(`Supabase insert tasks failed (${insert.status}): ${text}`);
+                }
             }
             const idsToDelete = tasks
                 .filter(t => t.id && !limited.some(l => l.id === t.id))

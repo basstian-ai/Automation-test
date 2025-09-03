@@ -34,7 +34,7 @@ export async function normalizeRoadmap() {
         let items = (data || []).map((t) => {
             let item = {
                 ...t,
-                created: t.created ?? t.created_at,
+                created: t.created,
                 desc: t.desc ?? t.content ?? t.details,
             };
             if (t.type === "new") {
