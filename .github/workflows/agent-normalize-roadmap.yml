@@ -1,7 +1,7 @@
 name: agent-normalize-roadmap
 on:
-  #schedule:
-   # - cron: "22 3 * * *"    # 03:22 UTC daily
+  schedule:
+    - cron: "0 * * * *"    # every hour
   workflow_dispatch:
 
 permissions:
