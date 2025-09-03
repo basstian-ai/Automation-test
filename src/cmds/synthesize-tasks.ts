@@ -101,7 +101,10 @@ export async function synthesizeTasks() {
         headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
         body: JSON.stringify(limited.map(toRow)),
       });
-      if (!upsert.ok) throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
+      if (!upsert.ok) {
+        const text = (await upsert.text()).slice(0, 200);
+        throw new Error(`Supabase upsert tasks failed (${upsert.status}): ${text}`);
+      }
 
       const idsToDelete = tasks
         .filter(t => t.id && !limited.some(l => l.id === t.id))

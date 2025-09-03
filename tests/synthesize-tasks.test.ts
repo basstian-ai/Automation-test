@@ -105,7 +105,7 @@ test('does not delete tasks if upsert fails', async () => {
       ok: true,
       json: async () => [existing],
     } as any)
-    .mockResolvedValueOnce({ ok: false, status: 500 } as any);
+    .mockResolvedValueOnce({ ok: false, status: 500, text: async () => 'server error' } as any);
   vi.stubGlobal('fetch', fetchMock);
 
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
@@ -113,5 +113,26 @@ test('does not delete tasks if upsert fails', async () => {
 
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(fetchMock.mock.calls.some(c => c[1]?.method === 'DELETE')).toBe(false);
+});
+
+test('includes Supabase response text when upsert fails', async () => {
+  vi.doMock('../src/lib/lock.js', () => ({
+    acquireLock: vi.fn().mockResolvedValue(true),
+    releaseLock: vi.fn().mockResolvedValue(undefined),
+  }));
+  vi.doMock('../src/lib/github.js', () => ({
+    readFile: vi.fn().mockResolvedValue('vision'),
+  }));
+  vi.doMock('../src/lib/prompts.js', () => ({
+    synthesizeTasksPrompt: vi.fn().mockResolvedValue('items:\n  - title: New\n    type: task'),
+  }));
+
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => [] } as any)
+    .mockResolvedValueOnce({ ok: false, status: 400, text: async () => 'invalid row' } as any);
+  vi.stubGlobal('fetch', fetchMock);
+
+  const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
+  await expect(synthesizeTasks()).rejects.toThrow(/400.*invalid row/);
 });
 
