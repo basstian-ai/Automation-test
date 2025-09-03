@@ -40,7 +40,7 @@ export async function synthesizeTasks() {
     if (!res.ok) throw new Error(`Supabase fetch failed: ${res.status}`);
     const rows: Task[] = (await res.json()).map((r: any) => ({
       ...r,
-      created: r.created ?? r.created_at,
+      created: r.created,
     }));
 
     const tasks = rows.filter(r => r.type === "task");
@@ -80,14 +80,14 @@ export async function synthesizeTasks() {
     const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
 
     const toRow = (t: Task) => {
-      const created = (t as any).created ?? (t as any).created_at;
+      const created = (t as any).created;
       return {
         id: t.id ?? null,
         title: t.title ?? null,
         type: "task",
         content: t.content ?? t.desc ?? null,
         priority: t.priority ?? null,
-        created_at: created ? new Date(created).toISOString() : null,
+        created: created ? new Date(created).toISOString() : null,
         source: t.source ?? null,
       };
     };

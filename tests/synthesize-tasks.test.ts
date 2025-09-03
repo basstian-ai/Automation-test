@@ -50,7 +50,7 @@ test('merges tasks and orders by date', async () => {
 
   const updateBody = JSON.parse(fetchMock.mock.calls[1][1].body);
   const insertBody = JSON.parse(fetchMock.mock.calls[2][1].body);
-  const keys = ['title', 'type', 'content', 'priority', 'created_at', 'source'];
+  const keys = ['title', 'type', 'content', 'priority', 'created', 'source'];
 
   expect(updateBody).toEqual([
     {
@@ -59,7 +59,7 @@ test('merges tasks and orders by date', async () => {
       type: 'task',
       content: null,
       priority: 1,
-      created_at: new Date('2024-01-05').toISOString(),
+      created: new Date('2024-01-05').toISOString(),
       source: 'codex',
     },
   ]);
@@ -71,7 +71,7 @@ test('merges tasks and orders by date', async () => {
       type: 'task',
       content: null,
       priority: 2,
-      created_at: new Date('2024-01-03').toISOString(),
+      created: new Date('2024-01-03').toISOString(),
       source: null,
     },
     {
@@ -79,7 +79,7 @@ test('merges tasks and orders by date', async () => {
       type: 'task',
       content: null,
       priority: 3,
-      created_at: new Date('2024-01-04').toISOString(),
+      created: new Date('2024-01-04').toISOString(),
       source: null,
     },
   ]);
@@ -117,14 +117,14 @@ test('filters out extra properties from existing tasks', async () => {
   await synthesizeTasks();
 
   const body = JSON.parse(fetchMock.mock.calls[1][1].body);
-  const keys = ['id', 'title', 'type', 'content', 'priority', 'created_at', 'source'];
+  const keys = ['id', 'title', 'type', 'content', 'priority', 'created', 'source'];
   expect(body[0]).toEqual({
     id: '1',
     title: 'Existing',
     type: 'task',
     content: null,
     priority: 1,
-    created_at: new Date('2024-01-05').toISOString(),
+    created: new Date('2024-01-05').toISOString(),
     source: 'codex',
   });
   expect(Object.keys(body[0])).toEqual(keys);

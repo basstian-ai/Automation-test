@@ -11,7 +11,7 @@ The `roadmap_items` table is the canonical backlog and replaces the older `tasks
 | content    | text                                                | optional |
 | type       | enum ('idea','task','bug','done'), not null         | |
 | priority   | integer                                             | optional |
-| created_at | timestamptz, default timezone('utc', now())         | |
+| created | timestamptz, default timezone('utc', now())         | |
 | status     | text                                                | optional |
 
 ### Indices
@@ -30,12 +30,18 @@ create table roadmap_items (
   content text,
   type roadmap_item_type not null,
   priority int,
-  created_at timestamptz default timezone('utc', now()),
+  created timestamptz default timezone('utc', now()),
   status text
 );
 
 create index roadmap_items_type_idx on roadmap_items(type);
 create index roadmap_items_priority_idx on roadmap_items(priority);
+```
+
+Older deployments may still use a `created_at` column. To migrate:
+
+```sql
+alter table roadmap_items rename column created_at to created;
 ```
 
 
