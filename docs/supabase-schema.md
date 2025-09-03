@@ -10,6 +10,7 @@ The `roadmap_items` table is the canonical backlog and replaces the older `tasks
 | title      | text, not null                                      | |
 | content    | text                                                | optional |
 | type       | enum ('idea','task','bug','done'), not null         | |
+| repo       | text, not null                                      | indexed |
 | priority   | integer                                             | optional |
 | created | timestamptz, default timezone('utc', now())         | |
 | status     | text                                                | optional |
@@ -17,6 +18,7 @@ The `roadmap_items` table is the canonical backlog and replaces the older `tasks
 ### Indices
 
 - `roadmap_items_type_idx` on `type`
+- `roadmap_items_repo_idx` on `repo`
 - `roadmap_items_priority_idx` on `priority`
 
 ### SQL
@@ -29,12 +31,14 @@ create table roadmap_items (
   title text not null,
   content text,
   type roadmap_item_type not null,
+  repo text not null,
   priority int,
   created timestamptz default timezone('utc', now()),
   status text
 );
 
 create index roadmap_items_type_idx on roadmap_items(type);
+create index roadmap_items_repo_idx on roadmap_items(repo);
 create index roadmap_items_priority_idx on roadmap_items(priority);
 ```
 
