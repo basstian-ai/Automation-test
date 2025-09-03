@@ -16,7 +16,7 @@ export async function completeTask(task: Task) {
 
   // Try the canonical function name first and fall back to the legacy name if needed.
   let { error } = await supabase.rpc("complete_task", params);
-  if (error && /not found|No function/i.test(String(error.message))) {
+  if (error && (error.code === "42883" || error.code === "PGRST302")) {
     const res = await supabase.rpc("complete_roadmap_task", params);
     if (res.error) throw res.error;
   } else if (error) {
