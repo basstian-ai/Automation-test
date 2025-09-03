@@ -22,7 +22,8 @@ function isInfraLog(e) {
         /ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN/i,
         /failed to fetch runtime-logs/i,
         /Too Many Requests|rate limit/i,
-        /https?:\/\/api\.vercel\.com/i
+        /https?:\/\/api\.vercel\.com/i,
+        /Query exceeds 5-minute execution limit/i // exceeds Vercel's query time limit
     ];
     if (INFRA_PATTERNS.some(rx => rx.test(msg)))
         return true;
@@ -42,17 +43,30 @@ export async function ingestLogs() {
             console.log("No deployment found; exit.");
             return;
         }
-        if (state.ingest?.lastDeploymentTimestamp && dep.createdAt <= state.ingest.lastDeploymentTimestamp) {
+        if (state.ingest?.lastDeploymentTimestamp && dep.createdAt < state.ingest.lastDeploymentTimestamp) {
             console.log("No new deployment; exit.");
             return;
         }
-        const now = Date.now();
-        const from = new Date(now - 5 * 60 * 1000).toISOString();
-        const until = new Date(now).toISOString();
-        const raw = await getRuntimeLogs(dep.uid, { from, until, limit: 100, direction: "forward" });
+        const sameDep = state.ingest?.lastDeploymentTimestamp === dep.createdAt;
+        const prevRowIds = sameDep ? state.ingest?.lastRowIds ?? [] : [];
+        let raw = [];
+        if (prevRowIds.length > 0) {
+            const fromId = prevRowIds[prevRowIds.length - 1];
+            raw = (await getRuntimeLogs(dep.uid, { fromId, limit: 100, direction: "forward" }));
+        }
+        else {
+            const now = Date.now();
+            const from = new Date(now - 5 * 60 * 1000).toISOString();
+            const until = new Date(now).toISOString();
+            raw = (await getRuntimeLogs(dep.uid, { from, until, limit: 100, direction: "forward" }));
+        }
+        const rawIds = raw.map(r => r?.id).filter(Boolean);
+        const prevIds = new Set(prevRowIds);
         const entries = raw
             .filter(r => r && (r.level === "error" || r.level === "warning"))
+            .filter(r => !prevIds.has(r.id))
             .map(r => ({
+            id: r.id,
             level: r.level,
             message: r.message ?? r.text ?? "",
             requestPath: r.requestPath ?? "",
@@ -60,7 +74,7 @@ export async function ingestLogs() {
         }));
         if (entries.length === 0) {
             console.log("No relevant log entries.");
-            await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+            await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: rawIds } });
             return;
         }
         const appEntries = entries.filter(e => !isInfraLog(e));
@@ -77,7 +91,7 @@ export async function ingestLogs() {
                 created: new Date().toISOString()
             };
             await insertRoadmap([item]);
-            await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+            await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: rawIds } });
             await appendChangelog("Handled infra-only logs during ingestion.");
             await appendDecision("Routed infra-related logs to Supabase as ideas instead of bugs.");
             console.log("Infra-only logs detected; routed to Supabase as type=idea.");
@@ -85,7 +99,7 @@ export async function ingestLogs() {
         }
         if (appEntries.length === 0) {
             console.log("No application log entries to process.");
-            await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+            await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: rawIds } });
             await appendChangelog("Ingestion run found no application logs.");
             await appendDecision("No app logs to process from latest deployment.");
             return;
@@ -120,7 +134,7 @@ export async function ingestLogs() {
             });
         }
         await insertRoadmap(items);
-        await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: [] } });
+        await saveState({ ...state, ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: rawIds } });
         await appendChangelog("Ingested runtime logs and inserted bugs into Supabase.");
         await appendDecision("Processed runtime logs and updated state after ingestion.");
         console.log("Ingest complete.");

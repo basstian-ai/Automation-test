@@ -27,6 +27,15 @@ test('getRuntimeLogs passes paging params', async () => {
   expect(url.searchParams.get('direction')).toBe('forward');
 });
 
+test('getRuntimeLogs uses fromId when provided', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '' } as any);
+  vi.stubGlobal('fetch', fetchMock);
+  const { getRuntimeLogs } = await import('../src/lib/vercel.ts');
+  await getRuntimeLogs('dep1', { fromId: '123' });
+  const url = fetchMock.mock.calls[0][0] as URL;
+  expect(url.searchParams.get('from')).toBe('123');
+});
+
 test('getRuntimeLogs times out', async () => {
   vi.useFakeTimers();
   vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, opts) => {
