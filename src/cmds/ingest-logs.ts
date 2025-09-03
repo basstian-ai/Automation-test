@@ -77,15 +77,23 @@ export async function ingestLogs(): Promise<void> {
     const nextRowIds = rawIds.length > 0 ? rawIds : prevRowIds;
     const prevIds = new Set(prevRowIds);
     const entries: RawLog[] = raw
-      .filter(r => r && (r.level === "error" || r.level === "warning"))
+      .filter(r => {
+        if (!r) return false;
+        const lvl = (r.level ?? r.type ?? "").toString().toLowerCase();
+        return lvl === "error" || lvl === "warning" || lvl === "stderr";
+      })
       .filter(r => !prevIds.has(r.id))
-      .map(r => ({
-        id: r.id,
-        level: r.level,
-        message: r.message ?? r.text ?? "",
-        requestPath: r.requestPath ?? "",
-        timestamp: r.timestamp ?? ""
-      }));
+      .map(r => {
+        const lvl = (r.level ?? r.type ?? "").toString().toLowerCase();
+        const normalizedLevel = lvl === "stderr" ? "error" : lvl;
+        return {
+          id: r.id,
+          level: normalizedLevel,
+          message: r.message ?? r.text ?? "",
+          requestPath: r.requestPath ?? "",
+          timestamp: r.timestamp ?? ""
+        };
+      });
 
     if (entries.length === 0) {
       console.log("No relevant log entries.");
