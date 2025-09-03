@@ -22,10 +22,7 @@ export async function implementTopTask() {
             .or("status.is.null,status.neq.done")
             .order("priority", { ascending: true })
             .limit(1);
-        let { data: rows, error } = await baseQuery().eq("repo", ENV.TARGET_REPO);
-        if (error?.code === "42703") {
-            ({ data: rows, error } = await baseQuery());
-        }
+        let { data: rows, error } = await baseQuery();
         if (error) {
             console.error("Failed to fetch tasks", error);
             return;
