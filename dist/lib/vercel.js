@@ -56,6 +56,8 @@ export async function getBuildLogs(deploymentId, opts = {}) {
     finally {
         clearTimeout(t);
     }
+    if (res.status === 404)
+        return [];
     if (!res.ok)
         throw new Error(`Vercel build-logs failed: ${res.status}`);
     const text = await res.text();

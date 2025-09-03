@@ -52,3 +52,11 @@ afterEach(() => {
   await vi.advanceTimersByTimeAsync(31_000);
   await p;
 });
+
+test('getBuildLogs returns empty array on 404', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404, text: async () => '' } as any);
+  vi.stubGlobal('fetch', fetchMock);
+  const { getBuildLogs } = await import('../src/lib/vercel.ts');
+  const res = await getBuildLogs('dep1');
+  expect(res).toEqual([]);
+});
