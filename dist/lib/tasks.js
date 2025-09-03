@@ -5,11 +5,10 @@ import { supabase } from "./supabase.js";
  */
 export async function completeTask(task) {
     const params = {
-        item_id: task.id,
+        task_id: task.id,
         title: task.title,
-        details: task.desc,
+        description: task.desc,
         priority: task.priority,
-        ...(task.type != null ? { type: task.type } : {}),
     };
     // Try the canonical function name first and fall back to the legacy name if needed.
     let { error } = await supabase.rpc("complete_task", params);

@@ -7,11 +7,10 @@ import type { Task } from "./types.js";
  */
 export async function completeTask(task: Task) {
   const params = {
-    item_id: task.id,
+    task_id: task.id,
     title: task.title,
-    details: task.desc,
+    description: task.desc,
     priority: task.priority,
-    ...(task.type != null ? { type: task.type } : {}),
   };
 
   // Try the canonical function name first and fall back to the legacy name if needed.
