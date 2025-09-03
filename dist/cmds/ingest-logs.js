@@ -55,10 +55,8 @@ export async function ingestLogs() {
             raw = (await getBuildLogs(dep.uid, { fromId, limit: 100, direction: "forward" }));
         }
         else {
-            const now = Date.now();
-            const from = new Date(now - 5 * 60 * 1000).toISOString();
-            const until = new Date(now).toISOString();
-            raw = (await getBuildLogs(dep.uid, { from, until, limit: 100, direction: "forward" }));
+            const from = new Date(dep.createdAt).toISOString();
+            raw = (await getBuildLogs(dep.uid, { from, limit: 100, direction: "forward" }));
         }
         const rawIds = raw.map(r => r?.id).filter(Boolean);
         const nextRowIds = rawIds.length > 0 ? rawIds : prevRowIds;

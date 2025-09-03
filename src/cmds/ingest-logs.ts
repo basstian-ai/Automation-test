@@ -70,10 +70,8 @@ export async function ingestLogs(): Promise<void> {
       const fromId = prevRowIds[prevRowIds.length - 1];
       raw = (await getBuildLogs(dep.uid, { fromId, limit: 100, direction: "forward" })) as any[];
     } else {
-      const now = Date.now();
-      const from = new Date(now - 5 * 60 * 1000).toISOString();
-      const until = new Date(now).toISOString();
-      raw = (await getBuildLogs(dep.uid, { from, until, limit: 100, direction: "forward" })) as any[];
+      const from = new Date(dep.createdAt).toISOString();
+      raw = (await getBuildLogs(dep.uid, { from, limit: 100, direction: "forward" })) as any[];
     }
     const rawIds = raw.map(r => r?.id).filter(Boolean) as string[];
     const nextRowIds = rawIds.length > 0 ? rawIds : prevRowIds;
