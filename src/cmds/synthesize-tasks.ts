@@ -2,7 +2,7 @@ import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile } from "../lib/github.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
-import { requireEnv } from "../lib/env.js";
+import { requireEnv, ENV } from "../lib/env.js";
 import { sbRequest } from "../lib/supabase.js";
 
 type Task = { id?: string; type?: string; title?: string; desc?: string; content?: string; source?: string; created?: string | number | Date; priority?: number };
@@ -35,7 +35,9 @@ export async function synthesizeTasks() {
 
     const vision = (await readFile("roadmap/vision.md")) || "";
 
-    const rows: Task[] = ((await sbRequest("roadmap_items?select=*")) as any[]).map((r: any) => ({
+    const rows: Task[] = ((await sbRequest(
+      `roadmap_items?select=*&repo=eq.${ENV.TARGET_REPO}`,
+    )) as any[]).map((r: any) => ({
       ...r,
       created: r.created,
     }));
@@ -91,6 +93,7 @@ export async function synthesizeTasks() {
         priority: t.priority ?? null,
         created: createdIso,
         source: t.source ?? null,
+        repo: ENV.TARGET_REPO,
       };
     };
 
@@ -132,10 +135,16 @@ export async function synthesizeTasks() {
         .filter(t => t.id && !limited.some(l => l.id === t.id))
         .map(t => `'${t.id}'`);
       if (idsToDelete.length) {
-        await sbRequest(`roadmap_items?id=in.(${idsToDelete.join(',')})`, { method: "DELETE" });
+        await sbRequest(
+          `roadmap_items?id=in.(${idsToDelete.join(',')})&repo=eq.${ENV.TARGET_REPO}`,
+          { method: "DELETE" },
+        );
       }
 
-      await sbRequest("roadmap_items?type=eq.idea", { method: "DELETE" });
+      await sbRequest(
+        `roadmap_items?type=eq.idea&repo=eq.${ENV.TARGET_REPO}`,
+        { method: "DELETE" },
+      );
     } else {
       console.log("No new tasks synthesized; skipping Supabase task update.");
     }

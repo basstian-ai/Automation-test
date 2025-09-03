@@ -49,9 +49,10 @@ test('merges tasks and orders by date', async () => {
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
   await synthesizeTasks();
 
+  expect(fetchMock.mock.calls[0][0]).toContain('repo=eq.owner/repo');
   const updateBody = JSON.parse(fetchMock.mock.calls[1][1].body);
   const insertBody = JSON.parse(fetchMock.mock.calls[2][1].body);
-  const keys = ['title', 'type', 'content', 'priority', 'created', 'source'];
+  const keys = ['title', 'type', 'content', 'priority', 'created', 'source', 'repo'];
 
   expect(updateBody).toEqual([
     {
@@ -62,6 +63,7 @@ test('merges tasks and orders by date', async () => {
       priority: 1,
       created: new Date('2024-01-05').toISOString(),
       source: 'codex',
+      repo: TARGET_REPO,
     },
   ]);
   expect(Object.keys(updateBody[0])).toEqual(['id', ...keys]);
@@ -74,6 +76,7 @@ test('merges tasks and orders by date', async () => {
       priority: 2,
       created: new Date('2024-01-03').toISOString(),
       source: null,
+      repo: TARGET_REPO,
     },
     {
       title: 'Newer',
@@ -82,6 +85,7 @@ test('merges tasks and orders by date', async () => {
       priority: 3,
       created: new Date('2024-01-04').toISOString(),
       source: null,
+      repo: TARGET_REPO,
     },
   ]);
   const sortedKeys = (o: any) => Object.keys(o).sort();
@@ -118,8 +122,9 @@ test('filters out extra properties from existing tasks', async () => {
   const { synthesizeTasks } = await import('../src/cmds/synthesize-tasks.ts');
   await synthesizeTasks();
 
+  expect(fetchMock.mock.calls[0][0]).toContain('repo=eq.owner/repo');
   const body = JSON.parse(fetchMock.mock.calls[1][1].body);
-  const keys = ['id', 'title', 'type', 'content', 'priority', 'created', 'source'];
+  const keys = ['id', 'title', 'type', 'content', 'priority', 'created', 'source', 'repo'];
   expect(body[0]).toEqual({
     id: '1',
     title: 'Existing',
@@ -128,6 +133,7 @@ test('filters out extra properties from existing tasks', async () => {
     priority: 1,
     created: new Date('2024-01-05').toISOString(),
     source: 'codex',
+    repo: TARGET_REPO,
   });
   expect(Object.keys(body[0])).toEqual(keys);
 });

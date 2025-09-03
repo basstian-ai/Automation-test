@@ -27,7 +27,8 @@ export async function normalizeRoadmap() {
     const { data, error } = await supabase
       .from("roadmap_items")
       .select("*")
-      .in("type", ["task", "new"]);
+      .in("type", ["task", "new"])
+      .eq("repo", ENV.TARGET_REPO);
     if (error) throw error;
     let items = (data || []).map((t: any) => {
       let item: Task = {
@@ -70,7 +71,8 @@ export async function normalizeRoadmap() {
       const { error: delError } = await supabase
         .from("roadmap_items")
         .delete()
-        .in("id", dupIds);
+        .in("id", dupIds)
+        .eq("repo", ENV.TARGET_REPO);
       if (delError) throw delError;
     }
 
@@ -80,6 +82,7 @@ export async function normalizeRoadmap() {
       id: t.id!,
       type: "task",
       priority: i < 100 ? i + 1 : null,
+      repo: ENV.TARGET_REPO,
     }));
     if (updates.length) {
       const { error: upsertError } = await supabase
@@ -92,7 +95,8 @@ export async function normalizeRoadmap() {
     const { error: finalDelError } = await supabase
       .from("roadmap_items")
       .delete()
-      .eq("type", "new");
+      .eq("type", "new")
+      .eq("repo", ENV.TARGET_REPO);
     if (finalDelError) throw finalDelError;
 
     console.log(
