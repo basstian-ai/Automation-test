@@ -49,7 +49,7 @@ test('merges tasks and orders by date', async () => {
 
   const upsertCall = fetchMock.mock.calls[1];
   const body = JSON.parse(upsertCall[1].body);
-  const keys = ['id', 'title', 'type', 'content', 'priority', 'created_at', 'source'];
+  const keys = ['title', 'type', 'content', 'priority', 'created_at', 'source'];
   expect(body).toEqual([
     {
       id: '1',
@@ -61,7 +61,6 @@ test('merges tasks and orders by date', async () => {
       source: 'codex',
     },
     {
-      id: null,
       title: 'Old',
       type: 'task',
       content: null,
@@ -70,7 +69,6 @@ test('merges tasks and orders by date', async () => {
       source: null,
     },
     {
-      id: null,
       title: 'Newer',
       type: 'task',
       content: null,
@@ -79,7 +77,9 @@ test('merges tasks and orders by date', async () => {
       source: null,
     },
   ]);
-  expect(body.every(o => Object.keys(o).length === keys.length && keys.every(k => k in o))).toBe(true);
+  expect(body[0]).toHaveProperty('id');
+  expect(body.slice(1).every(o => !('id' in o))).toBe(true);
+  expect(body.every(o => keys.every(k => k in o))).toBe(true);
 });
 
 test('filters out extra properties from existing tasks', async () => {
