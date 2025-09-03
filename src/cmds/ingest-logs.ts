@@ -1,7 +1,7 @@
 // src/cmds/ingest-logs.ts
 
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { getLatestDeployment, getRuntimeLogs } from "../lib/vercel.js";
+import { getLatestDeployment, getBuildLogs } from "../lib/vercel.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { summarizeLogToBug, type LogEntryForBug } from "../lib/prompts.js";
 import { insertRoadmap, type RoadmapItem } from "../lib/roadmap.js";
@@ -33,7 +33,7 @@ function isInfraLog(e: RawLog): boolean {
   const path = (e.requestPath ?? "").toString();
   const INFRA_PATTERNS = [
     /ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN/i,
-    /failed to fetch runtime-logs/i,
+    /failed to fetch (?:runtime|build)-logs/i,
     /Too Many Requests|rate limit/i,
     /https?:\/\/api\.vercel\.com/i,
     /Query exceeds 5-minute execution limit/i // exceeds Vercel's query time limit
@@ -68,12 +68,10 @@ export async function ingestLogs(): Promise<void> {
     let raw: any[] = [];
     if (prevRowIds.length > 0) {
       const fromId = prevRowIds[prevRowIds.length - 1];
-      raw = (await getRuntimeLogs(dep.uid, { fromId, limit: 100, direction: "forward" })) as any[];
+      raw = (await getBuildLogs(dep.uid, { fromId, limit: 100, direction: "forward" })) as any[];
     } else {
-      const now = Date.now();
-      const from = new Date(now - 5 * 60 * 1000).toISOString();
-      const until = new Date(now).toISOString();
-      raw = (await getRuntimeLogs(dep.uid, { from, until, limit: 100, direction: "forward" })) as any[];
+      const from = new Date(dep.createdAt).toISOString();
+      raw = (await getBuildLogs(dep.uid, { from, limit: 100, direction: "forward" })) as any[];
     }
     const rawIds = raw.map(r => r?.id).filter(Boolean) as string[];
     const nextRowIds = rawIds.length > 0 ? rawIds : prevRowIds;
@@ -155,7 +153,7 @@ export async function ingestLogs(): Promise<void> {
       if (!summary) continue;
 
       const lines = summary.trim().split("\n");
-      const title = lines[0]?.replace(/^#+\s*/, "").trim() || "Runtime error from logs";
+      const title = lines[0]?.replace(/^#+\s*/, "").trim() || "Build error from logs";
       const content = lines.slice(1).join("\n").trim();
 
       items.push({
@@ -173,8 +171,8 @@ export async function ingestLogs(): Promise<void> {
       ...state,
       ingest: { lastDeploymentTimestamp: dep.createdAt, lastRowIds: nextRowIds }
     });
-    await appendChangelog("Ingested runtime logs and inserted bugs into Supabase.");
-    await appendDecision("Processed runtime logs and updated state after ingestion.");
+    await appendChangelog("Ingested build logs and inserted bugs into Supabase.");
+    await appendDecision("Processed build logs and updated state after ingestion.");
     console.log("Ingest complete.");
   } finally {
     await releaseLock();

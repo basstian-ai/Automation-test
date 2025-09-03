@@ -15,11 +15,11 @@ afterEach(() => {
   delete process.env.VERCEL_TEAM_ID;
 });
 
-test('getRuntimeLogs passes paging params', async () => {
-  const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '' } as any);
-  vi.stubGlobal('fetch', fetchMock);
-  const { getRuntimeLogs } = await import('../src/lib/vercel.ts');
-  await getRuntimeLogs('dep1', { from: 'a', until: 'b', limit: 5, direction: 'forward' });
+  test('getBuildLogs passes paging params', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '' } as any);
+    vi.stubGlobal('fetch', fetchMock);
+    const { getBuildLogs } = await import('../src/lib/vercel.ts');
+    await getBuildLogs('dep1', { from: 'a', until: 'b', limit: 5, direction: 'forward' });
   const url = fetchMock.mock.calls[0][0] as URL;
   expect(url.searchParams.get('from')).toBe('a');
   expect(url.searchParams.get('until')).toBe('b');
@@ -27,16 +27,16 @@ test('getRuntimeLogs passes paging params', async () => {
   expect(url.searchParams.get('direction')).toBe('forward');
 });
 
-test('getRuntimeLogs uses fromId when provided', async () => {
-  const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '' } as any);
-  vi.stubGlobal('fetch', fetchMock);
-  const { getRuntimeLogs } = await import('../src/lib/vercel.ts');
-  await getRuntimeLogs('dep1', { fromId: '123' });
+  test('getBuildLogs uses fromId when provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '' } as any);
+    vi.stubGlobal('fetch', fetchMock);
+    const { getBuildLogs } = await import('../src/lib/vercel.ts');
+    await getBuildLogs('dep1', { fromId: '123' });
   const url = fetchMock.mock.calls[0][0] as URL;
   expect(url.searchParams.get('from')).toBe('123');
 });
 
-test('getRuntimeLogs rejects on timeout', async () => {
+  test('getBuildLogs rejects on timeout', async () => {
   vi.useFakeTimers();
   vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, opts) => {
     return new Promise((_, reject) => {
@@ -47,8 +47,8 @@ test('getRuntimeLogs rejects on timeout', async () => {
       });
     });
   }));
-  const { getRuntimeLogs } = await import('../src/lib/vercel.ts');
-  const p = expect(getRuntimeLogs('dep1')).rejects.toMatchObject({ name: 'AbortError' });
+    const { getBuildLogs } = await import('../src/lib/vercel.ts');
+    const p = expect(getBuildLogs('dep1')).rejects.toMatchObject({ name: 'AbortError' });
   await vi.advanceTimersByTimeAsync(31_000);
   await p;
 });

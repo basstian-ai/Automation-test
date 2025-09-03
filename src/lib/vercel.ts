@@ -4,7 +4,7 @@ const API = "https://api.vercel.com";
 
 async function vfetch(path: string, params: Record<string, string | undefined> = {}) {
   const url = new URL(API + path);
-  for (const [k,v] of Object.entries(params)) if (v) url.searchParams.set(k, v);
+  for (const [k, v] of Object.entries(params)) if (v) url.searchParams.set(k, v);
   const res = await fetch(url, { headers: { Authorization: `Bearer ${ENV.VERCEL_TOKEN}` } });
   if (!res.ok) throw new Error(`Vercel ${path} failed: ${res.status}`);
   return res.json();
@@ -21,7 +21,7 @@ export async function getLatestDeployment() {
   return data.deployments?.[0];
 }
 
-export async function getRuntimeLogs(
+export async function getBuildLogs(
   deploymentId: string,
   opts: {
     fromId?: string;
@@ -29,11 +29,11 @@ export async function getRuntimeLogs(
     until?: string;
     limit?: number;
     direction?: string;
-  } = {}
+  } = {},
 ) {
   if (!ENV.VERCEL_PROJECT_ID) return [];
   const url = new URL(
-    `${API}/v1/projects/${ENV.VERCEL_PROJECT_ID}/deployments/${deploymentId}/runtime-logs`
+    `${API}/v6/deployments/${deploymentId}/build-logs`
   );
   if (ENV.VERCEL_TEAM_ID) url.searchParams.set("teamId", ENV.VERCEL_TEAM_ID);
   const { fromId, from, until, limit, direction } = opts;
@@ -53,13 +53,13 @@ export async function getRuntimeLogs(
     });
   } catch (err) {
     if ((err as any).name === "AbortError") {
-      console.warn("Vercel runtime-logs request timed out");
+      console.warn("Vercel build-logs request timed out");
     }
     throw err;
   } finally {
     clearTimeout(t);
   }
-  if (!res.ok) throw new Error(`Vercel runtime-logs failed: ${res.status}`);
+  if (!res.ok) throw new Error(`Vercel build-logs failed: ${res.status}`);
   const text = await res.text();
   return text
     .split("\n")
@@ -73,3 +73,4 @@ export async function getRuntimeLogs(
     })
     .filter(Boolean);
 }
+
