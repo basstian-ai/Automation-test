@@ -33,7 +33,8 @@ test('ingestLogs only fetches new log entries on repeat runs', async () => {
 
   loadState
     .mockResolvedValueOnce({})
-    .mockResolvedValueOnce({ ingest: { lastDeploymentTimestamp: 1, lastRowIds: ['id1', 'id2'] } });
+    .mockResolvedValueOnce({ ingest: { lastDeploymentTimestamp: 1, lastRowIds: ['id1', 'id2'] } })
+    .mockResolvedValueOnce({ ingest: { lastDeploymentTimestamp: 1, lastRowIds: ['id2', 'id3'] } });
   getLatestDeployment.mockResolvedValue({ uid: 'dep1', createdAt: 1 });
   getRuntimeLogs
     .mockResolvedValueOnce([
@@ -43,15 +44,20 @@ test('ingestLogs only fetches new log entries on repeat runs', async () => {
     .mockResolvedValueOnce([
       { id: 'id2', level: 'error', message: 'b' },
       { id: 'id3', level: 'error', message: 'c' },
-    ]);
+    ])
+    .mockResolvedValueOnce([]);
 
+  await ingestLogs();
   await ingestLogs();
   await ingestLogs();
 
   expect(getRuntimeLogs.mock.calls[1][1]).toEqual(
     expect.objectContaining({ fromId: 'id2' })
   );
-  expect(insertRoadmap.mock.calls[0][0]).toHaveLength(2);
-  expect(insertRoadmap.mock.calls[1][0]).toHaveLength(1);
+  expect(getRuntimeLogs.mock.calls[2][1]).toEqual(
+    expect.objectContaining({ fromId: 'id3' })
+  );
+  expect(insertRoadmap).toHaveBeenCalledTimes(2);
   expect(saveState.mock.calls[1][0].ingest.lastRowIds).toEqual(['id2', 'id3']);
+  expect(saveState.mock.calls[2][0].ingest.lastRowIds).toEqual(['id2', 'id3']);
 });
