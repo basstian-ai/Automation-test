@@ -51,6 +51,9 @@ test('ingestLogs only fetches new log entries on repeat runs', async () => {
     await ingestLogs();
     await ingestLogs();
 
+    expect(getBuildLogs.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ from: new Date(1).toISOString() })
+    );
     expect(getBuildLogs.mock.calls[1][1]).toEqual(
       expect.objectContaining({ fromId: 'id2' })
     );
