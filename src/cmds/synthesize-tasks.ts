@@ -81,13 +81,18 @@ export async function synthesizeTasks() {
 
     const toRow = (t: Task) => {
       const created = (t as any).created;
+      let createdIso: string | null = null;
+      if (created) {
+        const d = new Date(created);
+        createdIso = Number.isNaN(d.valueOf()) ? null : d.toISOString();
+      }
       return {
         id: t.id ?? null,
         title: t.title ?? null,
         type: "task",
         content: t.content ?? t.desc ?? null,
         priority: t.priority ?? null,
-        created: created ? new Date(created).toISOString() : null,
+        created: createdIso,
         source: t.source ?? null,
       };
     };
