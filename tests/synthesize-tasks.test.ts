@@ -35,7 +35,7 @@ test('merges tasks and orders by date', async () => {
     .mockResolvedValueOnce({
       ok: true,
       json: async () => [
-        { id: '1', type: 'task', title: 'Existing', priority: 5, created: '2024-01-05' },
+        { id: '1', type: 'task', title: 'Existing', priority: 5, created: '2024-01-05', source: 'codex' },
         { id: 'x', type: 'idea', title: 'Idea', created: '2024-01-01' },
         { id: 'y', type: 'done', content: 'finished' },
       ],
@@ -51,7 +51,7 @@ test('merges tasks and orders by date', async () => {
   const upsertCall = fetchMock.mock.calls[2];
   const body = JSON.parse(upsertCall[1].body);
   expect(body).toEqual([
-    { id: '1', title: 'Existing', type: 'task', priority: 1, created_at: new Date('2024-01-05').toISOString() },
+    { id: '1', title: 'Existing', type: 'task', priority: 1, created_at: new Date('2024-01-05').toISOString(), source: 'codex' },
     { title: 'Old', type: 'task', priority: 2, created_at: new Date('2024-01-03').toISOString() },
     { title: 'Newer', type: 'task', priority: 3, created_at: new Date('2024-01-04').toISOString() },
   ]);

@@ -84,14 +84,17 @@ export async function synthesizeTasks() {
     if (!delTasks.ok) throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
 
     const toRow = (t: Task) => {
-      const row: any = {
-        title: t.title!,
-        type: "task",
-      };
-      if (t.id) row.id = t.id;
+      const row: any = t.id ? { ...t } : {};
+
+      row.title = t.title!;
+      row.type = "task";
       if (t.content || t.desc) row.content = t.content ?? t.desc;
       if (t.priority != null) row.priority = t.priority;
-      if (t.created) row.created_at = new Date(t.created).toISOString();
+      const created = (t as any).created ?? (t as any).created_at;
+      if (created) row.created_at = new Date(created).toISOString();
+
+      delete row.created;
+      delete row.desc;
       return row;
     };
 
