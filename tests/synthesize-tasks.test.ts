@@ -49,6 +49,9 @@ test('merges tasks and orders by date', async () => {
 
   const upsertCall = fetchMock.mock.calls[1];
   const body = JSON.parse(upsertCall[1].body);
+  const sortedKeys = (o: any) => Object.keys(o).filter(k => k !== 'id').sort();
+  const baseKeys = sortedKeys(body[0]);
+  expect(body.every(o => sortedKeys(o).join(',') === baseKeys.join(','))).toBe(true);
   const keys = ['title', 'type', 'content', 'priority', 'created_at', 'source'];
   expect(body).toEqual([
     {
