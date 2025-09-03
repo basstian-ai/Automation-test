@@ -61,7 +61,10 @@ export async function ingestLogs(): Promise<void> {
       return;
     }
 
-    const raw = await getRuntimeLogs(dep.uid);
+    const now = Date.now();
+    const from = new Date(now - 5 * 60 * 1000).toISOString();
+    const until = new Date(now).toISOString();
+    const raw = await getRuntimeLogs(dep.uid, { from, until, limit: 100, direction: "forward" });
     const entries: RawLog[] = (raw as any[])
       .filter(r => r && (r.level === "error" || r.level === "warning"))
       .map(r => ({
