@@ -36,7 +36,7 @@ test('getRuntimeLogs uses fromId when provided', async () => {
   expect(url.searchParams.get('from')).toBe('123');
 });
 
-test('getRuntimeLogs times out', async () => {
+test('getRuntimeLogs returns empty array on timeout', async () => {
   vi.useFakeTimers();
   vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, opts) => {
     return new Promise((_, reject) => {
@@ -49,7 +49,6 @@ test('getRuntimeLogs times out', async () => {
   }));
   const { getRuntimeLogs } = await import('../src/lib/vercel.ts');
   const p = getRuntimeLogs('dep1');
-  p.catch(() => {});
   await vi.advanceTimersByTimeAsync(31_000);
-  await expect(p).rejects.toThrow('timed out');
+  await expect(p).resolves.toEqual([]);
 });

@@ -53,7 +53,8 @@ export async function getRuntimeLogs(
     });
   } catch (err) {
     if ((err as any).name === "AbortError") {
-      throw new Error("Vercel runtime-logs request timed out");
+      console.warn("Vercel runtime-logs request timed out");
+      return [];
     }
     throw err;
   } finally {
