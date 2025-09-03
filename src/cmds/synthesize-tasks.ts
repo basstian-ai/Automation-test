@@ -2,7 +2,7 @@ import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile } from "../lib/github.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
-import { requireEnv, ENV } from "../lib/env.js";
+import { requireEnv } from "../lib/env.js";
 import { sbRequest } from "../lib/supabase.js";
 
 type Task = { id?: string; type?: string; title?: string; desc?: string; content?: string; source?: string; created?: string | number | Date; priority?: number };
@@ -24,42 +24,16 @@ export function compareTasks(a: Task, b: Task) {
 export async function synthesizeTasks() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    try {
-      requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "TARGET_REPO"]);
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("TARGET_REPO")) {
-        throw new Error("Missing env: TARGET_REPO. Set TARGET_REPO before running this command.");
-      }
-      throw err;
-    }
+    requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
 
     const vision = (await readFile("roadmap/vision.md")) || "";
 
-    let hasRepoColumn = true;
-    let rows: Task[] = [];
-    try {
-      rows = ((await sbRequest(
-        `roadmap_items?select=*&repo=eq.${ENV.TARGET_REPO}`,
-      )) as any[]).map((r: any) => ({
-        ...r,
-        created: r.created,
-      }));
-    } catch (err) {
-      if (
-        err instanceof Error &&
-        /column\s+roadmap_items\.repo/.test(err.message)
-      ) {
-        hasRepoColumn = false;
-        rows = ((await sbRequest(
-          `roadmap_items?select=*`,
-        )) as any[]).map((r: any) => ({
-          ...r,
-          created: r.created,
-        }));
-      } else {
-        throw err;
-      }
-    }
+    const rows: Task[] = ((await sbRequest(
+      `roadmap_items?select=*`,
+    )) as any[]).map((r: any) => ({
+      ...r,
+      created: r.created,
+    }));
 
     const tasks = rows.filter(r => r.type === "task");
     const bugs  = rows.filter(r => r.type === "bug");
@@ -112,7 +86,6 @@ export async function synthesizeTasks() {
         priority: t.priority ?? null,
         created: createdIso,
         source: t.source ?? null,
-        ...(hasRepoColumn ? { repo: ENV.TARGET_REPO } : {}),
       };
     };
 
@@ -153,16 +126,15 @@ export async function synthesizeTasks() {
       const idsToDelete = tasks
         .filter(t => t.id && !limited.some(l => l.id === t.id))
         .map(t => `'${t.id}'`);
-      const repoFilter = hasRepoColumn ? `&repo=eq.${ENV.TARGET_REPO}` : "";
       if (idsToDelete.length) {
         await sbRequest(
-          `roadmap_items?id=in.(${idsToDelete.join(',')})${repoFilter}`,
+          `roadmap_items?id=in.(${idsToDelete.join(',')})`,
           { method: "DELETE" },
         );
       }
 
       await sbRequest(
-        `roadmap_items?type=eq.idea${repoFilter}`,
+        `roadmap_items?type=eq.idea`,
         { method: "DELETE" },
       );
     } else {
