@@ -14,7 +14,13 @@ export async function completeTask(task: Task) {
     ...(task.type != null ? { type: task.type } : {}),
   };
 
-  const { error } = await supabase.rpc("complete_roadmap_task", params);
-  if (error) throw error;
+  // Try the canonical function name first and fall back to the legacy name if needed.
+  let { error } = await supabase.rpc("complete_task", params);
+  if (error && (error.code === "42883" || error.code === "PGRST302")) {
+    const res = await supabase.rpc("complete_roadmap_task", params);
+    if (res.error) throw res.error;
+  } else if (error) {
+    throw error;
+  }
 }
 
