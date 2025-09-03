@@ -3,13 +3,14 @@ import { readFileSync } from "node:fs";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
-import { ENV } from "../lib/env.js";
+import { ENV, requireEnv } from "../lib/env.js";
 export async function implementTopTask() {
     if (!(await acquireLock())) {
         console.log("Lock taken; exiting.");
         return;
     }
     try {
+        requireEnv(['TARGET_REPO']);
         const { supabase } = await import("../lib/supabase.js");
         // Load vision for context
         const vision = (await readFile("roadmap/vision.md")) || "";
@@ -18,7 +19,7 @@ export async function implementTopTask() {
             .from("roadmap_items")
             .select("*")
             .eq("type", "task")
-            .neq("status", "done")
+            .or("status.is.null,status.neq.done")
             .order("priority", { ascending: true })
             .limit(1);
         if (error) {
@@ -96,7 +97,7 @@ export async function implementTopTask() {
         if (files.length) {
             // Build commit body describing root cause, scope, and validation
             const cb = typeof plan.commitBody === "object" ? plan.commitBody : {};
-            const rootCause = cb.rootCause || top.details || "n/a";
+            const rootCause = cb.rootCause || top.content || "n/a";
             const scope = cb.scope || files.map(f => f.path).join(", ");
             const validation = cb.validation || plan.testHint || "n/a";
             const logLink = cb.logUrl || cb.logs || cb.log || undefined;
@@ -133,7 +134,7 @@ export async function implementTopTask() {
             try {
                 await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
                 const { completeTask } = await import("../lib/tasks.js");
-                await completeTask({ id: top.id, title: top.title, desc: top.details, priority: top.priority });
+                await completeTask({ id: top.id, title: top.title, desc: top.content, priority: top.priority });
                 console.log("Implement complete.");
             }
             catch (err) {

@@ -67,7 +67,7 @@ export async function ingestLogs() {
                 id: `IDEA-INGEST-${dep.uid.slice(0, 6)}-${Date.now()}`,
                 type: "idea",
                 title: "Ingestion/infra errors from Vercel logs API",
-                details: `Examples:\n${infraEntries
+                content: `Examples:\n${infraEntries
                     .slice(0, 3)
                     .map(e => `- ${e.message}`)
                     .join("\n")}\n\nAction: classify as infra; add retries/backoff; consider log drain.`,
@@ -107,12 +107,12 @@ export async function ingestLogs() {
                 continue;
             const lines = summary.trim().split("\n");
             const title = lines[0]?.replace(/^#+\s*/, "").trim() || "Runtime error from logs";
-            const details = lines.slice(1).join("\n").trim();
+            const content = lines.slice(1).join("\n").trim();
             items.push({
                 id: `BUG-${dep.uid.slice(0, 6)}-${Date.now()}`,
                 type: "bug",
                 title,
-                details,
+                content,
                 created: new Date().toISOString()
             });
         }

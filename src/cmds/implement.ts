@@ -8,8 +8,8 @@ import { ENV, requireEnv } from "../lib/env.js";
 type RoadmapItem = {
   id?: string;
   title?: string;
-  details?: string;
   content?: string;
+  details?: string;
   priority?: number;
   status?: string;
   type?: string;
@@ -103,7 +103,7 @@ export async function implementTopTask() {
     if (files.length) {
       // Build commit body describing root cause, scope, and validation
       const cb: any = typeof plan.commitBody === "object" ? plan.commitBody : {};
-      const rootCause = cb.rootCause || top.details || top.content || "n/a";
+      const rootCause = cb.rootCause || top.content || top.details || "n/a";
       const scope = cb.scope || files.map(f => f.path).join(", ");
       const validation = cb.validation || plan.testHint || "n/a";
       const logLink = cb.logUrl || cb.logs || cb.log || undefined;
@@ -138,7 +138,7 @@ export async function implementTopTask() {
       try {
         await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
         const { completeTask } = await import("../lib/tasks.js");
-        await completeTask({ id: top.id, title: top.title, desc: top.details || top.content, priority: top.priority });
+        await completeTask({ id: top.id, title: top.title, desc: top.content ?? top.details, priority: top.priority });
         console.log("Implement complete.");
       } catch (err) {
         console.error("Bulk commit failed; no changes were applied.", err);
