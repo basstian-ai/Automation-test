@@ -56,22 +56,38 @@ export async function reviewRepo() {
             .replace(/^```(?:yaml)?\n?/i, "")
             .replace(/\n?```$/, "")
             .trim();
+        // Quote fields that may contain YAML-breaking characters (e.g., colons)
+        const sanitizedIdeasYaml = normalizedIdeasYaml.replace(/^(\s*(?:-\s*)?(title|details):\s*)(.+)$/gm, (_m, prefix, _field, value) => {
+            const trimmed = value.trim();
+            // Skip quoting YAML block scalar indicators like `|` or `>`
+            const isBlockScalar = /^[|>][0-9+-]*(?:\s+#.*)?$/.test(trimmed);
+            if (isBlockScalar)
+                return `${prefix}${trimmed}`;
+            const startsWith = trimmed[0];
+            const endsWith = trimmed[trimmed.length - 1];
+            const isQuoted = startsWith === '"' || startsWith === "'";
+            const isBalanced = isQuoted && startsWith === endsWith;
+            if (isQuoted && !isBalanced)
+                return `${prefix}${trimmed}`;
+            const escaped = trimmed.replace(/"/g, '\\"');
+            return `${prefix}${isBalanced ? trimmed : `"${escaped}"`}`;
+        });
         // 3. Insert new ideas into Supabase
         let newIdeas = [];
         try {
             newIdeas =
-                yaml.load(normalizedIdeasYaml)?.queue || [];
+                yaml.load(sanitizedIdeasYaml)?.queue || [];
         }
         catch (err) {
             console.error("Failed to parse ideas YAML.", err);
-            console.error("Offending YAML:\n" + normalizedIdeasYaml);
+            console.error("Offending YAML:\n" + sanitizedIdeasYaml);
             throw new Error("Failed to parse ideas YAML");
         }
         const payloads = newIdeas.map((idea) => ({
             id: idea.id || crypto.randomUUID(),
             type: "task",
             title: idea.title,
-            details: idea.details,
+            content: idea.details,
             source: "review",
             created: idea.created || new Date().toISOString(),
         }));

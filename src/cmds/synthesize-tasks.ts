@@ -2,10 +2,10 @@ import yaml from "js-yaml";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile } from "../lib/github.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
-import { requireEnv, ENV } from "../lib/env.js";
+import { requireEnv } from "../lib/env.js";
 import { sbRequest } from "../lib/supabase.js";
 
-type Task = { id?: string; type?: string; title?: string; desc?: string; content?: string; source?: string; repo?: string; created?: string | number | Date; priority?: number };
+type Task = { id?: string; type?: string; title?: string; desc?: string; content?: string; source?: string; created?: string | number | Date; priority?: number };
 
 function normTitle(t = "") { return t.toLowerCase().replace(/\s+/g, " ").replace(/[`"'*]/g, "").trim(); }
 function normType(t = "") { return t.toLowerCase() === "idea" ? "idea" : "task"; }
@@ -24,12 +24,12 @@ export function compareTasks(a: Task, b: Task) {
 export async function synthesizeTasks() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+    requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
 
     const vision = (await readFile("roadmap/vision.md")) || "";
 
     const rows: Task[] = ((await sbRequest(
-      `roadmap_items?select=*&repo=eq.${ENV.TARGET_REPO}`,
+      `roadmap_items?select=*`,
     )) as any[]).map((r: any) => ({
       ...r,
       created: r.created,
@@ -86,7 +86,6 @@ export async function synthesizeTasks() {
         priority: t.priority ?? null,
         created: createdIso,
         source: t.source ?? null,
-        repo: ENV.TARGET_REPO,
       };
     };
 
@@ -129,13 +128,13 @@ export async function synthesizeTasks() {
         .map(t => `'${t.id}'`);
       if (idsToDelete.length) {
         await sbRequest(
-          `roadmap_items?id=in.(${idsToDelete.join(',')})&repo=eq.${ENV.TARGET_REPO}`,
+          `roadmap_items?id=in.(${idsToDelete.join(',')})`,
           { method: "DELETE" },
         );
       }
 
       await sbRequest(
-        `roadmap_items?type=eq.idea&repo=eq.${ENV.TARGET_REPO}`,
+        `roadmap_items?type=eq.idea`,
         { method: "DELETE" },
       );
     } else {

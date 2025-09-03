@@ -185,7 +185,7 @@ async function main() {
   const trim = (s: string, n: number) => (s && s.length > n ? s.slice(0, n) : (s || ""));
   const READ_LIMIT = 8000;
   const fetchRoadmap = async (type: string) => {
-    const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=content&type=eq.${type}&repo=eq.${process.env.TARGET_REPO}`;
+    const url = `${process.env.SUPABASE_URL}/rest/v1/roadmap_items?select=content&type=eq.${type}`;
     const headers = {
       apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
       Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`,
@@ -268,14 +268,13 @@ async function main() {
   const resp = await fetch(`${process.env.SUPABASE_URL}/rest/v1/roadmap_items`, {
     method: "POST",
     headers: supabaseHeaders,
-    body: JSON.stringify({
-      id: `IDEA-${Date.now()}`,
-      type: "new",
-      content: output,
-      created: new Date().toISOString(),
-      repo: process.env.TARGET_REPO,
-    }),
-  });
+      body: JSON.stringify({
+        id: `IDEA-${Date.now()}`,
+        type: "new",
+        content: output,
+        created: new Date().toISOString(),
+      }),
+    });
   if (!resp.ok) {
     const text = await resp.text();
     throw new Error(

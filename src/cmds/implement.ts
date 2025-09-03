@@ -33,10 +33,7 @@ export async function implementTopTask() {
         .order("priority", { ascending: true })
         .limit(1);
 
-    let { data: rows, error } = await baseQuery().eq("repo", ENV.TARGET_REPO);
-    if ((error as any)?.code === "42703") {
-      ({ data: rows, error } = await baseQuery());
-    }
+    let { data: rows, error } = await baseQuery();
     if (error) { console.error("Failed to fetch tasks", error); return; }
     const top = rows?.[0] as RoadmapItem | undefined;
     if (!top) { console.log("No tasks available."); return; }

@@ -13,7 +13,7 @@ export async function reviewRepo() {
     requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
     async function fetchRoadmap(type: string) {
       const data = (await sbRequest(
-        `roadmap_items?select=content&type=eq.${type}&repo=eq.${ENV.TARGET_REPO}`,
+        `roadmap_items?select=content&type=eq.${type}`,
       )) as { content: string }[] | undefined;
       return data ? data.map((r) => r.content).join("\n") : "";
     }
@@ -47,7 +47,6 @@ export async function reviewRepo() {
         type: "summary",
         content: summary,
         created: new Date().toISOString(),
-        repo: ENV.TARGET_REPO,
       }),
     });
     console.log("Stored repo summary in Supabase.");
@@ -97,7 +96,6 @@ export async function reviewRepo() {
       content: idea.details,
       source: "review",
       created: idea.created || new Date().toISOString(),
-      repo: ENV.TARGET_REPO,
     }));
     if (payloads.length > 0) {
       await sbRequest("roadmap_items", {
