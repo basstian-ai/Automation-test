@@ -34,7 +34,8 @@ function isInfraLog(e: RawLog): boolean {
     /ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN/i,
     /failed to fetch runtime-logs/i,
     /Too Many Requests|rate limit/i,
-    /https?:\/\/api\.vercel\.com/i
+    /https?:\/\/api\.vercel\.com/i,
+    /Query exceeds 5-minute execution limit/i // exceeds Vercel's query time limit
   ];
   if (INFRA_PATTERNS.some(rx => rx.test(msg))) return true;
   if (/^https?:\/\/api\.vercel\.com/.test(path)) return true;
