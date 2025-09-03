@@ -80,30 +80,34 @@ export async function synthesizeTasks() {
     const limited = merged.slice(0, 100).map((t, i) => ({ ...t, priority: i + 1 }));
 
     // Upsert tasks in Supabase
-    const delTasks = await fetch(`${url}/rest/v1/roadmap_items?type=eq.task`, { method: "DELETE", headers });
-    if (!delTasks.ok) throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
+    if (limited.length > 0) {
+      const delTasks = await fetch(`${url}/rest/v1/roadmap_items?type=eq.task`, { method: "DELETE", headers });
+      if (!delTasks.ok) throw new Error(`Supabase delete tasks failed: ${delTasks.status}`);
 
-    const toRow = (t: Task) => {
-      const row: any = t.id ? { ...t } : {};
+      const toRow = (t: Task) => {
+        const row: any = t.id ? { ...t } : {};
 
-      row.title = t.title!;
-      row.type = "task";
-      if (t.content || t.desc) row.content = t.content ?? t.desc;
-      if (t.priority != null) row.priority = t.priority;
-      const created = (t as any).created ?? (t as any).created_at;
-      if (created) row.created_at = new Date(created).toISOString();
+        row.title = t.title!;
+        row.type = "task";
+        if (t.content || t.desc) row.content = t.content ?? t.desc;
+        if (t.priority != null) row.priority = t.priority;
+        const created = (t as any).created ?? (t as any).created_at;
+        if (created) row.created_at = new Date(created).toISOString();
 
-      delete row.created;
-      delete row.desc;
-      return row;
-    };
+        delete row.created;
+        delete row.desc;
+        return row;
+      };
 
-    const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify(limited.map(toRow)),
-    });
-    if (!upsert.ok) throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
+      const upsert = await fetch(`${url}/rest/v1/roadmap_items`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify(limited.map(toRow)),
+      });
+      if (!upsert.ok) throw new Error(`Supabase upsert tasks failed: ${upsert.status}`);
+    } else {
+      console.log("No tasks to upsert; skipping Supabase task update.");
+    }
 
     const delIdeas = await fetch(`${url}/rest/v1/roadmap_items?type=eq.idea`, { method: "DELETE", headers });
     if (!delIdeas.ok) throw new Error(`Supabase delete ideas failed: ${delIdeas.status}`);
