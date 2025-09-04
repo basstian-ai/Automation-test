@@ -49,14 +49,21 @@ export async function ingestLogs() {
         }
         const sameDep = state.ingest?.lastDeploymentTimestamp === dep.createdAt;
         const prevRowIds = sameDep ? state.ingest?.lastRowIds ?? [] : [];
+        const depId = dep.id ?? dep.uid;
+        const depPrefix = depId.slice(0, 6);
         let raw = [];
+        let iter;
         if (prevRowIds.length > 0) {
             const fromId = prevRowIds[prevRowIds.length - 1];
-            raw = (await getBuildLogs(dep.uid, { fromId, limit: 100, direction: "forward" }));
+            iter = getBuildLogs(depId, { fromId, limit: 100, direction: "forward" });
         }
         else {
             const from = new Date(dep.createdAt).toISOString();
-            raw = (await getBuildLogs(dep.uid, { from, limit: 100, direction: "forward" }));
+            iter = getBuildLogs(depId, { from, limit: 100, direction: "forward" });
+        }
+        if (iter) {
+            for await (const r of iter)
+                raw.push(r);
         }
         const rawIds = raw.map(r => r?.id).filter(Boolean);
         const nextRowIds = rawIds.length > 0 ? rawIds : prevRowIds;
@@ -65,16 +72,18 @@ export async function ingestLogs() {
             .filter(r => {
             if (!r)
                 return false;
-            const lvl = (r.level ?? r.type ?? "").toString().toLowerCase();
-            return lvl === "error" || lvl === "warning" || lvl === "stderr";
+            const level = (r.level ?? "").toString().toLowerCase();
+            const type = (r.type ?? "").toString().toLowerCase();
+            return level === "error" || level === "warning" || type === "stderr";
         })
             .filter(r => !prevIds.has(r.id))
             .map(r => {
-            const lvl = (r.level ?? r.type ?? "").toString().toLowerCase();
-            const normalizedLevel = lvl === "stderr" ? "error" : lvl;
+            const level = (r.level ?? "").toString().toLowerCase();
+            const type = (r.type ?? "").toString().toLowerCase();
+            const lvl = type === "stderr" ? "error" : level || type;
             return {
                 id: r.id,
-                level: normalizedLevel,
+                level: lvl,
                 message: r.message ?? r.text ?? "",
                 requestPath: r.requestPath ?? "",
                 timestamp: r.timestamp ?? ""
@@ -92,7 +101,7 @@ export async function ingestLogs() {
         const infraEntries = entries.filter(isInfraLog);
         if (appEntries.length === 0 && infraEntries.length > 0) {
             const item = {
-                id: `IDEA-INGEST-${dep.uid.slice(0, 6)}-${Date.now()}`,
+                id: `IDEA-INGEST-${depPrefix}-${Date.now()}`,
                 type: "idea",
                 title: "Ingestion/infra errors from Vercel logs API",
                 content: `Examples:\n${infraEntries
@@ -143,7 +152,7 @@ export async function ingestLogs() {
             const title = lines[0]?.replace(/^#+\s*/, "").trim() || "Build error from logs";
             const content = lines.slice(1).join("\n").trim();
             items.push({
-                id: `BUG-${dep.uid.slice(0, 6)}-${Date.now()}`,
+                id: `BUG-${depPrefix}-${Date.now()}`,
                 type: "bug",
                 title,
                 content,
