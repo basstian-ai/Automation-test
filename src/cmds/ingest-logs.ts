@@ -65,14 +65,16 @@ export async function ingestLogs(): Promise<void> {
 
     const sameDep = state.ingest?.lastDeploymentTimestamp === dep.createdAt;
     const prevRowIds = sameDep ? state.ingest?.lastRowIds ?? [] : [];
+    const depId = dep.id ?? dep.uid;
+    const depPrefix = depId.slice(0, 6);
     let raw: any[] = [];
     let iter: AsyncGenerator<any, void, unknown> | void;
     if (prevRowIds.length > 0) {
       const fromId = prevRowIds[prevRowIds.length - 1];
-      iter = getBuildLogs(dep.uid, { fromId, limit: 100, direction: "forward" });
+      iter = getBuildLogs(depId, { fromId, limit: 100, direction: "forward" });
     } else {
       const from = new Date(dep.createdAt).toISOString();
-      iter = getBuildLogs(dep.uid, { from, limit: 100, direction: "forward" });
+      iter = getBuildLogs(depId, { from, limit: 100, direction: "forward" });
     }
     if (iter) {
       for await (const r of iter) raw.push(r);
@@ -115,7 +117,7 @@ export async function ingestLogs(): Promise<void> {
 
     if (appEntries.length === 0 && infraEntries.length > 0) {
       const item: RoadmapItem = {
-        id: `IDEA-INGEST-${dep.uid.slice(0, 6)}-${Date.now()}`,
+        id: `IDEA-INGEST-${depPrefix}-${Date.now()}`,
         type: "idea",
         title: "Ingestion/infra errors from Vercel logs API",
         content: `Examples:\n${infraEntries
@@ -171,7 +173,7 @@ export async function ingestLogs(): Promise<void> {
       const content = lines.slice(1).join("\n").trim();
 
       items.push({
-        id: `BUG-${dep.uid.slice(0, 6)}-${Date.now()}`,
+        id: `BUG-${depPrefix}-${Date.now()}`,
         type: "bug",
         title,
         content,
