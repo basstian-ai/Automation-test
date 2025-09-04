@@ -21,7 +21,7 @@ export async function getLatestDeployment() {
   return data.deployments?.[0];
 }
 
-export async function getBuildLogs(
+export async function* getBuildLogs(
   deploymentId: string,
   opts: {
     fromId?: string;
@@ -30,8 +30,8 @@ export async function getBuildLogs(
     limit?: number;
     direction?: string;
   } = {},
-) {
-  if (!ENV.VERCEL_PROJECT_ID) return [];
+) : AsyncGenerator<any, void, unknown> {
+  if (!ENV.VERCEL_PROJECT_ID) return;
   const url = new URL(
     `${API}/v6/deployments/${deploymentId}/build-logs`
   );
@@ -44,7 +44,7 @@ export async function getBuildLogs(
   if (direction) url.searchParams.set("direction", direction);
 
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), 30_000);
+  const t = setTimeout(() => controller.abort(), 180_000);
   let res: Response;
   try {
     res = await fetch(url, {
@@ -59,19 +59,34 @@ export async function getBuildLogs(
   } finally {
     clearTimeout(t);
   }
-  if (res.status === 404) return [];
+  if (res.status === 404) return;
   if (!res.ok) throw new Error(`Vercel build-logs failed: ${res.status}`);
-  const text = await res.text();
-  return text
-    .split("\n")
-    .filter(Boolean)
-    .map(l => {
+
+  const reader = res.body?.getReader();
+  if (!reader) return;
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
       try {
-        return JSON.parse(l);
+        yield JSON.parse(line);
       } catch {
-        return null;
+        // ignore malformed lines
       }
-    })
-    .filter(Boolean);
+    }
+  }
+  if (buffer.trim()) {
+    try {
+      yield JSON.parse(buffer);
+    } catch {
+      // ignore
+    }
+  }
 }
 

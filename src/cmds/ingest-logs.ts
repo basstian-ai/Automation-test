@@ -66,12 +66,16 @@ export async function ingestLogs(): Promise<void> {
     const sameDep = state.ingest?.lastDeploymentTimestamp === dep.createdAt;
     const prevRowIds = sameDep ? state.ingest?.lastRowIds ?? [] : [];
     let raw: any[] = [];
+    let iter: AsyncGenerator<any, void, unknown> | void;
     if (prevRowIds.length > 0) {
       const fromId = prevRowIds[prevRowIds.length - 1];
-      raw = (await getBuildLogs(dep.uid, { fromId, limit: 100, direction: "forward" })) as any[];
+      iter = getBuildLogs(dep.uid, { fromId, limit: 100, direction: "forward" });
     } else {
       const from = new Date(dep.createdAt).toISOString();
-      raw = (await getBuildLogs(dep.uid, { from, limit: 100, direction: "forward" })) as any[];
+      iter = getBuildLogs(dep.uid, { from, limit: 100, direction: "forward" });
+    }
+    if (iter) {
+      for await (const r of iter) raw.push(r);
     }
     const rawIds = raw.map(r => r?.id).filter(Boolean) as string[];
     const nextRowIds = rawIds.length > 0 ? rawIds : prevRowIds;
