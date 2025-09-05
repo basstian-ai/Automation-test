@@ -165,20 +165,26 @@ export async function ingestLogs(): Promise<void> {
     const items: RoadmapItem[] = [];
 
     for (const [_, entriesForSummary] of grouped) {
-      const summary = await summarizeLogToBug(entriesForSummary);
-      if (!summary) continue;
+      try {
+        const summary = await summarizeLogToBug(entriesForSummary);
+        if (!summary) continue;
 
-      const lines = summary.trim().split("\n");
-      const title = lines[0]?.replace(/^#+\s*/, "").trim() || "Build error from logs";
-      const content = lines.slice(1).join("\n").trim();
+        const lines = summary.trim().split("\n");
+        const title = lines[0]?.replace(/^#+\s*/, "").trim() || "Build error from logs";
+        const content = lines.slice(1).join("\n").trim();
 
-      items.push({
-        id: `BUG-${depPrefix}-${Date.now()}`,
-        type: "bug",
-        title,
-        content,
-        created: new Date().toISOString()
-      });
+        items.push({
+          id: `BUG-${depPrefix}-${Date.now()}`,
+          type: "bug",
+          title,
+          content,
+          created: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error("Error summarizing log group", err);
+        await appendChangelog("Failed to summarize log group during ingestion.");
+        continue;
+      }
     }
 
     await insertRoadmap(items);
