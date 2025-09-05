@@ -14,7 +14,7 @@ function formatMessage(msg: CommitMessage): string {
 
 export function parseRepo(s: string): RepoRef {
   const [owner, repo] = s.split("/");
-  if (!owner || !repo) throw new Error(`Invalid TARGET_REPO: ${s}`);
+  if (!owner || !repo) throw new Error(`Invalid repo: ${s}`);
   return { owner, repo };
 }
 
@@ -37,13 +37,13 @@ async function getFile(owner: string, repo: string, path: string, ref?: string) 
 }
 
 export async function getDefaultBranch(): Promise<string> {
-  const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+  const { OWNER: owner, REPO: repo } = ENV;
   const { data } = await gh.rest.repos.get({ owner, repo });
   return data.default_branch;
 }
 
 export async function ensureBranch(branch: string, baseBranch?: string): Promise<void> {
-  const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+  const { OWNER: owner, REPO: repo } = ENV;
   const ref = `heads/${branch}`;
   try {
     await gh.rest.git.getRef({ owner, repo, ref });
@@ -74,7 +74,7 @@ export function resolveRepoPath(p: string): string {
 }
 
 export async function readFile(path: string): Promise<string | undefined> {
-  const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+  const { OWNER: owner, REPO: repo } = ENV;
   const got = await getFile(owner, repo, path);
   return got.content;
 }
@@ -85,7 +85,7 @@ export async function upsertFile(
   message: CommitMessage,
   opts?: { branch?: string }
 ) {
-  const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+  const { OWNER: owner, REPO: repo } = ENV;
   const safePath = resolveRepoPath(path);
   const ref = opts?.branch;
   if (ENV.DRY_RUN) {
@@ -114,7 +114,7 @@ export async function commitMany(
   message: CommitMessage,
   opts?: { branch?: string }
 ) {
-  const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+  const { OWNER: owner, REPO: repo } = ENV;
   const ref = opts?.branch;
   const msg = formatMessage(message);
   if (ENV.DRY_RUN) {

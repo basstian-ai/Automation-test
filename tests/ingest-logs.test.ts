@@ -6,9 +6,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  delete process.env.TARGET_OWNER;
+  delete process.env.TARGET_REPO;
 });
 
 test('ingestLogs only fetches new log entries on repeat runs', async () => {
+    process.env.TARGET_OWNER = 'o';
+    process.env.TARGET_REPO = 'r';
     vi.mock('../src/lib/lock.js', () => ({
       acquireLock: vi.fn().mockResolvedValue(true),
       releaseLock: vi.fn().mockResolvedValue(undefined),

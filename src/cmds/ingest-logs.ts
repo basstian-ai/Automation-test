@@ -5,6 +5,7 @@ import { getLatestDeployment, getBuildLogs } from "../lib/vercel.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { summarizeLogToBug, type LogEntryForBug } from "../lib/prompts.js";
 import { insertRoadmap, type RoadmapItem } from "../lib/roadmap.js";
+import { requireEnv } from "../lib/env.js";
 
 type RawLog = {
   id?: string;
@@ -50,6 +51,7 @@ export async function ingestLogs(): Promise<void> {
   }
 
   try {
+    requireEnv(["TARGET_OWNER", "TARGET_REPO"]);
     const state = await loadState();
     const dep = await getLatestDeployment();
 

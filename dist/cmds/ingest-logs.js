@@ -4,6 +4,7 @@ import { getLatestDeployment, getBuildLogs } from "../lib/vercel.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { summarizeLogToBug } from "../lib/prompts.js";
 import { insertRoadmap } from "../lib/roadmap.js";
+import { requireEnv } from "../lib/env.js";
 function getLogSignature(message) {
     return message
         .replace(/\[\w+\]/g, "")
@@ -37,6 +38,7 @@ export async function ingestLogs() {
         return;
     }
     try {
+        requireEnv(["TARGET_OWNER", "TARGET_REPO"]);
         const state = await loadState();
         const dep = await getLatestDeployment();
         if (!dep) {

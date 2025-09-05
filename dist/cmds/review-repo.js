@@ -1,5 +1,5 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { parseRepo, gh } from "../lib/github.js";
+import { gh } from "../lib/github.js";
 import { reviewToIdeas, reviewToSummary } from "../lib/prompts.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { requireEnv, ENV } from "../lib/env.js";
@@ -12,7 +12,7 @@ export async function reviewRepo() {
         return;
     }
     try {
-        requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+        requireEnv(["TARGET_OWNER", "TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
         async function fetchRoadmap(type) {
             const data = (await sbRequest(`roadmap_items?select=content&type=eq.${type}`));
             return data ? data.map((r) => r.content).join("\n") : "";
@@ -20,8 +20,7 @@ export async function reviewRepo() {
         const roadmapTypes = ["vision", "task", "bugs", "done", "new"];
         const [vision, tasks, bugs, done, ideas] = await Promise.all(roadmapTypes.map(fetchRoadmap));
         const state = await loadState();
-        const { owner, repo } = parseRepo(ENV.TARGET_REPO);
-        const commitsResp = await gh.rest.repos.listCommits({ owner, repo, per_page: 10 });
+        const commitsResp = await gh.rest.repos.listCommits({ owner: ENV.OWNER, repo: ENV.REPO, per_page: 10 });
         const commitsData = [];
         for (const c of commitsResp.data) {
             if (c.sha === state.lastReviewedSha)

@@ -2,17 +2,23 @@ import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 
 const SUPABASE_URL = 'https://example.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = 'service-key';
+const TARGET_OWNER = 'o';
+const TARGET_REPO = 'r';
 
 beforeEach(() => {
   vi.resetModules();
   process.env.SUPABASE_URL = SUPABASE_URL;
   process.env.SUPABASE_SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY;
+  process.env.TARGET_OWNER = TARGET_OWNER;
+  process.env.TARGET_REPO = TARGET_REPO;
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   delete process.env.SUPABASE_URL;
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.TARGET_OWNER;
+  delete process.env.TARGET_REPO;
 });
 
 test('merges tasks and orders by date', async () => {

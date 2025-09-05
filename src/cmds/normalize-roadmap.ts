@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import type { Task } from "../lib/types.js";
-import { ENV } from "../lib/env.js";
+import { ENV, requireEnv } from "../lib/env.js";
 import yaml from "js-yaml";
 
 function normTitle(t = "") {
@@ -23,6 +23,7 @@ export function compareTasks(a: Task, b: Task) {
 export async function normalizeRoadmap() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
+    requireEnv(["TARGET_OWNER", "TARGET_REPO"]);
     const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY);
     const { data, error } = await supabase
       .from("roadmap_items")

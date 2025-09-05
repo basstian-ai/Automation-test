@@ -24,7 +24,7 @@ export function compareTasks(a: Task, b: Task) {
 export async function synthesizeTasks() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+    requireEnv(["TARGET_OWNER", "TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
 
     const vision = (await readFile("roadmap/vision.md")) || "";
 

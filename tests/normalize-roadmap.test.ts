@@ -66,12 +66,16 @@ beforeEach(() => {
   vi.resetModules();
   process.env.SUPABASE_URL = 'http://example.local';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
+  process.env.TARGET_OWNER = 'o';
+  process.env.TARGET_REPO = 'r';
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   delete process.env.SUPABASE_URL;
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.TARGET_OWNER;
+  delete process.env.TARGET_REPO;
 });
 
 test('sorts and deduplicates roadmap items (happy path)', async () => {

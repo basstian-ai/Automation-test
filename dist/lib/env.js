@@ -2,7 +2,8 @@
 export const ENV = {
     GH_USERNAME: process.env.GH_USERNAME || "ai-dev-agent",
     PAT_TOKEN: process.env.PAT_TOKEN || "",
-    TARGET_REPO: process.env.TARGET_REPO || "",
+    OWNER: process.env.TARGET_OWNER || "",
+    REPO: process.env.TARGET_REPO || "",
     TARGET_DIR: process.env.TARGET_DIR || "",
     VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID || "",
     VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID || "",
@@ -16,6 +17,7 @@ export const ENV = {
     BRANCH: process.env.GITHUB_REF_NAME || process.env.GITHUB_HEAD_REF || "",
     ALLOW_PATHS: (process.env.ALLOW_PATHS || "").split(",").map(s => s.trim()).filter(Boolean),
 };
+export const TARGET_REPO_SLUG = `${ENV.OWNER}/${ENV.REPO}`;
 // Call this inside commands to assert only what they need.
 export function requireEnv(names) {
     for (const n of names) {
