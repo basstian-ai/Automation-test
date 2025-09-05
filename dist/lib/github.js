@@ -8,10 +8,11 @@ function formatMessage(msg) {
     return msg.body ? `${msg.title}\n\n${msg.body}` : msg.title;
 }
 export function parseRepo(s) {
-    const [owner, repo] = s.split("/");
-    if (!owner || !repo)
+    const parts = s.split("/");
+    if (parts.length !== 2 || !parts[0] || !parts[1]) {
         throw new Error(`Invalid TARGET_REPO: ${s}`);
-    return { owner, repo };
+    }
+    return { owner: parts[0], repo: parts[1] };
 }
 function b64(s) {
     return Buffer.from(s, "utf8").toString("base64");

@@ -13,9 +13,11 @@ function formatMessage(msg: CommitMessage): string {
 }
 
 export function parseRepo(s: string): RepoRef {
-  const [owner, repo] = s.split("/");
-  if (!owner || !repo) throw new Error(`Invalid TARGET_REPO: ${s}`);
-  return { owner, repo };
+  const parts = s.split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(`Invalid TARGET_REPO: ${s}`);
+  }
+  return { owner: parts[0], repo: parts[1] };
 }
 
 function b64(s: string) {

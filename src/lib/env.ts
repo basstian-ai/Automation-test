@@ -1,8 +1,16 @@
 // src/lib/env.ts
+const owner = process.env.TARGET_OWNER || "";
+const repoInput = process.env.TARGET_REPO || "";
+const targetRepo = repoInput.includes("/")
+  ? repoInput
+  : owner && repoInput
+    ? `${owner}/${repoInput}`
+    : repoInput;
+
 export const ENV = {
   GH_USERNAME: process.env.GH_USERNAME || "ai-dev-agent",
   PAT_TOKEN: process.env.PAT_TOKEN || "",
-  TARGET_REPO: process.env.TARGET_REPO || "",
+  TARGET_REPO: targetRepo,
   TARGET_DIR: process.env.TARGET_DIR || "",
   VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID || "",
   VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID || "",
