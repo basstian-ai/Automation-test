@@ -187,7 +187,9 @@ export async function ingestLogs(): Promise<void> {
       }
     }
 
-    await insertRoadmap(items);
+    if (items.length > 0) {
+      await insertRoadmap(items);
+    }
 
     await saveState({
       ...state,
