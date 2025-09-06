@@ -12,10 +12,16 @@ function formatMessage(msg: CommitMessage): string {
   return msg.body ? `${msg.title}\n\n${msg.body}` : msg.title;
 }
 
-export function parseRepo(s: string): RepoRef {
-  const [owner, repo] = s.split("/");
-  if (!owner || !repo) throw new Error(`Invalid TARGET_REPO: ${s}`);
-  return { owner, repo };
+export function parseRepo(repoEnv: string = ENV.TARGET_REPO): RepoRef {
+  if (!repoEnv) throw new Error("Missing TARGET_REPO");
+  if (repoEnv.includes("/")) {
+    const [owner, repo] = repoEnv.split("/");
+    if (!owner || !repo) throw new Error(`Invalid TARGET_REPO: ${repoEnv}`);
+    return { owner, repo };
+  }
+  const owner = ENV.TARGET_OWNER;
+  if (!owner) throw new Error(`Invalid TARGET_REPO: ${repoEnv}`);
+  return { owner, repo: repoEnv };
 }
 
 function b64(s: string) {
