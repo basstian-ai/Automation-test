@@ -49,3 +49,17 @@ test('parseRepo handles separate TARGET_OWNER and TARGET_REPO', async () => {
   const { parseRepo } = await import('../src/lib/github.ts');
   expect(parseRepo()).toEqual({ owner: 'basstian-ai', repo: 'simple-pim-123' });
 });
+
+test('parseRepo throws if TARGET_REPO is missing', async () => {
+  delete process.env.TARGET_OWNER;
+  delete process.env.TARGET_REPO;
+  const { parseRepo } = await import('../src/lib/github.ts');
+  expect(() => parseRepo()).toThrow(/Missing TARGET_REPO/);
+});
+
+test('parseRepo throws if repo-only provided without owner', async () => {
+  process.env.TARGET_REPO = 'simple-pim-123';
+  delete process.env.TARGET_OWNER;
+  const { parseRepo } = await import('../src/lib/github.ts');
+  expect(() => parseRepo()).toThrow(/TARGET_OWNER/);
+});
