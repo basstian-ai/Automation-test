@@ -350,17 +350,19 @@ export async function commitMany(
   });
 }
 
-try {
-  const parsed = parseRepo();
-  console.log("Resolved repo configuration:", {
-    TARGET_OWNER: ENV.TARGET_OWNER,
-    TARGET_REPO: ENV.TARGET_REPO,
-    parsed,
-  });
-} catch (err: any) {
-  console.log("Resolved repo configuration:", {
-    TARGET_OWNER: ENV.TARGET_OWNER,
-    TARGET_REPO: ENV.TARGET_REPO,
-    parsed: err.message,
-  });
+if (process.env.DEBUG) {
+  try {
+    const parsed = parseRepo();
+    console.log("Resolved repo configuration:", {
+      TARGET_OWNER: ENV.TARGET_OWNER,
+      TARGET_REPO: ENV.TARGET_REPO,
+      parsed,
+    });
+  } catch (err: any) {
+    console.log("Resolved repo configuration:", {
+      TARGET_OWNER: ENV.TARGET_OWNER,
+      TARGET_REPO: ENV.TARGET_REPO,
+      parsed: err.message,
+    });
+  }
 }
