@@ -27,22 +27,6 @@ export function parseRepo(repoEnv = ENV.TARGET_REPO) {
 function b64(s) {
     return Buffer.from(s, "utf8").toString("base64");
 }
-/**
- * Create Octokit instance that automatically injects {owner, repo}
- * for any repo-scoped route when missing.
- */
-export function createOctokitWithRepo(repo) {
-    const gh = new Octokit({ auth: ENV.PAT_TOKEN });
-    gh.hook.before("request", (options) => {
-        if (typeof options.url === "string" && options.url.includes("/repos/")) {
-            if (options.owner == null)
-                options.owner = repo.owner;
-            if (options.repo == null)
-                options.repo = repo.repo;
-        }
-    });
-    return gh;
-}
 /** Small helper to merge repo params */
 export function withRepo(ref, extra) {
     return { owner: ref.owner, repo: ref.repo, ...extra };
