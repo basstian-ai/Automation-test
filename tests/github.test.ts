@@ -63,3 +63,14 @@ test('parseRepo throws if repo-only provided without owner', async () => {
   const { parseRepo } = await import('../src/lib/github.ts');
   expect(() => parseRepo()).toThrow(/TARGET_OWNER/);
 });
+
+test.each(['ownerOnly/', '/repoOnly'])(
+  'parseRepo throws if TARGET_REPO has missing owner or repo: %s',
+  async (repo) => {
+    process.env.TARGET_REPO = repo;
+    const { parseRepo } = await import('../src/lib/github.ts');
+    expect(() => parseRepo()).toThrow(
+      `Invalid TARGET_REPO format: "${repo}". Expected "owner/repo".`
+    );
+  }
+);
