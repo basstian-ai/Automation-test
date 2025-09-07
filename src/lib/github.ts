@@ -13,29 +13,30 @@ function formatMessage(msg: CommitMessage): string {
 }
 
 export function parseRepo(repoEnv: string = ENV.TARGET_REPO): RepoRef {
+  const ownerEnv = ENV.TARGET_OWNER || "";
   if (!repoEnv) {
     throw new Error(
-      "Missing TARGET_REPO. Expected either 'owner/repo' or TARGET_OWNER + TARGET_REPO."
+      `Missing TARGET_REPO. Received TARGET_OWNER="${ownerEnv}", TARGET_REPO="${repoEnv}".`
     );
   }
   if (repoEnv.includes("/")) {
     const [owner, repo] = repoEnv.split("/");
     if (!owner || !repo) {
       throw new Error(
-        `Invalid TARGET_REPO format: "${repoEnv}". Expected "owner/repo".`
+        `Invalid TARGET_REPO format: "${repoEnv}". Received TARGET_OWNER="${ownerEnv}", TARGET_REPO="${repoEnv}".`
       );
     }
     return { owner, repo };
   }
-  if (!ENV.TARGET_OWNER) {
+  if (!ownerEnv) {
     throw new Error(
-      `TARGET_REPO="${repoEnv}" provided without TARGET_OWNER. Please set TARGET_OWNER (deprecated) or prefer TARGET_REPO="owner/repo".`
+      `TARGET_REPO="${repoEnv}" provided without TARGET_OWNER. Received TARGET_OWNER="${ownerEnv}".`
     );
   }
   console.warn(
     "DEPRECATION: Using TARGET_OWNER + TARGET_REPO. Prefer TARGET_REPO='owner/repo'."
   );
-  return { owner: ENV.TARGET_OWNER, repo: repoEnv };
+  return { owner: ownerEnv, repo: repoEnv };
 }
 
 function b64(s: string) {
@@ -52,6 +53,11 @@ export async function getDefaultBranch(
   client: Octokit = gh,
   repo: RepoRef = parseRepo()
 ) {
+  console.log("Resolved repo configuration:", {
+    TARGET_OWNER: ENV.TARGET_OWNER,
+    TARGET_REPO: ENV.TARGET_REPO,
+    parsed: repo,
+  });
   const { data } = await client.rest.repos.get(withRepo(repo, {}));
   return data.default_branch || "main";
 }
@@ -256,7 +262,13 @@ export async function commitMany(
   message: CommitMessage,
   opts?: { branch?: string }
 ) {
-  const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+  const repoRef = parseRepo(ENV.TARGET_REPO);
+  console.log("Resolved repo configuration:", {
+    TARGET_OWNER: ENV.TARGET_OWNER,
+    TARGET_REPO: ENV.TARGET_REPO,
+    parsed: repoRef,
+  });
+  const { owner, repo } = repoRef;
   const ref = opts?.branch;
   const msg = formatMessage(message);
   if (ENV.DRY_RUN) {
@@ -270,7 +282,7 @@ export async function commitMany(
     return;
   }
 
-  const branch = ref || (await getDefaultBranch());
+  const branch = ref || (await getDefaultBranch(gh, repoRef));
   const git = gh.rest.git;
   const headRef = await git.getRef({ owner, repo, ref: `heads/${branch}` });
   const latestCommitSha = headRef.data.object.sha;
@@ -346,21 +358,4 @@ export async function commitMany(
     ref: `heads/${branch}`,
     sha: newCommit.data.sha
   });
-}
-
-if (process.env.DEBUG) {
-  try {
-    const parsed = parseRepo();
-    console.log("Resolved repo configuration:", {
-      TARGET_OWNER: ENV.TARGET_OWNER,
-      TARGET_REPO: ENV.TARGET_REPO,
-      parsed,
-    });
-  } catch (err: any) {
-    console.log("Resolved repo configuration:", {
-      TARGET_OWNER: ENV.TARGET_OWNER,
-      TARGET_REPO: ENV.TARGET_REPO,
-      parsed: err.message,
-    });
-  }
 }
