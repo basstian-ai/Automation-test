@@ -42,23 +42,6 @@ function b64(s: string) {
   return Buffer.from(s, "utf8").toString("base64");
 }
 
-/**
- * Create Octokit instance that automatically injects {owner, repo}
- * for any repo-scoped route when missing.
- */
-export function createOctokitWithRepo(repo: RepoRef) {
-  const gh = new Octokit({ auth: ENV.PAT_TOKEN });
-
-  gh.hook.before("request", (options: any) => {
-    if (typeof options.url === "string" && options.url.includes("/repos/")) {
-      if (options.owner == null) options.owner = repo.owner;
-      if (options.repo == null) options.repo = repo.repo;
-    }
-  });
-
-  return gh;
-}
-
 /** Small helper to merge repo params */
 export function withRepo<T extends object>(ref: RepoRef, extra: T): T & RepoRef {
   return { owner: ref.owner, repo: ref.repo, ...extra };
@@ -126,8 +109,13 @@ export async function createRepoTree(
 }
 
 /**
- * Example high-level commit helper (optional).
- * Use this if you currently hand-wire blob/tree/commit calls.
+ * Commit a set of files using an explicit Octokit client and repository.
+ *
+ * This is a low-level helper that assumes paths are already normalized and
+ * writes all blobs with the default `100644` mode. It does not inspect the
+ * repository for existing permissions or apply any `TARGET_*` environment
+ * configuration. For automation tasks that rely on those conveniences or need
+ * to preserve file modes, use {@link commitMany} instead.
  */
 export async function commitFiles(
   client: Octokit,
@@ -253,6 +241,16 @@ export async function upsertFile(
   });
 }
 
+/**
+ * Convenience wrapper around {@link commitFiles} that commits multiple files to
+ * the repository defined by `TARGET_REPO`.
+ *
+ * Paths are normalized through {@link resolveRepoPath} and existing file modes
+ * are preserved by inspecting the current tree. Use this in automation
+ * commands where environment configuration and permission retention are
+ * desirable. For generic library usage where you already have an Octokit
+ * instance and repo reference, prefer {@link commitFiles}.
+ */
 export async function commitMany(
   files: Array<{ path: string; content: string }>,
   message: CommitMessage,
@@ -350,17 +348,19 @@ export async function commitMany(
   });
 }
 
-try {
-  const parsed = parseRepo();
-  console.log("Resolved repo configuration:", {
-    TARGET_OWNER: ENV.TARGET_OWNER,
-    TARGET_REPO: ENV.TARGET_REPO,
-    parsed,
-  });
-} catch (err: any) {
-  console.log("Resolved repo configuration:", {
-    TARGET_OWNER: ENV.TARGET_OWNER,
-    TARGET_REPO: ENV.TARGET_REPO,
-    parsed: err.message,
-  });
+if (process.env.DEBUG) {
+  try {
+    const parsed = parseRepo();
+    console.log("Resolved repo configuration:", {
+      TARGET_OWNER: ENV.TARGET_OWNER,
+      TARGET_REPO: ENV.TARGET_REPO,
+      parsed,
+    });
+  } catch (err: any) {
+    console.log("Resolved repo configuration:", {
+      TARGET_OWNER: ENV.TARGET_OWNER,
+      TARGET_REPO: ENV.TARGET_REPO,
+      parsed: err.message,
+    });
+  }
 }

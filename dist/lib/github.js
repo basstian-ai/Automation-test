@@ -27,22 +27,6 @@ export function parseRepo(repoEnv = ENV.TARGET_REPO) {
 function b64(s) {
     return Buffer.from(s, "utf8").toString("base64");
 }
-/**
- * Create Octokit instance that automatically injects {owner, repo}
- * for any repo-scoped route when missing.
- */
-export function createOctokitWithRepo(repo) {
-    const gh = new Octokit({ auth: ENV.PAT_TOKEN });
-    gh.hook.before("request", (options) => {
-        if (typeof options.url === "string" && options.url.includes("/repos/")) {
-            if (options.owner == null)
-                options.owner = repo.owner;
-            if (options.repo == null)
-                options.repo = repo.repo;
-        }
-    });
-    return gh;
-}
 /** Small helper to merge repo params */
 export function withRepo(ref, extra) {
     return { owner: ref.owner, repo: ref.repo, ...extra };
@@ -87,8 +71,13 @@ export async function createRepoTree(client, repo, files) {
     }
 }
 /**
- * Example high-level commit helper (optional).
- * Use this if you currently hand-wire blob/tree/commit calls.
+ * Commit a set of files using an explicit Octokit client and repository.
+ *
+ * This is a low-level helper that assumes paths are already normalized and
+ * writes all blobs with the default `100644` mode. It does not inspect the
+ * repository for existing permissions or apply any `TARGET_*` environment
+ * configuration. For automation tasks that rely on those conveniences or need
+ * to preserve file modes, use {@link commitMany} instead.
  */
 export async function commitFiles(client, repo, files, message, branch) {
     // 1) create blobs
@@ -190,6 +179,16 @@ export async function upsertFile(path, updater, message, opts) {
         author: { name: "ai-dev-agent", email: "bot@local" }
     });
 }
+/**
+ * Convenience wrapper around {@link commitFiles} that commits multiple files to
+ * the repository defined by `TARGET_REPO`.
+ *
+ * Paths are normalized through {@link resolveRepoPath} and existing file modes
+ * are preserved by inspecting the current tree. Use this in automation
+ * commands where environment configuration and permission retention are
+ * desirable. For generic library usage where you already have an Octokit
+ * instance and repo reference, prefer {@link commitFiles}.
+ */
 export async function commitMany(files, message, opts) {
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
     const ref = opts?.branch;
