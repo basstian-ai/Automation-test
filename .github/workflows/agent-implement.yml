@@ -14,6 +14,8 @@ concurrency:
 jobs:
   implement:
     runs-on: ubuntu-latest
+    env:
+      TARGET_REPO: ${{ secrets.TARGET_REPO }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,12 +29,13 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+      - name: Debug env
+        run: echo "DEBUG ENV TARGET_REPO=$TARGET_REPO"
       - run: node dist/orchestrator.js
         env:
           RUN_TASK: implement
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          TARGET_REPO: ${{ secrets.TARGET_REPO }}
           TARGET_DIR: ${{ secrets.TARGET_DIR }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
