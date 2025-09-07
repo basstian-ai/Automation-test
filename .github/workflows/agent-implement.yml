@@ -16,8 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TARGET_REPO: basstian-ai/simple-pim-1754492683911
-      # Or if you prefer to use a secret:
-      # TARGET_REPO: ${{ secrets.TARGET_REPO }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,7 +42,6 @@ jobs:
           RUN_TASK: implement
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          TARGET_REPO: ${{ env.TARGET_REPO }}
           TARGET_DIR: ${{ secrets.TARGET_DIR }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
