@@ -32,7 +32,7 @@ jobs:
           RUN_TASK: review-repo
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          TARGET_REPO: ${{ secrets.TARGET_REPO }}
+          TARGET_REPO: basstian-ai/simple-pim-1754492683911
           TARGET_DIR: ${{ secrets.TARGET_DIR }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
