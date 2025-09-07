@@ -109,8 +109,13 @@ export async function createRepoTree(
 }
 
 /**
- * Example high-level commit helper (optional).
- * Use this if you currently hand-wire blob/tree/commit calls.
+ * Commit a set of files using an explicit Octokit client and repository.
+ *
+ * This is a low-level helper that assumes paths are already normalized and
+ * writes all blobs with the default `100644` mode. It does not inspect the
+ * repository for existing permissions or apply any `TARGET_*` environment
+ * configuration. For automation tasks that rely on those conveniences or need
+ * to preserve file modes, use {@link commitMany} instead.
  */
 export async function commitFiles(
   client: Octokit,
@@ -236,6 +241,16 @@ export async function upsertFile(
   });
 }
 
+/**
+ * Convenience wrapper around {@link commitFiles} that commits multiple files to
+ * the repository defined by `TARGET_REPO`.
+ *
+ * Paths are normalized through {@link resolveRepoPath} and existing file modes
+ * are preserved by inspecting the current tree. Use this in automation
+ * commands where environment configuration and permission retention are
+ * desirable. For generic library usage where you already have an Octokit
+ * instance and repo reference, prefer {@link commitFiles}.
+ */
 export async function commitMany(
   files: Array<{ path: string; content: string }>,
   message: CommitMessage,
