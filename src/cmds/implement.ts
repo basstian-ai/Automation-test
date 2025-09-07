@@ -1,7 +1,15 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { readFile, commitMany, resolveRepoPath, ensureBranch, getDefaultBranch } from "../lib/github.js";
+import {
+  readFile,
+  commitMany,
+  resolveRepoPath,
+  ensureBranch,
+  getDefaultBranch,
+  gh,
+  parseRepo,
+} from "../lib/github.js";
 import { implementPlan } from "../lib/prompts.js";
 import { ENV, requireEnv } from "../lib/env.js";
 
@@ -138,13 +146,28 @@ export async function implementTopTask() {
         console.error("Checks or tests failed; aborting commit.", err);
         return;
       }
+      const branch = targetBranch || await getDefaultBranch();
+      const { owner, repo } = parseRepo();
+      let preSha: string | undefined;
+      try {
+        const ref = await gh.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+        preSha = ref.data.object.sha;
+      } catch {}
+
       try {
         await commitMany(files, { title, body: commitBody }, { branch: targetBranch });
         const { completeTask } = await import("../lib/tasks.js");
         await completeTask({ id: top.id, title: top.title, desc: top.content ?? top.details, priority: top.priority });
         console.log("Implement complete.");
       } catch (err) {
-        console.error("Bulk commit failed; no changes were applied.", err);
+        let postSha: string | undefined;
+        try {
+          const ref = await gh.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+          postSha = ref.data.object.sha;
+        } catch {}
+        if (preSha === postSha || !files.length) {
+          console.error("Bulk commit failed; no changes were applied.", err);
+        }
       }
     }
   } finally {
