@@ -12,10 +12,41 @@ function formatMessage(msg: CommitMessage): string {
   return msg.body ? `${msg.title}\n\n${msg.body}` : msg.title;
 }
 
-export function parseRepo(s: string): RepoRef {
-  const [owner, repo] = s.split("/");
-  if (!owner || !repo) throw new Error(`Invalid TARGET_REPO: ${s}`);
-  return { owner, repo };
+export function parseRepo(repoEnv: string = ENV.TARGET_REPO): RepoRef {
+  if (!repoEnv) {
+    throw new Error(
+      "Missing TARGET_REPO. Expected either 'owner/repo' or TARGET_OWNER + TARGET_REPO."
+    );
+  }
+  if (repoEnv.includes("/")) {
+    const [owner, repo] = repoEnv.split("/");
+    if (!owner || !repo) {
+      throw new Error(
+        `Invalid TARGET_REPO format: "${repoEnv}". Expected "owner/repo".`
+      );
+    }
+    return { owner, repo };
+  }
+  if (!ENV.TARGET_OWNER) {
+    throw new Error(
+      `TARGET_REPO="${repoEnv}" provided without TARGET_OWNER. Please set TARGET_OWNER.`
+    );
+  }
+  return { owner: ENV.TARGET_OWNER, repo: repoEnv };
+}
+
+try {
+  console.log("Resolved repo configuration:", {
+    TARGET_OWNER: ENV.TARGET_OWNER,
+    TARGET_REPO: ENV.TARGET_REPO,
+    parsed: parseRepo(),
+  });
+} catch (err) {
+  console.log("Resolved repo configuration:", {
+    TARGET_OWNER: ENV.TARGET_OWNER,
+    TARGET_REPO: ENV.TARGET_REPO,
+    parsed: (err as Error).message,
+  });
 }
 
 function b64(s: string) {
