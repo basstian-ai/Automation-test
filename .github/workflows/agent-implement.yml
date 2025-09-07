@@ -32,7 +32,7 @@ jobs:
           RUN_TASK: implement
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          TARGET_REPO: ${{ secrets.TARGET_REPO }}
+          TARGET_REPO: basstian-ai/simple-pim-1754492683911
           TARGET_DIR: ${{ secrets.TARGET_DIR }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
