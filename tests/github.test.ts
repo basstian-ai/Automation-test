@@ -63,3 +63,34 @@ test('parseRepo throws if repo-only provided without owner', async () => {
   const { parseRepo } = await import('../src/lib/github.ts');
   expect(() => parseRepo()).toThrow(/TARGET_OWNER/);
 });
+
+test('createRepoTree retries on 404 and returns final sha', async () => {
+  const github = await import('../src/lib/github.ts');
+
+  const createTree = vi
+    .fn()
+    .mockRejectedValueOnce({ status: 404, message: 'Not Found' })
+    .mockResolvedValueOnce({ data: { sha: 'final-tree' } });
+
+  const client = {
+    rest: {
+      repos: {
+        get: vi.fn().mockResolvedValue({ data: { default_branch: 'main' } }),
+      },
+      git: {
+        getRef: vi.fn().mockResolvedValue({ data: { object: { sha: 'commit-sha' } } }),
+        getCommit: vi.fn().mockResolvedValue({ data: { tree: { sha: 'base-tree' } } }),
+        createTree,
+      },
+    },
+  } as any;
+
+  const sha = await github.createRepoTree(
+    client,
+    { owner: 'o', repo: 'r' },
+    [{ path: 'a.txt', sha: 'blob' }]
+  );
+
+  expect(sha).toBe('final-tree');
+  expect(createTree).toHaveBeenCalledTimes(2);
+});
