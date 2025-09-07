@@ -195,7 +195,7 @@ export async function ensureBranch(branch: string, baseBranch?: string): Promise
   } catch (e: any) {
     if (e?.status !== 404) throw e;
   }
-  const base = baseBranch || await getDefaultBranch();
+  const base = baseBranch || (await getDefaultBranch(gh, { owner, repo }));
   const baseRef = await gh.rest.git.getRef({ owner, repo, ref: `heads/${base}` });
   const baseSha = baseRef.data.object.sha;
   await gh.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: baseSha });
