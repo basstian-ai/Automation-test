@@ -15,7 +15,8 @@ jobs:
   implement:
     runs-on: ubuntu-latest
     env:
-      TARGET_REPO: basstian-ai/simple-pim-1754492683911
+      TARGET_OWNER: basstian-ai
+      TARGET_REPO: simple-pim-1754492683911
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

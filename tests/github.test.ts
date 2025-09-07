@@ -55,6 +55,6 @@ test('parseRepo throws if TARGET_REPO is missing', async () => {
   delete process.env.TARGET_REPO;
   const { parseRepo } = await import('../src/lib/github.ts');
   expect(() => parseRepo()).toThrow(
-    'Missing TARGET_REPO. Received TARGET_OWNER="", TARGET_REPO="".'
+    'Invalid repo config. Got TARGET_OWNER="" TARGET_REPO="". Expected either TARGET_OWNER + TARGET_REPO or TARGET_REPO="owner/repo".'
   );
 });

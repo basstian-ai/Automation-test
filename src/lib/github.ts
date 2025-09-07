@@ -12,31 +12,28 @@ function formatMessage(msg: CommitMessage): string {
   return msg.body ? `${msg.title}\n\n${msg.body}` : msg.title;
 }
 
-export function parseRepo(repoEnv: string = ENV.TARGET_REPO): RepoRef {
-  const ownerEnv = ENV.TARGET_OWNER || "";
-  if (!repoEnv) {
-    throw new Error(
-      `Missing TARGET_REPO. Received TARGET_OWNER="${ownerEnv}", TARGET_REPO="${repoEnv}".`
-    );
+export function parseRepo(): RepoRef {
+  const owner = ENV.TARGET_OWNER?.trim();
+  const repoEnv = ENV.TARGET_REPO?.trim();
+
+  if (owner && repoEnv) {
+    // Preferred: explicit TARGET_OWNER + TARGET_REPO
+    return { owner, repo: repoEnv };
   }
-  if (repoEnv.includes("/")) {
-    const [owner, repo] = repoEnv.split("/");
-    if (!owner || !repo) {
-      throw new Error(
-        `Invalid TARGET_REPO format: "${repoEnv}". Received TARGET_OWNER="${ownerEnv}", TARGET_REPO="${repoEnv}".`
-      );
+
+  if (repoEnv && repoEnv.includes("/")) {
+    // Fallback: combined TARGET_REPO=owner/repo
+    const [parsedOwner, parsedRepo] = repoEnv.split("/");
+    if (!parsedOwner || !parsedRepo) {
+      throw new Error(`Invalid TARGET_REPO format: "${repoEnv}". Expected "owner/repo".`);
     }
-    return { owner, repo };
+    return { owner: parsedOwner, repo: parsedRepo };
   }
-  if (!ownerEnv) {
-    throw new Error(
-      `TARGET_REPO="${repoEnv}" provided without TARGET_OWNER. Received TARGET_OWNER="${ownerEnv}".`
-    );
-  }
-  console.warn(
-    "DEPRECATION: Using TARGET_OWNER + TARGET_REPO. Prefer TARGET_REPO='owner/repo'."
+
+  throw new Error(
+    `Invalid repo config. Got TARGET_OWNER="${owner}" TARGET_REPO="${repoEnv}". ` +
+    `Expected either TARGET_OWNER + TARGET_REPO or TARGET_REPO="owner/repo".`
   );
-  return { owner: ownerEnv, repo: repoEnv };
 }
 
 function b64(s: string) {
@@ -181,7 +178,7 @@ async function getFile(owner: string, repo: string, path: string, ref?: string) 
 }
 
 export async function ensureBranch(branch: string, baseBranch?: string): Promise<void> {
-  const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+  const { owner, repo } = parseRepo();
   const ref = `heads/${branch}`;
   try {
     await gh.rest.git.getRef({ owner, repo, ref });
@@ -212,7 +209,7 @@ export function resolveRepoPath(p: string): string {
 }
 
 export async function readFile(path: string): Promise<string | undefined> {
-  const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+  const { owner, repo } = parseRepo();
   const got = await getFile(owner, repo, path);
   return got.content;
 }
@@ -223,7 +220,7 @@ export async function upsertFile(
   message: CommitMessage,
   opts?: { branch?: string }
 ) {
-  const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+  const { owner, repo } = parseRepo();
   const safePath = resolveRepoPath(path);
   const ref = opts?.branch;
   if (ENV.DRY_RUN) {
@@ -262,7 +259,7 @@ export async function commitMany(
   message: CommitMessage,
   opts?: { branch?: string }
 ) {
-  const repoRef = parseRepo(ENV.TARGET_REPO);
+  const repoRef = parseRepo();
   console.log("Resolved repo configuration:", {
     TARGET_OWNER: ENV.TARGET_OWNER,
     TARGET_REPO: ENV.TARGET_REPO,

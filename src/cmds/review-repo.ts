@@ -23,7 +23,7 @@ export async function reviewRepo() {
     );
 
     const state = await loadState();
-    const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const { owner, repo } = parseRepo();
     const commitsResp = await gh.rest.repos.listCommits({ owner, repo, per_page: 10 });
     const commitsData = [] as { sha: string; commit: { message: string } }[];
     for (const c of commitsResp.data) {
