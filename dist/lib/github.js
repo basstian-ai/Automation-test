@@ -1,4 +1,4 @@
-import { Octokit } from "octokit";
+import { Octokit } from "@octokit/rest";
 import { posix as pathPosix } from "node:path";
 import { ENV } from "./env.js";
 export const gh = new Octokit({ auth: ENV.PAT_TOKEN });
@@ -8,21 +8,110 @@ function formatMessage(msg) {
     return msg.body ? `${msg.title}\n\n${msg.body}` : msg.title;
 }
 export function parseRepo(repoEnv = ENV.TARGET_REPO) {
-    if (!repoEnv)
-        throw new Error("Missing TARGET_REPO");
+    if (!repoEnv) {
+        throw new Error("Missing TARGET_REPO. Expected either 'owner/repo' or TARGET_OWNER + TARGET_REPO.");
+    }
     if (repoEnv.includes("/")) {
         const [owner, repo] = repoEnv.split("/");
-        if (!owner || !repo)
-            throw new Error(`Invalid TARGET_REPO: ${repoEnv}`);
+        if (!owner || !repo) {
+            throw new Error(`Invalid TARGET_REPO format: "${repoEnv}". Expected "owner/repo".`);
+        }
         return { owner, repo };
     }
-    const owner = ENV.TARGET_OWNER;
-    if (!owner)
-        throw new Error(`Invalid TARGET_REPO: ${repoEnv}`);
-    return { owner, repo: repoEnv };
+    if (!ENV.TARGET_OWNER) {
+        throw new Error(`TARGET_REPO="${repoEnv}" provided without TARGET_OWNER. Please set TARGET_OWNER (deprecated) or prefer TARGET_REPO="owner/repo".`);
+    }
+    console.warn("DEPRECATION: Using TARGET_OWNER + TARGET_REPO. Prefer TARGET_REPO='owner/repo'.");
+    return { owner: ENV.TARGET_OWNER, repo: repoEnv };
 }
 function b64(s) {
     return Buffer.from(s, "utf8").toString("base64");
+}
+/**
+ * Create Octokit instance that automatically injects {owner, repo}
+ * for any repo-scoped route when missing.
+ */
+export function createOctokitWithRepo(repo) {
+    const gh = new Octokit({ auth: ENV.PAT_TOKEN });
+    gh.hook.before("request", (options) => {
+        if (typeof options.url === "string" && options.url.includes("/repos/")) {
+            if (options.owner == null)
+                options.owner = repo.owner;
+            if (options.repo == null)
+                options.repo = repo.repo;
+        }
+    });
+    return gh;
+}
+/** Small helper to merge repo params */
+export function withRepo(ref, extra) {
+    return { owner: ref.owner, repo: ref.repo, ...extra };
+}
+/** Resolve default branch name from the repo (e.g. "main") */
+export async function getDefaultBranch(client = gh, repo = parseRepo()) {
+    const { data } = await client.rest.repos.get(withRepo(repo, {}));
+    return data.default_branch || "main";
+}
+/** Resolve a valid base tree SHA from the head commit of a branch */
+export async function getBaseTreeSha(client, repo, branch) {
+    const defaultBranch = branch || (await getDefaultBranch(client, repo));
+    const ref = await client.rest.git.getRef(withRepo(repo, { ref: `heads/${defaultBranch}` }));
+    const commitSha = ref.data.object.sha;
+    const commit = await client.rest.git.getCommit(withRepo(repo, { commit_sha: commitSha }));
+    return commit.data.tree.sha;
+}
+/**
+ * Create a tree robustly.
+ * 1) Try with base_tree resolved from default branch.
+ * 2) On 404/Not Found, retry without base_tree (works for trees that add only new files).
+ */
+export async function createRepoTree(client, repo, files) {
+    const tree = files.map((f) => ({
+        path: f.path,
+        mode: "100644",
+        type: "blob",
+        sha: f.sha,
+    }));
+    try {
+        const base_tree = await getBaseTreeSha(client, repo);
+        const { data } = await client.rest.git.createTree(withRepo(repo, { base_tree, tree }));
+        return data.sha;
+    }
+    catch (e) {
+        const msg = String(e?.message || "");
+        if (e?.status === 404 || /Not Found/i.test(msg)) {
+            const { data } = await client.rest.git.createTree(withRepo(repo, { tree }));
+            return data.sha;
+        }
+        throw e;
+    }
+}
+/**
+ * Example high-level commit helper (optional).
+ * Use this if you currently hand-wire blob/tree/commit calls.
+ */
+export async function commitFiles(client, repo, files, message, branch) {
+    // 1) create blobs
+    const blobShas = [];
+    for (const f of files) {
+        const blob = await client.rest.git.createBlob(withRepo(repo, { content: b64(f.content), encoding: "base64" }));
+        blobShas.push({ path: f.path, sha: blob.data.sha });
+    }
+    // 2) create tree robustly
+    const treeSha = await createRepoTree(client, repo, blobShas);
+    // 3) get parent commit
+    const defaultBranch = branch || (await getDefaultBranch(client, repo));
+    const ref = await client.rest.git.getRef(withRepo(repo, { ref: `heads/${defaultBranch}` }));
+    const parentSha = ref.data.object.sha;
+    // 4) create commit
+    const commit = await client.rest.git.createCommit(withRepo(repo, {
+        message: formatMessage(message),
+        tree: treeSha,
+        parents: [parentSha],
+    }));
+    // 5) update ref
+    await client.rest.git.updateRef(withRepo(repo, { ref: `heads/${defaultBranch}`, sha: commit.data.sha, force: false }));
+    return commit.data.sha;
 }
 async function getFile(owner, repo, path, ref) {
     try {
@@ -39,11 +128,6 @@ async function getFile(owner, repo, path, ref) {
             return { sha: undefined, content: undefined };
         throw e;
     }
-}
-export async function getDefaultBranch() {
-    const { owner, repo } = parseRepo(ENV.TARGET_REPO);
-    const { data } = await gh.rest.repos.get({ owner, repo });
-    return data.default_branch;
 }
 export async function ensureBranch(branch, baseBranch) {
     const { owner, repo } = parseRepo(ENV.TARGET_REPO);
@@ -176,5 +260,20 @@ export async function commitMany(files, message, opts) {
         repo,
         ref: `heads/${branch}`,
         sha: newCommit.data.sha
+    });
+}
+try {
+    const parsed = parseRepo();
+    console.log("Resolved repo configuration:", {
+        TARGET_OWNER: ENV.TARGET_OWNER,
+        TARGET_REPO: ENV.TARGET_REPO,
+        parsed,
+    });
+}
+catch (err) {
+    console.log("Resolved repo configuration:", {
+        TARGET_OWNER: ENV.TARGET_OWNER,
+        TARGET_REPO: ENV.TARGET_REPO,
+        parsed: err.message,
     });
 }
