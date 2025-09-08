@@ -10,7 +10,7 @@ export async function implementTopTask() {
         return;
     }
     try {
-        requireEnv(['TARGET_REPO']);
+        requireEnv(['TARGET_OWNER', 'TARGET_REPO']);
         const { supabase } = await import("../lib/supabase.js");
         // Load vision for context
         const vision = (await readFile("roadmap/vision.md")) || "";

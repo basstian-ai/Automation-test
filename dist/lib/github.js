@@ -1,17 +1,13 @@
 import { Octokit } from "octokit";
 import { posix as pathPosix } from "node:path";
 import { ENV } from "./env.js";
+import { parseRepo } from "../env.js";
+export { parseRepo };
 export const gh = new Octokit({ auth: ENV.PAT_TOKEN });
 function formatMessage(msg) {
     if (typeof msg === "string")
         return msg;
     return msg.body ? `${msg.title}\n\n${msg.body}` : msg.title;
-}
-export function parseRepo(s) {
-    const [owner, repo] = s.split("/");
-    if (!owner || !repo)
-        throw new Error(`Invalid TARGET_REPO: ${s}`);
-    return { owner, repo };
 }
 function b64(s) {
     return Buffer.from(s, "utf8").toString("base64");
@@ -33,12 +29,12 @@ async function getFile(owner, repo, path, ref) {
     }
 }
 export async function getDefaultBranch() {
-    const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const { owner, repo } = parseRepo();
     const { data } = await gh.rest.repos.get({ owner, repo });
     return data.default_branch;
 }
 export async function ensureBranch(branch, baseBranch) {
-    const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const { owner, repo } = parseRepo();
     const ref = `heads/${branch}`;
     try {
         await gh.rest.git.getRef({ owner, repo, ref });
@@ -70,12 +66,12 @@ export function resolveRepoPath(p) {
     return joined.replace(/^\/+/, "");
 }
 export async function readFile(path) {
-    const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const { owner, repo } = parseRepo();
     const got = await getFile(owner, repo, path);
     return got.content;
 }
 export async function upsertFile(path, updater, message, opts) {
-    const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const { owner, repo } = parseRepo();
     const safePath = resolveRepoPath(path);
     const ref = opts?.branch;
     if (ENV.DRY_RUN) {
@@ -99,7 +95,7 @@ export async function upsertFile(path, updater, message, opts) {
     });
 }
 export async function commitMany(files, message, opts) {
-    const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const { owner, repo } = parseRepo();
     const ref = opts?.branch;
     const msg = formatMessage(message);
     if (ENV.DRY_RUN) {

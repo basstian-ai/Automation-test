@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseRepo } from "../src/env";
+import { gh, getDefaultBranch } from "../src/lib/github";
 
 describe("parseRepo", () => {
   it("parses separate TARGET_OWNER and TARGET_REPO", () => {
@@ -24,5 +25,17 @@ describe("parseRepo", () => {
     delete process.env.TARGET_OWNER;
     delete process.env.TARGET_REPO;
     expect(() => parseRepo()).toThrow("Missing required TARGET_OWNER and TARGET_REPO");
+  });
+});
+
+describe("Octokit integration", () => {
+  it("passes owner and repo to API calls", async () => {
+    process.env.TARGET_OWNER = "foo";
+    process.env.TARGET_REPO = "bar";
+    const spy = vi
+      .spyOn(gh.rest.repos, "get")
+      .mockResolvedValue({ data: { default_branch: "main" } } as any);
+    await getDefaultBranch();
+    expect(spy).toHaveBeenCalledWith({ owner: "foo", repo: "bar" });
   });
 });
