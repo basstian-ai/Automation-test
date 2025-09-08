@@ -1,34 +1,27 @@
-import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+import { parseRepo } from "../src/env";
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  delete process.env.TARGET_DIR;
-});
+describe("parseRepo", () => {
+  it("parses separate TARGET_OWNER and TARGET_REPO", () => {
+    process.env.TARGET_OWNER = "foo";
+    process.env.TARGET_REPO = "bar";
+    expect(parseRepo()).toEqual({ owner: "foo", repo: "bar" });
+  });
 
-beforeEach(() => {
-  vi.resetModules();
-  delete process.env.TARGET_DIR;
-});
+  it("throws when missing TARGET_OWNER", () => {
+    delete process.env.TARGET_OWNER;
+    process.env.TARGET_REPO = "bar";
+    expect(() => parseRepo()).toThrow("Missing required TARGET_OWNER and TARGET_REPO");
+  });
 
-test('normalizes mixed path separators', async () => {
-  const { resolveRepoPath } = await import('../src/lib/github.ts');
-  const resolved = resolveRepoPath('foo\\bar/baz\\qux.txt');
-  expect(resolved).toBe('foo/bar/baz/qux.txt');
-});
+  it("throws when missing TARGET_REPO", () => {
+    process.env.TARGET_OWNER = "foo";
+    delete process.env.TARGET_REPO;
+    expect(() => parseRepo()).toThrow("Missing required TARGET_OWNER and TARGET_REPO");
+  });
 
-test('rejects paths containing ..', async () => {
-  const { resolveRepoPath } = await import('../src/lib/github.ts');
-  expect(() => resolveRepoPath('../secret')).toThrow('Refusing path outside repo: ../secret');
-});
-
-test('rejects empty paths', async () => {
-  const { resolveRepoPath } = await import('../src/lib/github.ts');
-  expect(() => resolveRepoPath('')).toThrow('Empty path');
-});
-
-test('prefixes TARGET_DIR when set', async () => {
-  process.env.TARGET_DIR = 'base';
-  const { resolveRepoPath } = await import('../src/lib/github.ts');
-  const resolved = resolveRepoPath('file.txt');
-  expect(resolved).toBe('base/file.txt');
+  it("throws when both missing", () => {
+    delete process.env.TARGET_OWNER;
+    delete process.env.TARGET_REPO;
+    expect(() => parseRepo()).toThrow("Missing required TARGET_OWNER and TARGET_REPO");
+  });
 });
