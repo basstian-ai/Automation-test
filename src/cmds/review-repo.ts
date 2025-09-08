@@ -10,7 +10,7 @@ import crypto from "node:crypto";
 export async function reviewRepo() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(["TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+    requireEnv(["TARGET_OWNER", "TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
     async function fetchRoadmap(type: string) {
       const data = (await sbRequest(
         `roadmap_items?select=content&type=eq.${type}`,
@@ -23,7 +23,7 @@ export async function reviewRepo() {
     );
 
     const state = await loadState();
-    const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+    const { owner, repo } = parseRepo();
     const commitsResp = await gh.rest.repos.listCommits({ owner, repo, per_page: 10 });
     const commitsData = [] as { sha: string; commit: { message: string } }[];
     for (const c of commitsResp.data) {

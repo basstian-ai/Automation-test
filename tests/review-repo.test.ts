@@ -1,7 +1,8 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 
 const envVars = {
-  TARGET_REPO: 'o/r',
+  TARGET_OWNER: 'o',
+  TARGET_REPO: 'r',
   SUPABASE_URL: 'https://supabase.local',
   SUPABASE_SERVICE_ROLE_KEY: 'key',
 };
@@ -53,12 +54,14 @@ vi.mock('../src/lib/supabase.js', () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.TARGET_OWNER = envVars.TARGET_OWNER;
   process.env.TARGET_REPO = envVars.TARGET_REPO;
   process.env.SUPABASE_URL = envVars.SUPABASE_URL;
   process.env.SUPABASE_SERVICE_ROLE_KEY = envVars.SUPABASE_SERVICE_ROLE_KEY;
 });
 
 afterEach(() => {
+  delete process.env.TARGET_OWNER;
   delete process.env.TARGET_REPO;
   delete process.env.SUPABASE_URL;
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;

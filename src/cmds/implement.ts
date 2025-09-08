@@ -18,7 +18,7 @@ type RoadmapItem = {
 export async function implementTopTask() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(['TARGET_REPO']);
+    requireEnv(['TARGET_OWNER', 'TARGET_REPO']);
     const { supabase } = await import("../lib/supabase.js");
     // Load vision for context
     const vision = (await readFile("roadmap/vision.md")) || "";

@@ -18,9 +18,9 @@ async function shouldIngest(state) {
 }
 async function shouldReview(state) {
     try {
-        if (!ENV.TARGET_REPO)
+        if (!ENV.TARGET_OWNER || !ENV.TARGET_REPO)
             return false;
-        const { owner, repo } = parseRepo(ENV.TARGET_REPO);
+        const { owner, repo } = parseRepo();
         const resp = await gh.rest.repos.listCommits({ owner, repo, per_page: 1 });
         const latest = resp.data[0]?.sha;
         return !!latest && latest !== state.lastReviewedSha;

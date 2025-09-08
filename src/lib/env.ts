@@ -2,6 +2,7 @@
 export const ENV = {
   GH_USERNAME: process.env.GH_USERNAME || "ai-dev-agent",
   PAT_TOKEN: process.env.PAT_TOKEN || "",
+  TARGET_OWNER: process.env.TARGET_OWNER || "",
   TARGET_REPO: process.env.TARGET_REPO || "",
   TARGET_DIR: process.env.TARGET_DIR || "",
   VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID || "",
