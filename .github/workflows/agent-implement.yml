@@ -33,14 +33,12 @@ jobs:
 
       - name: Debug env
         run: echo "DEBUG ENV TARGET_REPO=$TARGET_REPO"
-
       - run: node dist/orchestrator.js
         env:
           RUN_TASK: implement
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          # 👇 hardcoded repo instead of secret
-          TARGET_REPO: basstian-ai/simple-pim-1754492683911
+          TARGET_REPO: ${{ secrets.TARGET_REPO }}
           TARGET_DIR: ${{ secrets.TARGET_DIR }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
