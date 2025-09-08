@@ -18,6 +18,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
+      - name: Debug GitHub auth
+        run: |
+          curl -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
+               https://api.github.com/repos/basstian-ai/simple-pim-1754492683911
       - name: Ensure lockfile (first run)
         run: |
           if [ ! -f package-lock.json ]; then
