@@ -1,8 +1,8 @@
 name: agent-implement
 on:
-   schedule:
-     - cron: "*/10 * * * *"   # every 5 minutes (UTC)
-   workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes (UTC)
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -17,22 +17,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with:
+          node-version: 20
+
       - name: Ensure lockfile (first run)
         run: |
           if [ ! -f package-lock.json ]; then
             npm install --package-lock-only --no-audit --no-fund
           fi
+
       - run: npm ci --no-audit --no-fund
       - run: npm run check
       - run: npm test
       - run: npm run build
+
+      - name: Debug env
+        run: echo "DEBUG ENV TARGET_REPO=$TARGET_REPO"
+
       - run: node dist/orchestrator.js
         env:
           RUN_TASK: implement
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          TARGET_REPO: ${{ secrets.TARGET_REPO }}
+          # 👇 hardcoded repo instead of secret
+          TARGET_REPO: basstian-ai/simple-pim-1754492683911
           TARGET_DIR: ${{ secrets.TARGET_DIR }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
@@ -41,4 +49,3 @@ jobs:
           AI_BOT_WRITE_MODE: commit
           DRY_RUN: "0"
           ALLOW_PATHS: ""
-        # Runs `npm run check` and `npm test` before committing; aborts commit on failure
