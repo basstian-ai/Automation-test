@@ -1,17 +1,24 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+import { ENV } from '../src/lib/env';
 
 beforeEach(() => {
   vi.resetModules();
-  delete process.env.TARGET_OWNER;
-  delete process.env.TARGET_REPO;
+  vi.unstubAllEnvs();
+  vi.stubEnv('TARGET_REPO', '');
+  ENV.TARGET_OWNER = '';
+  ENV.TARGET_REPO = '';
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+  ENV.TARGET_OWNER = '';
+  ENV.TARGET_REPO = '';
 });
 
 test('implementTopTask throws when TARGET_REPO missing', async () => {
-  process.env.TARGET_OWNER = 'o';
+  vi.stubEnv('TARGET_OWNER', 'o');
+  ENV.TARGET_OWNER = 'o';
   vi.mock('../src/lib/lock.js', () => ({
     acquireLock: vi.fn().mockResolvedValue(true),
     releaseLock: vi.fn().mockResolvedValue(undefined),

@@ -27,4 +27,12 @@ export function requireEnv(names: string[]) {
   }
 }
 
+export function parseRepo(): { owner: string; repo: string } {
+  const { TARGET_OWNER, TARGET_REPO } = ENV;
+  if (!TARGET_OWNER || !TARGET_REPO) {
+    throw new Error("Missing required TARGET_OWNER and TARGET_REPO environment variables");
+  }
+  return { owner: TARGET_OWNER, repo: TARGET_REPO };
+}
+
 // Avoid requiring SUPABASE variables for commands that don't need them.

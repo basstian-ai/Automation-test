@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+import { ENV } from '../src/lib/env';
 
 const envVars = {
   TARGET_OWNER: 'o',
@@ -17,7 +18,6 @@ vi.mock('../src/lib/lock.js', () => ({
 }));
 
 vi.mock('../src/lib/github.js', () => ({
-  parseRepo: vi.fn().mockReturnValue({ owner: 'o', repo: 'r' }),
   gh: {
     rest: {
       repos: {
@@ -52,19 +52,25 @@ vi.mock('../src/lib/supabase.js', () => {
   return { sbRequest };
 });
 
+
 beforeEach(() => {
   vi.clearAllMocks();
-  process.env.TARGET_OWNER = envVars.TARGET_OWNER;
-  process.env.TARGET_REPO = envVars.TARGET_REPO;
-  process.env.SUPABASE_URL = envVars.SUPABASE_URL;
-  process.env.SUPABASE_SERVICE_ROLE_KEY = envVars.SUPABASE_SERVICE_ROLE_KEY;
+  vi.stubEnv('TARGET_OWNER', envVars.TARGET_OWNER);
+  vi.stubEnv('TARGET_REPO', envVars.TARGET_REPO);
+  vi.stubEnv('SUPABASE_URL', envVars.SUPABASE_URL);
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', envVars.SUPABASE_SERVICE_ROLE_KEY);
+  ENV.TARGET_OWNER = envVars.TARGET_OWNER;
+  ENV.TARGET_REPO = envVars.TARGET_REPO;
+  ENV.SUPABASE_URL = envVars.SUPABASE_URL;
+  ENV.SUPABASE_SERVICE_ROLE_KEY = envVars.SUPABASE_SERVICE_ROLE_KEY;
 });
 
 afterEach(() => {
-  delete process.env.TARGET_OWNER;
-  delete process.env.TARGET_REPO;
-  delete process.env.SUPABASE_URL;
-  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  vi.unstubAllEnvs();
+  ENV.TARGET_OWNER = '';
+  ENV.TARGET_REPO = '';
+  ENV.SUPABASE_URL = '';
+  ENV.SUPABASE_SERVICE_ROLE_KEY = '';
 });
 
 test('reviewRepo throws on invalid ideas YAML', async () => {

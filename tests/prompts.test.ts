@@ -1,18 +1,22 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+import { ENV } from '../src/lib/env';
 
 // Tests for src/lib/prompts.ts
 
 beforeEach(() => {
   vi.resetModules();
-  process.env.OPENAI_API_KEY = 'test-key';
-  delete process.env.OPENAI_MODEL;
+  vi.stubEnv('OPENAI_API_KEY', 'test-key');
+  vi.stubEnv('OPENAI_MODEL', '');
+  ENV.OPENAI_API_KEY = 'test-key';
+  ENV.OPENAI_MODEL = '';
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unmock('openai');
-  delete process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_MODEL;
+  vi.unstubAllEnvs();
+  ENV.OPENAI_API_KEY = '';
+  ENV.OPENAI_MODEL = '';
 });
 
 test('summarizeLogToBug uses default model when OPENAI_MODEL missing', async () => {
@@ -37,7 +41,8 @@ test('getModel falls back to default when env is empty', async () => {
 });
 
 test('getModel uses provided env model', async () => {
-  process.env.OPENAI_MODEL = 'test-model';
+  vi.stubEnv('OPENAI_MODEL', 'test-model');
+  ENV.OPENAI_MODEL = 'test-model';
   const { getModel } = await import('../src/lib/prompts.ts');
   expect(getModel()).toBe('test-model');
 });

@@ -1,18 +1,24 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+let ENV: any;
 
 const SUPABASE_URL = 'https://example.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = 'service-key';
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetModules();
-  process.env.SUPABASE_URL = SUPABASE_URL;
-  process.env.SUPABASE_SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY;
+  vi.unstubAllEnvs();
+  ({ ENV } = await import('../src/lib/env.ts'));
+  vi.stubEnv('SUPABASE_URL', SUPABASE_URL);
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', SUPABASE_SERVICE_ROLE_KEY);
+  ENV.SUPABASE_URL = SUPABASE_URL;
+  ENV.SUPABASE_SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY;
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  delete process.env.SUPABASE_URL;
-  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  vi.unstubAllEnvs();
+  ENV.SUPABASE_URL = '';
+  ENV.SUPABASE_SERVICE_ROLE_KEY = '';
 });
 
 test('merges tasks and orders by date', async () => {

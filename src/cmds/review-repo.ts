@@ -1,8 +1,8 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { parseRepo, gh } from "../lib/github.js";
+import { gh } from "../lib/github.js";
 import { reviewToIdeas, reviewToSummary } from "../lib/prompts.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
-import { requireEnv, ENV } from "../lib/env.js";
+import { requireEnv, ENV, parseRepo } from "../lib/env.js";
 import { sbRequest } from "../lib/supabase.js";
 import yaml from "js-yaml";
 import crypto from "node:crypto";

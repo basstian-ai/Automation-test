@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { ENV } from '../src/lib/env';
 
 const SUPABASE_URL = 'https://example.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = 'service-key';
 
 beforeEach(() => {
-  vi.resetModules();
-  process.env.SUPABASE_URL = SUPABASE_URL;
-  process.env.SUPABASE_SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY;
+  ENV.SUPABASE_URL = SUPABASE_URL;
+  ENV.SUPABASE_SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY;
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  delete process.env.SUPABASE_URL;
-  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  ENV.SUPABASE_URL = '';
+  ENV.SUPABASE_SERVICE_ROLE_KEY = '';
 });
 
 test('loadState fetches and returns data', async () => {
@@ -60,10 +60,8 @@ test('saveState posts data to Supabase', async () => {
 });
 
 test('loadState throws when credentials missing', async () => {
-  vi.resetModules();
-  delete process.env.SUPABASE_URL;
-  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-
+  ENV.SUPABASE_URL = '';
+  ENV.SUPABASE_SERVICE_ROLE_KEY = '';
   const { loadState } = await import('../src/lib/state.ts');
   await expect(loadState()).rejects.toThrow('Missing Supabase credentials');
 });

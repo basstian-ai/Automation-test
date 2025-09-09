@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { ENV } from '../src/lib/env';
 
 beforeEach(() => {
-  vi.resetModules();
-  process.env.VERCEL_PROJECT_ID = 'proj';
-  process.env.VERCEL_TOKEN = 'token';
-  process.env.VERCEL_TEAM_ID = 'team';
+  ENV.VERCEL_PROJECT_ID = 'proj';
+  ENV.VERCEL_TOKEN = 'token';
+  ENV.VERCEL_TEAM_ID = 'team';
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
-  delete process.env.VERCEL_PROJECT_ID;
-  delete process.env.VERCEL_TOKEN;
-  delete process.env.VERCEL_TEAM_ID;
+  ENV.VERCEL_PROJECT_ID = '';
+  ENV.VERCEL_TOKEN = '';
+  ENV.VERCEL_TEAM_ID = '';
 });
 
   test('getBuildLogs passes paging params', async () => {

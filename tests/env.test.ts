@@ -4,13 +4,12 @@ import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 
 beforeEach(() => {
   vi.resetModules();
-  delete process.env.GH_USERNAME;
+  vi.unstubAllEnvs();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  delete process.env.GH_USERNAME;
-  delete process.env.EXAMPLE;
+  vi.unstubAllEnvs();
 });
 
 test('ENV provides default GH_USERNAME', async () => {
@@ -24,7 +23,7 @@ test('requireEnv throws on missing variable', async () => {
 });
 
 test('requireEnv succeeds when variable is set', async () => {
-  process.env.EXAMPLE = '1';
+  vi.stubEnv('EXAMPLE', '1');
   const { requireEnv } = await import('../src/lib/env.ts');
   expect(() => requireEnv(['EXAMPLE'])).not.toThrow();
 });

@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+let ENV: any;
 
 // We vary mocks per test, so use doMock inside a helper:
 function setup(opts: {
@@ -62,16 +63,17 @@ function setup(opts: {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetModules();
-  process.env.SUPABASE_URL = 'http://example.local';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
+  ({ ENV } = await import('../src/lib/env.ts'));
+  ENV.SUPABASE_URL = 'http://example.local';
+  ENV.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  delete process.env.SUPABASE_URL;
-  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  ENV.SUPABASE_URL = '';
+  ENV.SUPABASE_SERVICE_ROLE_KEY = '';
 });
 
 test('sorts and deduplicates roadmap items (happy path)', async () => {
