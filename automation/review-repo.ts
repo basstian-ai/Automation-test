@@ -52,9 +52,13 @@ function dirSignature(entries: string[]) {
 }
 
 async function ensureRepo() {
-  const gitUrl = `https://github.com/${TARGET_OWNER}/${TARGET_REPO}.git`;
+  const ghUser = process.env.GH_USERNAME;
+  const pat = process.env.PAT_TOKEN;
+  const auth = ghUser && pat ? `${encodeURIComponent(ghUser)}:${encodeURIComponent(pat)}@` : "";
+  const gitUrl = `https://${auth}github.com/${TARGET_OWNER}/${TARGET_REPO}.git`;
   try {
     await fs.access(path.join(TARGET_PATH, ".git"));
+    await exec(`git -C ${TARGET_PATH} remote set-url origin ${gitUrl}`);
     await exec(`git -C ${TARGET_PATH} pull --ff-only`);
   } catch {
     await fs.mkdir(path.dirname(TARGET_PATH), { recursive: true });
