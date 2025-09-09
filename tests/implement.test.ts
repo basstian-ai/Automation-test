@@ -17,6 +17,6 @@ test('implementTopTask throws when TARGET_REPO missing', async () => {
     releaseLock: vi.fn().mockResolvedValue(undefined),
   }));
   const { implementTopTask } = await import('../src/cmds/implement.ts');
-  await expect(implementTopTask()).rejects.toThrow('Missing env: TARGET_REPO');
+  await expect(implementTopTask()).rejects.toThrow('Missing required TARGET_OWNER and TARGET_REPO environment variables');
 });
 
