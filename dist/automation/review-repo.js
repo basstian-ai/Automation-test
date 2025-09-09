@@ -1,8 +1,19 @@
 import { promises as fs } from "fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { exec as execCb } from "node:child_process";
+import { promisify } from "node:util";
 import { planRepo } from "./prompt.js";
-const TARGET_PATH = process.env.TARGET_PATH || "target";
+const exec = promisify(execCb);
+const TARGET_OWNER = process.env.TARGET_OWNER;
+const TARGET_REPO = process.env.TARGET_REPO;
+const TARGET_DIR = process.env.TARGET_DIR || "";
+if (!TARGET_OWNER || !TARGET_REPO) {
+    console.error("Missing required env TARGET_OWNER or TARGET_REPO");
+    process.exit(1);
+}
+const CLONE_PATH = process.env.TARGET_PATH || "target";
+const REPO_PATH = path.join(CLONE_PATH, TARGET_DIR);
 const MAX_FILES = Number(process.env.MAX_FILES || 180);
 const MAX_SAMPLED_FILES = Number(process.env.MAX_SAMPLED_FILES || 80);
 const MAX_BYTES = Number(process.env.MAX_BYTES_PER_FILE || 1500);
@@ -94,8 +105,13 @@ async function scanRepo(root) {
     });
     return { files, dirs, duplicates };
 }
+async function cloneRepo() {
+    await fs.rm(CLONE_PATH, { recursive: true, force: true });
+    const url = `https://github.com/${TARGET_OWNER}/${TARGET_REPO}.git`;
+    await exec(`git clone --depth 1 ${url} ${CLONE_PATH}`);
+}
 async function writeFileSafe(p, content) {
-    const rel = path.relative(TARGET_PATH, p).replace(/\\/g, "/");
+    const rel = path.relative(REPO_PATH, p).replace(/\\/g, "/");
     if (PROTECTED_PATHS.includes(rel)) {
         throw new Error(`Refusing to write protected path: ${rel}`);
     }
@@ -104,14 +120,15 @@ async function writeFileSafe(p, content) {
     console.log(`Wrote ${p}`);
 }
 async function main() {
-    const { files, dirs, duplicates } = await scanRepo(TARGET_PATH);
+    await cloneRepo();
+    const { files, dirs, duplicates } = await scanRepo(REPO_PATH);
     const truncated = files.length >= MAX_FILES || files.length >= MAX_SAMPLED_FILES;
     console.log(`Scanned ${files.length} files in ${dirs.length} dirs${truncated ? " (truncated)" : ""}`);
     if (duplicates.length) {
         console.log(`Duplicate dirs: ${duplicates.map(d => d.base).join(", ")}`);
     }
     const topLevel = dirs.filter(d => !d.path.includes(path.sep)).map(d => d.path);
-    const auditPath = path.join(TARGET_PATH, "audits", "repo-structure.md");
+    const auditPath = path.join(REPO_PATH, "audits", "repo-structure.md");
     const dupLines = duplicates.length
         ? duplicates.flatMap(d => [`- ${d.base}`, ...d.members.map(m => `  - ${m}`)])
         : ["- none"];
@@ -188,7 +205,10 @@ async function main() {
     const vision = await (async () => {
         for (const rel of ["vision.md", "roadmap/vision.md"]) {
             try {
-                return { path: rel, content: trim(await fs.readFile(path.join(TARGET_PATH, rel), "utf8"), READ_LIMIT) };
+                return {
+                    path: rel,
+                    content: trim(await fs.readFile(path.join(REPO_PATH, rel), "utf8"), READ_LIMIT),
+                };
             }
             catch { }
         }
