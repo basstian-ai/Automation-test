@@ -73,6 +73,12 @@ test('reviewRepo throws on invalid ideas YAML', async () => {
   expect(saveState).not.toHaveBeenCalled();
 });
 
+test('reviewRepo throws when repo env vars are missing', async () => {
+  delete process.env.TARGET_OWNER;
+  const { reviewRepo } = await import('../src/cmds/review-repo.ts');
+  await expect(reviewRepo()).rejects.toThrow('Missing required TARGET_OWNER and TARGET_REPO environment variables');
+});
+
 test('reviewRepo batches ideas and generates unique IDs', async () => {
   const { reviewRepo } = await import('../src/cmds/review-repo.ts');
   reviewToIdeas.mockResolvedValue(
