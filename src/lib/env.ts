@@ -35,8 +35,7 @@ export function requireEnv(names: string[]) {
  *   - TARGET_REPO (e.g. "simple-pim-1754492683911")
  */
 export function parseRepo(): { owner: string; repo: string } {
-  const targetOwner = process.env.TARGET_OWNER;
-  const targetRepo = process.env.TARGET_REPO;
+  const { TARGET_OWNER: targetOwner, TARGET_REPO: targetRepo } = ENV;
 
   if (!targetOwner || !targetRepo) {
     throw new Error("Missing required TARGET_OWNER and TARGET_REPO environment variables");
