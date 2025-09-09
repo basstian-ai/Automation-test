@@ -1,9 +1,6 @@
 import { Octokit } from "octokit";
 import { posix as pathPosix } from "node:path";
-import { ENV } from "./env.js";
-import { parseRepo } from "../env.js";
-
-export { parseRepo };
+import { ENV, parseRepo } from "./env.js";
 
 export const gh = new Octokit({ auth: ENV.PAT_TOKEN });
 
