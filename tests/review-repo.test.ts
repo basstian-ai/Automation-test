@@ -122,3 +122,11 @@ test('reviewRepo skips quoting YAML block scalars', async () => {
   const ideasBody = JSON.parse(postCalls[1][1].body);
   expect(ideasBody[0].content).toBe('first\nsecond\n');
 });
+
+test('reviewRepo fetches bug roadmap items', async () => {
+  const { reviewRepo } = await import('../src/cmds/review-repo.ts');
+  reviewToIdeas.mockResolvedValue('queue:\n');
+  await reviewRepo();
+  const paths = sbRequest.mock.calls.map((call) => call[0]);
+  expect(paths).toContain('roadmap_items?select=content&type=eq.bug');
+});
