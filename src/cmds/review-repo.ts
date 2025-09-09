@@ -1,5 +1,6 @@
 import { acquireLock, releaseLock } from "../lib/lock.js";
-import { parseRepo, gh } from "../lib/github.js";
+import { gh } from "../lib/github.js";
+import { parseRepo } from "../lib/env.js";
 import { reviewToIdeas, reviewToSummary } from "../lib/prompts.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
 import { requireEnv, ENV } from "../lib/env.js";

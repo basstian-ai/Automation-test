@@ -17,7 +17,6 @@ vi.mock('../src/lib/lock.js', () => ({
 }));
 
 vi.mock('../src/lib/github.js', () => ({
-  parseRepo: vi.fn().mockReturnValue({ owner: 'o', repo: 'r' }),
   gh: {
     rest: {
       repos: {

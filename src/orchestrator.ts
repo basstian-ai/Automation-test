@@ -3,8 +3,8 @@ import { reviewRepo } from "./cmds/review-repo.js";
 import { implementTopTask } from "./cmds/implement.js";
 import { loadState, type AgentState } from "./lib/state.js";
 import { getLatestDeployment } from "./lib/vercel.js";
-import { gh, parseRepo } from "./lib/github.js";
-import { ENV } from "./lib/env.js";
+import { gh } from "./lib/github.js";
+import { ENV, parseRepo } from "./lib/env.js";
 
 async function shouldIngest(state: AgentState): Promise<boolean> {
   try {

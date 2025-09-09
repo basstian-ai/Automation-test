@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseRepo } from "../src/env";
+import { parseRepo } from "../src/lib/env";
 import { gh, getDefaultBranch } from "../src/lib/github";
 
 describe("parseRepo", () => {
