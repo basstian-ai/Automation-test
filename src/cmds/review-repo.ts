@@ -2,7 +2,7 @@ import { acquireLock, releaseLock } from "../lib/lock.js";
 import { parseRepo, gh } from "../lib/github.js";
 import { reviewToIdeas, reviewToSummary } from "../lib/prompts.js";
 import { loadState, saveState, appendChangelog, appendDecision } from "../lib/state.js";
-import { requireEnv, ENV } from "../lib/env.js";
+import { requireEnv } from "../lib/env.js";
 import { sbRequest } from "../lib/supabase.js";
 import yaml from "js-yaml";
 import crypto from "node:crypto";
@@ -10,7 +10,7 @@ import crypto from "node:crypto";
 export async function reviewRepo() {
   if (!(await acquireLock())) { console.log("Lock taken; exiting."); return; }
   try {
-    requireEnv(["TARGET_OWNER", "TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+    requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
     async function fetchRoadmap(type: string) {
       const data = (await sbRequest(
         `roadmap_items?select=content&type=eq.${type}`,

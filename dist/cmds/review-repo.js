@@ -12,7 +12,7 @@ export async function reviewRepo() {
         return;
     }
     try {
-        requireEnv(["TARGET_OWNER", "TARGET_REPO", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
+        requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
         async function fetchRoadmap(type) {
             const data = (await sbRequest(`roadmap_items?select=content&type=eq.${type}`));
             return data ? data.map((r) => r.content).join("\n") : "";
