@@ -3,8 +3,8 @@ import { reviewRepo } from "./cmds/review-repo.js";
 import { implementTopTask } from "./cmds/implement.js";
 import { loadState } from "./lib/state.js";
 import { getLatestDeployment } from "./lib/vercel.js";
-import { gh, parseRepo } from "./lib/github.js";
-import { ENV } from "./lib/env.js";
+import { gh } from "./lib/github.js";
+import { parseRepo } from "./lib/env.js";
 async function shouldIngest(state) {
     try {
         const dep = await getLatestDeployment();
@@ -18,8 +18,6 @@ async function shouldIngest(state) {
 }
 async function shouldReview(state) {
     try {
-        if (!ENV.TARGET_OWNER || !ENV.TARGET_REPO)
-            return false;
         const { owner, repo } = parseRepo();
         const resp = await gh.rest.repos.listCommits({ owner, repo, per_page: 1 });
         const latest = resp.data[0]?.sha;
