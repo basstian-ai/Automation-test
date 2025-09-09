@@ -143,12 +143,20 @@ export async function commitMany(files, message, opts) {
             sha: blob.data.sha
         });
     }
-    const tree = await git.createTree({
-        owner,
-        repo,
-        base_tree: latestCommit.data.tree.sha,
-        tree: treeEntries
-    });
+    let tree;
+    try {
+        tree = await git.createTree({
+            owner,
+            repo,
+            base_tree: latestCommit.data.tree.sha,
+            tree: treeEntries
+        });
+    } catch (e) {
+        if ((e == null ? void 0 : e.status) === 404 || (e == null ? void 0 : e.status) === 403) {
+            throw new Error(`Access to repository ${owner}/${repo} failed with status ${e.status}. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions.`);
+        }
+        throw e;
+    }
     const newCommit = await git.createCommit({
         owner,
         repo,
