@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+import { ENV } from '../src/lib/env.js';
 
 const envVars = {
   TARGET_OWNER: 'o',
@@ -53,15 +54,15 @@ vi.mock('../src/lib/supabase.js', () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  process.env.TARGET_OWNER = envVars.TARGET_OWNER;
-  process.env.TARGET_REPO = envVars.TARGET_REPO;
+  ENV.TARGET_OWNER = envVars.TARGET_OWNER;
+  ENV.TARGET_REPO = envVars.TARGET_REPO;
   process.env.SUPABASE_URL = envVars.SUPABASE_URL;
   process.env.SUPABASE_SERVICE_ROLE_KEY = envVars.SUPABASE_SERVICE_ROLE_KEY;
 });
 
 afterEach(() => {
-  delete process.env.TARGET_OWNER;
-  delete process.env.TARGET_REPO;
+  ENV.TARGET_OWNER = '';
+  ENV.TARGET_REPO = '';
   delete process.env.SUPABASE_URL;
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 });
@@ -74,7 +75,7 @@ test('reviewRepo throws on invalid ideas YAML', async () => {
 });
 
 test('reviewRepo throws when repo env vars are missing', async () => {
-  delete process.env.TARGET_OWNER;
+  ENV.TARGET_OWNER = '';
   const { reviewRepo } = await import('../src/cmds/review-repo.ts');
   await expect(reviewRepo()).rejects.toThrow('Missing required TARGET_OWNER and TARGET_REPO environment variables');
 });
