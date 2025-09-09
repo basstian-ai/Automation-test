@@ -29,6 +29,12 @@ jobs:
       ALLOW_PATHS: ""
 
     steps:
+      - name: Verify target repository variables
+        run: |
+          if [ -z "${TARGET_OWNER}" ] || [ -z "${TARGET_REPO}" ]; then
+            echo "TARGET_OWNER and TARGET_REPO must be set"
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
