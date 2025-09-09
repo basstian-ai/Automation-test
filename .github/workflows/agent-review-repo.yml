@@ -17,6 +17,7 @@ jobs:
     env:
       TARGET_OWNER: ${{ secrets.TARGET_OWNER }}
       TARGET_REPO: ${{ secrets.TARGET_REPO }}
+      TARGET_DIR: ${{ secrets.TARGET_DIR }}
     steps:
       - name: Verify target repository variables
         run: |
