@@ -104,6 +104,7 @@ Project-agnostic behavior
 
 Setup requirements (minimal)
 	•	Credentials: GitHub token (repo), Deploy provider token (e.g., Vercel) + project id.
+	•	PAT_TOKEN must include `repo` scope and be authorized for the target repository.
 	•	Permissions: Push rights (or PR-only mode), access to build logs.
 	•	Config: agent/config.json (or zero-config with sensible defaults).
 
