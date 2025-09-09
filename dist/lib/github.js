@@ -1,6 +1,6 @@
 import { Octokit } from "octokit";
 import { posix as pathPosix } from "node:path";
-import { ENV, parseRepo } from "./env.js";
+import { ENV, parseRepo, requireEnv } from "./env.js";
 export const gh = new Octokit({ auth: ENV.PAT_TOKEN });
 function formatMessage(msg) {
     if (typeof msg === "string")
@@ -93,6 +93,7 @@ export async function upsertFile(path, updater, message, opts) {
     });
 }
 export async function commitMany(files, message, opts) {
+    requireEnv(["PAT_TOKEN"]);
     const { owner, repo } = parseRepo();
     const ref = opts?.branch;
     const msg = formatMessage(message);

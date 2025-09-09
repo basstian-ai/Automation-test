@@ -1,6 +1,6 @@
 import { Octokit } from "octokit";
 import { posix as pathPosix } from "node:path";
-import { ENV, parseRepo } from "./env.js";
+import { ENV, parseRepo, requireEnv } from "./env.js";
 
 export const gh = new Octokit({ auth: ENV.PAT_TOKEN });
 
@@ -108,6 +108,7 @@ export async function commitMany(
   message: CommitMessage,
   opts?: { branch?: string }
 ) {
+  requireEnv(["PAT_TOKEN"]);
   const { owner, repo } = parseRepo();
   const ref = opts?.branch;
   const msg = formatMessage(message);
