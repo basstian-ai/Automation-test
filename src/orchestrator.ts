@@ -4,7 +4,7 @@ import { implementTopTask } from "./cmds/implement.js";
 import { loadState, type AgentState } from "./lib/state.js";
 import { getLatestDeployment } from "./lib/vercel.js";
 import { gh } from "./lib/github.js";
-import { ENV, parseRepo } from "./lib/env.js";
+import { parseRepo } from "./lib/env.js";
 
 async function shouldIngest(state: AgentState): Promise<boolean> {
   try {
@@ -18,7 +18,6 @@ async function shouldIngest(state: AgentState): Promise<boolean> {
 
 async function shouldReview(state: AgentState): Promise<boolean> {
   try {
-    if (!ENV.TARGET_OWNER || !ENV.TARGET_REPO) return false;
     const { owner, repo } = parseRepo();
     const resp = await gh.rest.repos.listCommits({ owner, repo, per_page: 1 });
     const latest = resp.data[0]?.sha;
