@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "vitest run",
-    "build": "tsc -p tsconfig.json && tsc automation/prompt.ts automation/review-repo.ts --outDir dist/automation --rootDir automation --module ES2022 --moduleResolution bundler --target ES2022 --esModuleInterop --skipLibCheck && node -e \"const fs=require('fs');const p='dist/automation/review-repo.js';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace('./prompt','./prompt.js'));\"",
+    "build": "tsc -p tsconfig.json && tsc automation/prompt.ts automation/review-repo.ts --outDir dist/automation --rootDir automation --module ES2022 --moduleResolution bundler --target ES2022 --esModuleInterop --skipLibCheck && node -e \"const fs=require('fs');const p='dist/automation/review-repo.js';let c=fs.readFileSync(p,'utf8');c=c.replace('./prompt','./prompt.js').replace('../src/lib/env.js','../lib/env.js');fs.writeFileSync(p,c);\"",
     "start": "node dist/cli.js",
     "cmd:ingest-logs": "node dist/cli.js ingest-logs",
     "cmd:synthesize-tasks": "node dist/cli.js synthesize-tasks",
