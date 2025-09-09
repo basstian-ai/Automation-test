@@ -11,6 +11,8 @@ jobs:
     env:
       TARGET_OWNER: ${{ secrets.TARGET_OWNER }}
       TARGET_REPO: ${{ secrets.TARGET_REPO }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - name: Verify target repository variables
         run: |
