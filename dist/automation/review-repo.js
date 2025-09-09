@@ -1,8 +1,18 @@
 import { promises as fs } from "fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { exec as cpExec } from "node:child_process";
+import { promisify } from "node:util";
 import { planRepo } from "./prompt.js";
-const TARGET_PATH = process.env.TARGET_PATH || "target";
+const exec = promisify(cpExec);
+const TARGET_OWNER = process.env.TARGET_OWNER;
+const TARGET_REPO = process.env.TARGET_REPO;
+const TARGET_DIR = process.env.TARGET_DIR || "target";
+if (!TARGET_OWNER || !TARGET_REPO) {
+    console.error("TARGET_OWNER and TARGET_REPO must be set");
+    process.exit(1);
+}
+const TARGET_PATH = path.join(TARGET_DIR, TARGET_OWNER, TARGET_REPO);
 const MAX_FILES = Number(process.env.MAX_FILES || 180);
 const MAX_SAMPLED_FILES = Number(process.env.MAX_SAMPLED_FILES || 80);
 const MAX_BYTES = Number(process.env.MAX_BYTES_PER_FILE || 1500);
@@ -33,6 +43,17 @@ const TEXT_EXT = /\.(md|txt|js|jsx|ts|tsx|json|yaml|yml|html|css|mjs|cjs|py|java
 function dirSignature(entries) {
     const sig = entries.filter(Boolean).sort().join("|");
     return crypto.createHash("md5").update(sig).digest("hex");
+}
+async function ensureRepo() {
+    const gitUrl = `https://github.com/${TARGET_OWNER}/${TARGET_REPO}.git`;
+    try {
+        await fs.access(path.join(TARGET_PATH, ".git"));
+        await exec(`git -C ${TARGET_PATH} pull --ff-only`);
+    }
+    catch {
+        await fs.mkdir(path.dirname(TARGET_PATH), { recursive: true });
+        await exec(`git clone ${gitUrl} ${TARGET_PATH}`);
+    }
 }
 async function scanRepo(root) {
     const files = [];
@@ -104,6 +125,7 @@ async function writeFileSafe(p, content) {
     console.log(`Wrote ${p}`);
 }
 async function main() {
+    await ensureRepo();
     const { files, dirs, duplicates } = await scanRepo(TARGET_PATH);
     const truncated = files.length >= MAX_FILES || files.length >= MAX_SAMPLED_FILES;
     console.log(`Scanned ${files.length} files in ${dirs.length} dirs${truncated ? " (truncated)" : ""}`);
