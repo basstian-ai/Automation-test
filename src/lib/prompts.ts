@@ -27,7 +27,7 @@ export type LogEntryForBug = {
 
 /**
  * Turn runtime/build log entries into a short bug description list.
- * Return is free-form markdown/text that the caller writes into bugs.md.
+ * Return is free-form markdown/text that the caller stores in Supabase.
  */
 export async function summarizeLogToBug(entries: LogEntryForBug[]): Promise<string> {
   const openai = getOpenAI();
