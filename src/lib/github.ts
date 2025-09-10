@@ -121,7 +121,13 @@ export async function commitMany(
     );
     for (const f of files) {
       const safePath = resolveRepoPath(f.path);
-      console.log(`  - ${safePath} (${f.content.length} bytes)`);
+      const treePath = ref
+        ? safePath.startsWith(`${ref}/`)
+          ? safePath
+          : pathPosix.join(ref, safePath)
+        : safePath;
+      const size = "content" in f ? f.content.length : 0;
+      console.log(`  - ${treePath} (${size} bytes)`);
     }
     return;
   }
@@ -157,6 +163,11 @@ export async function commitMany(
   }> = [];
   for (const f of files) {
     const safePath = resolveRepoPath(f.path);
+    const treePath = ref
+      ? safePath.startsWith(`${ref}/`)
+        ? safePath
+        : pathPosix.join(ref, safePath)
+      : safePath;
     if ("content" in f) {
       const blob = await git.createBlob({
         owner,
@@ -165,7 +176,7 @@ export async function commitMany(
         encoding: "utf-8"
       });
       const mode =
-        (modeByPath.get(safePath) as
+        (modeByPath.get(treePath) as
           | "100644"
           | "100755"
           | "040000"
@@ -173,13 +184,13 @@ export async function commitMany(
           | "120000"
           | undefined) || "100644";
       treeEntries.push({
-        path: safePath,
+        path: treePath,
         mode,
         type: "blob",
         sha: blob.data.sha
       });
     } else {
-      treeEntries.push({ path: safePath, mode: f.mode, type: "blob", sha: null });
+      treeEntries.push({ path: treePath, mode: f.mode, type: "blob", sha: null });
     }
   }
 
