@@ -104,7 +104,10 @@ export async function upsertFile(
 }
 
 export async function commitMany(
-  files: Array<{ path: string; content: string }>,
+  files: Array<
+    | { path: string; content: string }
+    | { path: string; sha: null; mode: "100644" }
+  >,
   message: CommitMessage,
   opts?: { branch?: string }
 ) {
@@ -150,30 +153,34 @@ export async function commitMany(
     path: string;
     mode: "100644" | "100755" | "040000" | "160000" | "120000";
     type: "blob";
-    sha: string;
+    sha: string | null;
   }> = [];
   for (const f of files) {
     const safePath = resolveRepoPath(f.path);
-    const blob = await git.createBlob({
-      owner,
-      repo,
-      content: f.content,
-      encoding: "utf-8"
-    });
-    const mode =
-      (modeByPath.get(safePath) as
-        | "100644"
-        | "100755"
-        | "040000"
-        | "160000"
-        | "120000"
-        | undefined) || "100644";
-    treeEntries.push({
-      path: safePath,
-      mode,
-      type: "blob",
-      sha: blob.data.sha
-    });
+    if ("content" in f) {
+      const blob = await git.createBlob({
+        owner,
+        repo,
+        content: f.content,
+        encoding: "utf-8"
+      });
+      const mode =
+        (modeByPath.get(safePath) as
+          | "100644"
+          | "100755"
+          | "040000"
+          | "160000"
+          | "120000"
+          | undefined) || "100644";
+      treeEntries.push({
+        path: safePath,
+        mode,
+        type: "blob",
+        sha: blob.data.sha
+      });
+    } else {
+      treeEntries.push({ path: safePath, mode: f.mode, type: "blob", sha: null });
+    }
   }
 
   try {

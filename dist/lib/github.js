@@ -129,19 +129,28 @@ export async function commitMany(files, message, opts) {
     const treeEntries = [];
     for (const f of files) {
         const safePath = resolveRepoPath(f.path);
-        const blob = await git.createBlob({
-            owner,
-            repo,
-            content: f.content,
-            encoding: "utf-8"
-        });
-        const mode = modeByPath.get(safePath) || "100644";
-        treeEntries.push({
-            path: safePath,
-            mode,
-            type: "blob",
-            sha: blob.data.sha
-        });
+        if ("content" in f) {
+            const blob = await git.createBlob({
+                owner,
+                repo,
+                content: f.content,
+                encoding: "utf-8"
+            });
+            const mode = modeByPath.get(safePath) || "100644";
+            treeEntries.push({
+                path: safePath,
+                mode,
+                type: "blob",
+                sha: blob.data.sha
+            });
+        } else {
+            treeEntries.push({
+                path: safePath,
+                mode: f.mode,
+                type: "blob",
+                sha: null
+            });
+        }
     }
     let tree;
     try {
