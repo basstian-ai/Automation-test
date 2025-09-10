@@ -37,7 +37,7 @@ export async function getBuildLogs(
   );
   if (ENV.VERCEL_TEAM_ID) url.searchParams.set("teamId", ENV.VERCEL_TEAM_ID);
   const { fromId, from, until, limit, direction } = opts;
-  if (fromId) url.searchParams.set("from", fromId);
+  if (fromId) url.searchParams.set("fromId", fromId);
   else if (from) url.searchParams.set("from", from);
   if (until) url.searchParams.set("until", until);
   if (limit !== undefined) url.searchParams.set("limit", String(limit));

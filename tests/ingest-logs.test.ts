@@ -58,6 +58,8 @@ test('ingestLogs only fetches new log entries on repeat runs', async () => {
       expect.objectContaining({ fromId: 'id3' })
     );
     expect(insertRoadmap).toHaveBeenCalledTimes(2);
+    expect(insertRoadmap.mock.calls[0][0]).toHaveLength(2);
+    expect(insertRoadmap.mock.calls[1][0]).toHaveLength(1);
     expect(saveState.mock.calls[1][0].ingest.lastRowIds).toEqual(['id2', 'id3']);
     expect(saveState.mock.calls[2][0].ingest.lastRowIds).toEqual(['id2', 'id3']);
   });

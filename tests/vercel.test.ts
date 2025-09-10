@@ -33,7 +33,7 @@ afterEach(() => {
     const { getBuildLogs } = await import('../src/lib/vercel.ts');
     await getBuildLogs('dep1', { fromId: '123' });
   const url = fetchMock.mock.calls[0][0] as URL;
-  expect(url.searchParams.get('from')).toBe('123');
+  expect(url.searchParams.get('fromId')).toBe('123');
 });
 
   test('getBuildLogs rejects on timeout', async () => {
