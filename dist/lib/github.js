@@ -101,7 +101,13 @@ export async function commitMany(files, message, opts) {
         console.log(`[DRY_RUN] commitMany will create 1 commit on ${ref || "(default branch)"}: ${msg}`);
         for (const f of files) {
             const safePath = resolveRepoPath(f.path);
-            console.log(`  - ${safePath} (${f.content.length} bytes)`);
+            const treePath = ref
+                ? safePath.startsWith(`${ref}/`)
+                    ? safePath
+                    : pathPosix.join(ref, safePath)
+                : safePath;
+            const size = "content" in f ? f.content.length : 0;
+            console.log(`  - ${treePath} (${size} bytes)`);
         }
         return;
     }
@@ -129,6 +135,9 @@ export async function commitMany(files, message, opts) {
     const treeEntries = [];
     for (const f of files) {
         const safePath = resolveRepoPath(f.path);
+        const treePath = safePath.startsWith(`${branch}/`)
+            ? safePath
+            : pathPosix.join(branch, safePath);
         if ("content" in f) {
             const blob = await git.createBlob({
                 owner,
@@ -136,22 +145,28 @@ export async function commitMany(files, message, opts) {
                 content: f.content,
                 encoding: "utf-8"
             });
-            const mode = modeByPath.get(safePath) || "100644";
+            const mode = modeByPath.get(treePath) || "100644";
             treeEntries.push({
-                path: safePath,
+                path: treePath,
                 mode,
                 type: "blob",
                 sha: blob.data.sha
             });
-        } else {
-            treeEntries.push({
-                path: safePath,
-                mode: f.mode,
-                type: "blob",
-                sha: null
-            });
+        }
+        else {
+            treeEntries.push({ path: treePath, mode: f.mode, type: "blob", sha: null });
         }
     }
+    try {
+        await gh.rest.repos.get({ owner, repo });
+    }
+    catch (e) {
+        if (e?.status === 404 || e?.status === 403) {
+            throw new Error(`Access to repository ${owner}/${repo} failed with status ${e.status}. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions.`);
+        }
+        throw e;
+    }
+    console.log(`commitMany target: owner=${owner} repo=${repo} branch=${branch} base=${latestCommit.data.tree.sha}`);
     let tree;
     try {
         tree = await git.createTree({
@@ -160,8 +175,9 @@ export async function commitMany(files, message, opts) {
             base_tree: latestCommit.data.tree.sha,
             tree: treeEntries
         });
-    } catch (e) {
-        if ((e == null ? void 0 : e.status) === 404 || (e == null ? void 0 : e.status) === 403) {
+    }
+    catch (e) {
+        if (e?.status === 404 || e?.status === 403) {
             throw new Error(`Access to repository ${owner}/${repo} failed with status ${e.status}. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions.`);
         }
         throw e;
