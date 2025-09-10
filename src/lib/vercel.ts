@@ -59,6 +59,10 @@ export async function getBuildLogs(
   } finally {
     clearTimeout(t);
   }
+  if (res.status === 404) {
+    console.warn("Vercel build-logs not found (404)");
+    return [];
+  }
   if (!res.ok) throw new Error(`Vercel build-logs failed: ${res.status}`);
   const text = await res.text();
   return text

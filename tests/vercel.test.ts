@@ -7,13 +7,23 @@ beforeEach(() => {
   process.env.VERCEL_TEAM_ID = 'team';
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.useRealTimers();
-  delete process.env.VERCEL_PROJECT_ID;
-  delete process.env.VERCEL_TOKEN;
-  delete process.env.VERCEL_TEAM_ID;
-});
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    delete process.env.VERCEL_PROJECT_ID;
+    delete process.env.VERCEL_TOKEN;
+    delete process.env.VERCEL_TEAM_ID;
+  });
+
+  test('getBuildLogs returns empty array on 404', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404, text: async () => '' } as any);
+    vi.stubGlobal('fetch', fetchMock);
+    const warnMock = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { getBuildLogs } = await import('../src/lib/vercel.ts');
+    const res = await getBuildLogs('dep1');
+    expect(res).toEqual([]);
+    expect(warnMock).toHaveBeenCalled();
+  });
 
   test('getBuildLogs passes paging params', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '' } as any);
