@@ -44,7 +44,14 @@ export async function implementTopTask() {
             targetBranch = undefined;
         }
         // Optional path guard
-        const repoTree = [];
+        let repoTree = [];
+        try {
+            const treeOutput = execSync("git ls-files", { encoding: "utf8" });
+            repoTree = treeOutput.split(/\r?\n/).filter(Boolean);
+        }
+        catch (err) {
+            console.warn("Failed to list repo files", err);
+        }
         const planJson = await implementPlan({ vision, done: "", topTask: top, repoTree });
         let plan = {};
         try {
