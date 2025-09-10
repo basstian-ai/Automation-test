@@ -29,7 +29,7 @@ export async function getBuildLogs(deploymentId, opts = {}) {
         url.searchParams.set("teamId", ENV.VERCEL_TEAM_ID);
     const { fromId, from, until, limit, direction } = opts;
     if (fromId)
-        url.searchParams.set("from", fromId);
+        url.searchParams.set("fromId", fromId);
     else if (from)
         url.searchParams.set("from", from);
     if (until)
