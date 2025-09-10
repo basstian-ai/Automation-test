@@ -24,11 +24,17 @@ export async function reviewRepo() {
 
     const state = await loadState();
     const { owner, repo } = parseRepo();
-    const commitsResp = await gh.rest.repos.listCommits({ owner, repo, per_page: 10 });
     const commitsData = [] as { sha: string; commit: { message: string } }[];
-    for (const c of commitsResp.data) {
-      if (c.sha === state.lastReviewedSha) break;
-      commitsData.push(c);
+    let reachedLastReviewed = false;
+    for await (const { data } of gh.paginate.iterator(
+      gh.rest.repos.listCommits,
+      { owner, repo, per_page: 100 },
+    )) {
+      for (const c of data as { sha: string; commit: { message: string } }[]) {
+        if (c.sha === state.lastReviewedSha) { reachedLastReviewed = true; break; }
+        commitsData.push(c);
+      }
+      if (reachedLastReviewed) break;
     }
     if (commitsData.length === 0) { console.log("No new commits to review."); return; }
     const recent = commitsData.map(

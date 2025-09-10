@@ -10,7 +10,13 @@ const envVars = {
 
 let saveState: ReturnType<typeof vi.fn>;
 let reviewToIdeas: ReturnType<typeof vi.fn>;
+let reviewToSummary: ReturnType<typeof vi.fn>;
 let sbRequest: ReturnType<typeof vi.fn>;
+
+const defaultIteratorImpl = () =>
+  (async function* () {
+    yield { data: [{ sha: '1234567', commit: { message: 'msg' } }] };
+  })();
 
 vi.mock('../src/lib/lock.js', () => ({
   acquireLock: vi.fn().mockResolvedValue(true),
@@ -19,22 +25,15 @@ vi.mock('../src/lib/lock.js', () => ({
 
 vi.mock('../src/lib/github.js', () => ({
   gh: {
-    rest: {
-      repos: {
-        listCommits: vi.fn().mockResolvedValue({
-          data: [{ sha: '1234567', commit: { message: 'msg' } }],
-        }),
-      },
-    },
+    rest: { repos: { listCommits: vi.fn() } },
+    paginate: { iterator: vi.fn() },
   },
 }));
 
 vi.mock('../src/lib/prompts.js', () => {
   reviewToIdeas = vi.fn();
-  return {
-    reviewToSummary: vi.fn().mockResolvedValue('summary'),
-    reviewToIdeas,
-  };
+  reviewToSummary = vi.fn().mockResolvedValue('summary');
+  return { reviewToSummary, reviewToIdeas };
 });
 
 vi.mock('../src/lib/state.js', () => {
@@ -52,8 +51,10 @@ vi.mock('../src/lib/supabase.js', () => {
   return { sbRequest };
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  const { gh } = await import('../src/lib/github.js');
+  gh.paginate.iterator.mockImplementation(defaultIteratorImpl);
   ENV.TARGET_OWNER = envVars.TARGET_OWNER;
   ENV.TARGET_REPO = envVars.TARGET_REPO;
   process.env.SUPABASE_URL = envVars.SUPABASE_URL;
@@ -130,3 +131,37 @@ test('reviewRepo fetches bug roadmap items', async () => {
   const paths = sbRequest.mock.calls.map((call) => call[0]);
   expect(paths).toContain('roadmap_items?select=content&type=eq.bug');
 });
+
+test('reviewRepo paginates commits beyond first page', async () => {
+  const commits = [
+    // first page: 10 commits
+    { sha: 'sha12', commit: { message: 'm12' } },
+    { sha: 'sha11', commit: { message: 'm11' } },
+    { sha: 'sha10', commit: { message: 'm10' } },
+    { sha: 'sha9', commit: { message: 'm9' } },
+    { sha: 'sha8', commit: { message: 'm8' } },
+    { sha: 'sha7', commit: { message: 'm7' } },
+    { sha: 'sha6', commit: { message: 'm6' } },
+    { sha: 'sha5', commit: { message: 'm5' } },
+    { sha: 'sha4', commit: { message: 'm4' } },
+    { sha: 'sha3', commit: { message: 'm3' } },
+  ];
+  const moreCommits = [
+    { sha: 'sha2', commit: { message: 'm2' } },
+    { sha: 'sha1', commit: { message: 'm1' } },
+    { sha: 'old', commit: { message: 'old' } },
+  ];
+  const { gh } = await import('../src/lib/github.js');
+  gh.paginate.iterator.mockImplementation(() =>
+    (async function* () {
+      yield { data: commits };
+      yield { data: moreCommits };
+    })(),
+  );
+  const { reviewRepo } = await import('../src/cmds/review-repo.ts');
+  reviewToIdeas.mockResolvedValue('queue:\n');
+  await reviewRepo();
+  const summaryInput = reviewToSummary.mock.calls[0][0];
+  expect(summaryInput.commits).toHaveLength(12);
+});
+
