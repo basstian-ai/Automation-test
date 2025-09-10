@@ -76,4 +76,44 @@ describe("commitMany", () => {
       ]
     });
   });
+
+  it("does not prefix default branch when branch option is omitted", async () => {
+    process.env.PAT_TOKEN = "token";
+    ENV.PAT_TOKEN = "token";
+    ENV.TARGET_OWNER = "foo";
+    ENV.TARGET_REPO = "bar";
+
+    vi.spyOn(gh.rest.git, "getRef").mockResolvedValue({
+      data: { object: { sha: "headsha" } }
+    } as any);
+    vi.spyOn(gh.rest.git, "getCommit").mockResolvedValue({
+      data: { tree: { sha: "treesha" } }
+    } as any);
+    vi.spyOn(gh.rest.git, "getTree").mockResolvedValue({ data: { tree: [] } } as any);
+    const createBlob = vi
+      .spyOn(gh.rest.git, "createBlob")
+      .mockResolvedValue({ data: { sha: "blobsha" } } as any);
+    const reposGet = vi.spyOn(gh.rest.repos, "get");
+    reposGet
+      .mockResolvedValueOnce({ data: { default_branch: "main" } } as any)
+      .mockResolvedValueOnce({} as any);
+
+    const createTree = vi
+      .spyOn(gh.rest.git, "createTree")
+      .mockResolvedValue({ data: { sha: "newtree" } } as any);
+    vi.spyOn(gh.rest.git, "createCommit").mockResolvedValue({ data: { sha: "newcommit" } } as any);
+    vi.spyOn(gh.rest.git, "updateRef").mockResolvedValue({} as any);
+
+    await commitMany([{ path: "foo.txt", content: "hi" }], "msg");
+
+    expect(createBlob).toHaveBeenCalledTimes(1);
+    expect(createTree).toHaveBeenCalledWith({
+      owner: "foo",
+      repo: "bar",
+      base_tree: "treesha",
+      tree: [
+        { path: "foo.txt", mode: "100644", type: "blob", sha: "blobsha" }
+      ]
+    });
+  });
 });
