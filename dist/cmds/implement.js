@@ -101,9 +101,13 @@ export async function implementTopTask() {
         // Build file list from normalized ops
         const files = [];
         for (const op of filtered) {
-            if (op.action !== "create" && op.action !== "update")
-                continue;
-            files.push({ path: op.path, content: op.content ?? "" });
+            if (op.action === "create" || op.action === "update") {
+                files.push({ path: op.path, content: op.content ?? "" });
+            } else if (op.action === "delete") {
+                files.push({ path: op.path, sha: null, mode: "100644" });
+            } else {
+                console.warn(`Unsupported action ${op.action} for path ${op.path}`);
+            }
         }
         if (files.length) {
             // Build commit body describing root cause, scope, and validation

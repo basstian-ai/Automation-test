@@ -31,4 +31,49 @@ describe("commitMany", () => {
 
     expect(createTreeMock).toHaveBeenCalled();
   });
+
+  it("handles file deletions", async () => {
+    process.env.PAT_TOKEN = "token";
+    ENV.PAT_TOKEN = "token";
+    ENV.TARGET_OWNER = "foo";
+    ENV.TARGET_REPO = "bar";
+
+    vi.spyOn(gh.rest.git, "getRef").mockResolvedValue({
+      data: { object: { sha: "headsha" } }
+    } as any);
+    vi.spyOn(gh.rest.git, "getCommit").mockResolvedValue({
+      data: { tree: { sha: "treesha" } }
+    } as any);
+    vi.spyOn(gh.rest.git, "getTree").mockResolvedValue({ data: { tree: [] } } as any);
+    const createBlob = vi
+      .spyOn(gh.rest.git, "createBlob")
+      .mockResolvedValue({ data: { sha: "blobsha" } } as any);
+    vi.spyOn(gh.rest.repos, "get").mockResolvedValue({} as any);
+
+    const createTree = vi
+      .spyOn(gh.rest.git, "createTree")
+      .mockResolvedValue({ data: { sha: "newtree" } } as any);
+    vi.spyOn(gh.rest.git, "createCommit").mockResolvedValue({ data: { sha: "newcommit" } } as any);
+    vi.spyOn(gh.rest.git, "updateRef").mockResolvedValue({} as any);
+
+    await commitMany(
+      [
+        { path: "keep.txt", content: "hi" },
+        { path: "remove.txt", sha: null, mode: "100644" }
+      ],
+      "msg",
+      { branch: "main" }
+    );
+
+    expect(createBlob).toHaveBeenCalledTimes(1);
+    expect(createTree).toHaveBeenCalledWith({
+      owner: "foo",
+      repo: "bar",
+      base_tree: "treesha",
+      tree: [
+        { path: "main/keep.txt", mode: "100644", type: "blob", sha: "blobsha" },
+        { path: "main/remove.txt", mode: "100644", type: "blob", sha: null }
+      ]
+    });
+  });
 });

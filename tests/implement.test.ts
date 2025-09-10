@@ -135,3 +135,72 @@ test('implementTopTask caps repoTree length', async () => {
   expect(captured).toEqual(['f0', 'f1']);
 });
 
+test('implementTopTask handles delete ops and logs unsupported actions', async () => {
+  process.env.TARGET_OWNER = 'o';
+  process.env.TARGET_REPO = 'r';
+
+  vi.doMock('node:child_process', () => ({
+    execSync: vi.fn(() => '')
+  }));
+
+  vi.doMock('../src/lib/lock.js', () => ({
+    acquireLock: vi.fn().mockResolvedValue(true),
+    releaseLock: vi.fn().mockResolvedValue(undefined),
+  }));
+
+  const mockTask = { id: '1', title: 't', content: 'c', priority: 1 };
+  vi.doMock('../src/lib/supabase.js', () => ({
+    supabase: {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            or: () => ({
+              order: () => ({
+                limit: () => Promise.resolve({ data: [mockTask], error: null }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    },
+  }));
+
+  vi.doMock('../src/lib/prompts.js', () => ({
+    implementPlan: vi.fn(async () =>
+      JSON.stringify({
+        operations: [
+          { action: 'delete', path: 'file.txt' },
+          { action: 'move', path: 'other.txt' },
+        ],
+      })
+    ),
+  }));
+
+  const commitSpy = vi.fn().mockResolvedValue(undefined);
+  vi.doMock('../src/lib/github.js', () => ({
+    readFile: vi.fn().mockResolvedValue(''),
+    commitMany: commitSpy,
+    resolveRepoPath: (p: string) => p,
+    ensureBranch: vi.fn(),
+    getDefaultBranch: vi.fn().mockResolvedValue('main'),
+  }));
+
+  vi.doMock('../src/lib/tasks.js', () => ({
+    completeTask: vi.fn().mockResolvedValue(undefined),
+  }));
+
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  const { implementTopTask } = await import('../src/cmds/implement.ts');
+  await implementTopTask();
+
+  expect(commitSpy).toHaveBeenCalledWith(
+    [{ path: 'file.txt', sha: null, mode: '100644' }],
+    expect.anything(),
+    { branch: undefined }
+  );
+  expect(warn).toHaveBeenCalledWith(
+    'Unsupported action move for path other.txt'
+  );
+});
+
