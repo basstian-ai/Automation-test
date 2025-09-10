@@ -52,7 +52,17 @@ export async function implementTopTask() {
     }
 
     // Optional path guard
-    const repoTree: string[] = [];
+    let repoTree: string[] = [];
+    try {
+      const treeOutput = execSync("git ls-files", { encoding: "utf8" });
+      const repoTreeLimit = parseInt(process.env.REPO_TREE_LIMIT || "1000", 10);
+      repoTree = treeOutput
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .slice(0, repoTreeLimit);
+    } catch (err) {
+      console.warn("Failed to list repo files", err);
+    }
     const planJson = await implementPlan({ vision, done: "", topTask: top, repoTree });
     let plan: any = {};
     try { plan = JSON.parse(planJson); } catch { plan = {}; }
