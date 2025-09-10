@@ -163,9 +163,11 @@ export async function commitMany(
   }> = [];
   for (const f of files) {
     const safePath = resolveRepoPath(f.path);
-    const treePath = safePath.startsWith(`${branch}/`)
-      ? safePath
-      : pathPosix.join(branch, safePath);
+    const treePath = ref
+      ? safePath.startsWith(`${ref}/`)
+        ? safePath
+        : pathPosix.join(ref, safePath)
+      : safePath;
     if ("content" in f) {
       const blob = await git.createBlob({
         owner,
