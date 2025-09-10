@@ -95,20 +95,33 @@ export async function reviewRepo() {
       console.error("Offending YAML:\n" + sanitizedIdeasYaml);
       throw new Error("Failed to parse ideas YAML");
     }
-    const payloads = newIdeas.map((idea) => ({
-      id: idea.id || crypto.randomUUID(),
-      type: "task",
-      title: idea.title,
-      content: idea.details,
-      source: "review",
-      created: idea.created || new Date().toISOString(),
-    }));
-    if (payloads.length > 0) {
-      await sbRequest("roadmap_items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify(payloads),
-      });
+    const existingTasks = (await sbRequest(
+      "roadmap_items?type=eq.task&select=id",
+    )) as { id: string }[] | undefined;
+    const backlogCount = existingTasks?.length ?? 0;
+    if (backlogCount >= 20) {
+      console.log(
+        `Task backlog already at ${backlogCount}; skipping new tasks.`,
+      );
+    } else {
+      const payloads = newIdeas.map((idea) => ({
+        id: idea.id || crypto.randomUUID(),
+        type: "task",
+        title: idea.title,
+        content: idea.details,
+        source: "review",
+        created: idea.created || new Date().toISOString(),
+      }));
+      if (payloads.length > 0) {
+        await sbRequest("roadmap_items", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Prefer: "return=minimal",
+          },
+          body: JSON.stringify(payloads),
+        });
+      }
     }
 
     const headSha = commitsData[0]?.sha;

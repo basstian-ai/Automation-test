@@ -165,3 +165,26 @@ test('reviewRepo paginates commits beyond first page', async () => {
   expect(summaryInput.commits).toHaveLength(12);
 });
 
+test('reviewRepo does not post new tasks when backlog is high', async () => {
+  sbRequest.mockImplementation((path) => {
+    if (path === 'roadmap_items?type=eq.task&select=id') {
+      return Array(20).fill({ id: 'x' });
+    }
+    return [];
+  });
+  const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  const { reviewRepo } = await import('../src/cmds/review-repo.ts');
+  reviewToIdeas.mockResolvedValue(
+    'queue:\n  - title: Example\n    details: test\n',
+  );
+  await reviewRepo();
+  const postCalls = sbRequest.mock.calls.filter(([, init]) => init?.method === 'POST');
+  expect(postCalls).toHaveLength(1);
+  expect(
+    logSpy.mock.calls.some(([msg]) =>
+      msg.includes('Task backlog already at 20'),
+    ),
+  ).toBe(true);
+  logSpy.mockRestore();
+});
+
