@@ -55,7 +55,11 @@ export async function implementTopTask() {
     let repoTree: string[] = [];
     try {
       const treeOutput = execSync("git ls-files", { encoding: "utf8" });
-      repoTree = treeOutput.split(/\r?\n/).filter(Boolean);
+      const repoTreeLimit = parseInt(process.env.REPO_TREE_LIMIT || "1000", 10);
+      repoTree = treeOutput
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .slice(0, repoTreeLimit);
     } catch (err) {
       console.warn("Failed to list repo files", err);
     }
