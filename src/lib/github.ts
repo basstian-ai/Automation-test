@@ -73,6 +73,28 @@ export async function readFile(path: string): Promise<string | undefined> {
   return got.content;
 }
 
+async function validateRepoAccess(): Promise<RepoRef> {
+  requireEnv(["PAT_TOKEN"]);
+  const { owner, repo } = parseRepo();
+  const res = await gh.request("GET /user");
+  const scopes = (res.headers["x-oauth-scopes"] as string | undefined) || "";
+  const hasRepoScope = scopes.split(",").map(s => s.trim()).includes("repo");
+  if (!hasRepoScope) {
+    throw new Error("PAT_TOKEN is missing required repo scope");
+  }
+  try {
+    await gh.rest.repos.get({ owner, repo });
+  } catch (e: any) {
+    if (e?.status === 404 || e?.status === 403) {
+      throw new Error(
+        `Access to repository ${owner}/${repo} failed with status ${e.status}. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions.`
+      );
+    }
+    throw e;
+  }
+  return { owner, repo };
+}
+
 export async function upsertFile(
   path: string,
   updater: (old: string | undefined) => string,
@@ -111,8 +133,7 @@ export async function commitMany(
   message: CommitMessage,
   opts?: { branch?: string }
 ) {
-  requireEnv(["PAT_TOKEN"]);
-  const { owner, repo } = parseRepo();
+  const { owner, repo } = await validateRepoAccess();
   const ref = opts?.branch;
   const msg = formatMessage(message);
   if (ENV.DRY_RUN) {
@@ -193,18 +214,6 @@ export async function commitMany(
       treeEntries.push({ path: treePath, mode: f.mode, type: "blob", sha: null });
     }
   }
-
-  try {
-    await gh.rest.repos.get({ owner, repo });
-  } catch (e: any) {
-    if (e?.status === 404 || e?.status === 403) {
-      throw new Error(
-        `Access to repository ${owner}/${repo} failed with status ${e.status}. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions.`
-      );
-    }
-    throw e;
-  }
-
   console.log(
     `commitMany target: owner=${owner} repo=${repo} branch=${branch} base=${latestCommit.data.tree.sha}`
   );

@@ -1,13 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { commitMany, gh } from "../src/lib/github";
 import { ENV } from "../src/lib/env";
 
 describe("commitMany", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    process.env.TARGET_DIR = "";
+    ENV.TARGET_DIR = "";
+  });
+
   it("surfaces a descriptive error when git.createTree returns 404", async () => {
     process.env.PAT_TOKEN = "token";
     ENV.PAT_TOKEN = "token";
     ENV.TARGET_OWNER = "foo";
     ENV.TARGET_REPO = "bar";
+
+    vi.spyOn(gh, "request").mockResolvedValue({
+      headers: { "x-oauth-scopes": "repo" }
+    } as any);
 
     vi.spyOn(gh.rest.git, "getRef").mockResolvedValue({
       data: { object: { sha: "headsha" } }
@@ -37,6 +47,10 @@ describe("commitMany", () => {
     ENV.PAT_TOKEN = "token";
     ENV.TARGET_OWNER = "foo";
     ENV.TARGET_REPO = "bar";
+
+    vi.spyOn(gh, "request").mockResolvedValue({
+      headers: { "x-oauth-scopes": "repo" }
+    } as any);
 
     vi.spyOn(gh.rest.git, "getRef").mockResolvedValue({
       data: { object: { sha: "headsha" } }
@@ -83,6 +97,10 @@ describe("commitMany", () => {
     ENV.TARGET_OWNER = "foo";
     ENV.TARGET_REPO = "bar";
 
+    vi.spyOn(gh, "request").mockResolvedValue({
+      headers: { "x-oauth-scopes": "repo" }
+    } as any);
+
     vi.spyOn(gh.rest.git, "getRef").mockResolvedValue({
       data: { object: { sha: "headsha" } }
     } as any);
@@ -95,8 +113,8 @@ describe("commitMany", () => {
       .mockResolvedValue({ data: { sha: "blobsha" } } as any);
     const reposGet = vi.spyOn(gh.rest.repos, "get");
     reposGet
-      .mockResolvedValueOnce({ data: { default_branch: "main" } } as any)
-      .mockResolvedValueOnce({} as any);
+      .mockResolvedValueOnce({} as any)
+      .mockResolvedValueOnce({ data: { default_branch: "main" } } as any);
 
     const createTree = vi
       .spyOn(gh.rest.git, "createTree")
@@ -115,5 +133,49 @@ describe("commitMany", () => {
         { path: "foo.txt", mode: "100644", type: "blob", sha: "blobsha" }
       ]
     });
+  });
+
+  it("fails fast when repo access check fails", async () => {
+    process.env.PAT_TOKEN = "token";
+    ENV.PAT_TOKEN = "token";
+    ENV.TARGET_OWNER = "foo";
+    ENV.TARGET_REPO = "bar";
+
+    vi.spyOn(gh, "request").mockResolvedValue({
+      headers: { "x-oauth-scopes": "repo" }
+    } as any);
+
+    const reposGet = vi
+      .spyOn(gh.rest.repos, "get")
+      .mockRejectedValue({ status: 404 });
+    const createBlob = vi.spyOn(gh.rest.git, "createBlob");
+
+    await expect(
+      commitMany([{ path: "file.txt", content: "hi" }], "msg")
+    ).rejects.toThrow(
+      "Access to repository foo/bar failed with status 404. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions."
+    );
+
+    expect(createBlob).not.toHaveBeenCalled();
+    expect(reposGet).toHaveBeenCalled();
+  });
+
+  it("throws when PAT_TOKEN lacks repo scope", async () => {
+    process.env.PAT_TOKEN = "token";
+    ENV.PAT_TOKEN = "token";
+    ENV.TARGET_OWNER = "foo";
+    ENV.TARGET_REPO = "bar";
+
+    const reqMock = vi
+      .spyOn(gh, "request")
+      .mockResolvedValue({ headers: { "x-oauth-scopes": "read:user" } } as any);
+    const reposGet = vi.spyOn(gh.rest.repos, "get");
+
+    await expect(
+      commitMany([{ path: "f.txt", content: "hi" }], "msg")
+    ).rejects.toThrow("PAT_TOKEN is missing required repo scope");
+
+    expect(reqMock).toHaveBeenCalled();
+    expect(reposGet).not.toHaveBeenCalled();
   });
 });

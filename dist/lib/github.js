@@ -68,6 +68,26 @@ export async function readFile(path) {
     const got = await getFile(owner, repo, path);
     return got.content;
 }
+async function validateRepoAccess() {
+    requireEnv(["PAT_TOKEN"]);
+    const { owner, repo } = parseRepo();
+    const res = await gh.request("GET /user");
+    const scopes = res.headers["x-oauth-scopes"] || "";
+    const hasRepoScope = scopes.split(",").map(s => s.trim()).includes("repo");
+    if (!hasRepoScope) {
+        throw new Error("PAT_TOKEN is missing required repo scope");
+    }
+    try {
+        await gh.rest.repos.get({ owner, repo });
+    }
+    catch (e) {
+        if (e?.status === 404 || e?.status === 403) {
+            throw new Error(`Access to repository ${owner}/${repo} failed with status ${e.status}. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions.`);
+        }
+        throw e;
+    }
+    return { owner, repo };
+}
 export async function upsertFile(path, updater, message, opts) {
     const { owner, repo } = parseRepo();
     const safePath = resolveRepoPath(path);
@@ -93,8 +113,7 @@ export async function upsertFile(path, updater, message, opts) {
     });
 }
 export async function commitMany(files, message, opts) {
-    requireEnv(["PAT_TOKEN"]);
-    const { owner, repo } = parseRepo();
+    const { owner, repo } = await validateRepoAccess();
     const ref = opts?.branch;
     const msg = formatMessage(message);
     if (ENV.DRY_RUN) {
@@ -158,15 +177,6 @@ export async function commitMany(files, message, opts) {
         else {
             treeEntries.push({ path: treePath, mode: f.mode, type: "blob", sha: null });
         }
-    }
-    try {
-        await gh.rest.repos.get({ owner, repo });
-    }
-    catch (e) {
-        if (e?.status === 404 || e?.status === 403) {
-            throw new Error(`Access to repository ${owner}/${repo} failed with status ${e.status}. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions.`);
-        }
-        throw e;
     }
     console.log(`commitMany target: owner=${owner} repo=${repo} branch=${branch} base=${latestCommit.data.tree.sha}`);
     let tree;
