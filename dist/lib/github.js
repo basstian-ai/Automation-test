@@ -72,10 +72,14 @@ async function validateRepoAccess() {
     requireEnv(["PAT_TOKEN"]);
     const { owner, repo } = parseRepo();
     const res = await gh.request("GET /user");
-    const scopes = res.headers["x-oauth-scopes"] || "";
-    const hasRepoScope = scopes.split(",").map(s => s.trim()).includes("repo");
-    if (!hasRepoScope) {
-        throw new Error("PAT_TOKEN is missing required repo scope");
+    const scopesHeader = res.headers["x-oauth-scopes"];
+    if (scopesHeader) {
+        const scopes = scopesHeader.split(",").map(s => s.trim());
+        const allowed = ["repo", "public_repo", "contents:write"];
+        const hasRepoScope = allowed.some(scope => scopes.includes(scope));
+        if (!hasRepoScope) {
+            throw new Error("PAT_TOKEN is missing required repo scope");
+        }
     }
     try {
         await gh.rest.repos.get({ owner, repo });
