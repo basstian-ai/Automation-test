@@ -35,6 +35,13 @@ jobs:
             echo "TARGET_OWNER and TARGET_REPO must be set"
             exit 1
           fi
+          if [ -z "${PAT_TOKEN}" ]; then
+            echo "PAT_TOKEN must be set"
+            exit 1
+          else
+            echo "::add-mask::$PAT_TOKEN"
+            echo "PAT_TOKEN is set: ${PAT_TOKEN//?/*}"
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
