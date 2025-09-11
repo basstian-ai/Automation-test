@@ -85,8 +85,8 @@ describe("commitMany", () => {
       repo: "bar",
       base_tree: "treesha",
       tree: [
-        { path: "main/keep.txt", mode: "100644", type: "blob", sha: "blobsha" },
-        { path: "main/remove.txt", mode: "100644", type: "blob", sha: null }
+        { path: "keep.txt", mode: "100644", type: "blob", sha: "blobsha" },
+        { path: "remove.txt", mode: "100644", type: "blob", sha: null }
       ]
     });
   });
