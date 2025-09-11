@@ -1,4 +1,5 @@
 import yaml from "js-yaml";
+import crypto from "node:crypto";
 import { acquireLock, releaseLock } from "../lib/lock.js";
 import { readFile } from "../lib/github.js";
 import { synthesizeTasksPrompt } from "../lib/prompts.js";
@@ -39,6 +40,7 @@ export async function synthesizeTasks() {
     const bugs  = rows.filter(r => r.type === "bug");
     const ideas = rows.filter(r => r.type === "idea");
     const done  = rows.filter(r => r.type === "done").map(r => r.content || "").join("\n");
+    const existingIds = new Set((tasks.map(t => t.id).filter(Boolean)) as string[]);
 
     const proposal = await synthesizeTasksPrompt({
       tasks: yamlBlock({ items: tasks }),
@@ -79,7 +81,7 @@ export async function synthesizeTasks() {
         createdIso = Number.isNaN(d.valueOf()) ? null : d.toISOString();
       }
       return {
-        id: t.id ?? null,
+        id: t.id ?? crypto.randomUUID(),
         title: t.title ?? null,
         type: "task",
         content: t.content ?? t.desc ?? null,
@@ -92,8 +94,8 @@ export async function synthesizeTasks() {
     // Upsert tasks in Supabase only if new tasks were synthesized
     if (proposed.length > 0) {
       const rows = limited.map(toRow);
-      const toUpdate = rows.filter(r => r.id !== null);
-      const toInsert = rows.filter(r => r.id === null).map(({ id, ...rest }) => rest);
+      const toUpdate = rows.filter(r => existingIds.has(r.id!));
+      const toInsert = rows.filter(r => !existingIds.has(r.id!));
 
       const hasUniformKeys = (arr: any[]) => {
         if (arr.length <= 1) return true;
