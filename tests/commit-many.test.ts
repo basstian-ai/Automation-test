@@ -36,7 +36,7 @@ describe("commitMany", () => {
     await expect(
       commitMany([{ path: "file.txt", content: "hello" }], "msg", { branch: "main" })
     ).rejects.toThrow(
-      "Access to repository foo/bar failed with status 404. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions."
+      /Access to repository foo\/bar failed with status 404\. Request: .* Error: Not Found\. Please verify TARGET_OWNER, TARGET_REPO, PAT_TOKEN permissions, and that branch main exists\./
     );
 
     expect(createTreeMock).toHaveBeenCalled();
