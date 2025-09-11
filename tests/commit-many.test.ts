@@ -160,6 +160,29 @@ describe("commitMany", () => {
     expect(reposGet).toHaveBeenCalled();
   });
 
+  it("skips repo scope check when header is missing", async () => {
+    process.env.PAT_TOKEN = "token";
+    ENV.PAT_TOKEN = "token";
+    ENV.TARGET_OWNER = "foo";
+    ENV.TARGET_REPO = "bar";
+
+    vi.spyOn(gh, "request").mockResolvedValue({ headers: {} } as any);
+
+    const reposGet = vi
+      .spyOn(gh.rest.repos, "get")
+      .mockRejectedValue({ status: 404 });
+    const createBlob = vi.spyOn(gh.rest.git, "createBlob");
+
+    await expect(
+      commitMany([{ path: "file.txt", content: "hi" }], "msg")
+    ).rejects.toThrow(
+      "Access to repository foo/bar failed with status 404. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions."
+    );
+
+    expect(createBlob).not.toHaveBeenCalled();
+    expect(reposGet).toHaveBeenCalled();
+  });
+
   it("throws when PAT_TOKEN lacks repo scope", async () => {
     process.env.PAT_TOKEN = "token";
     ENV.PAT_TOKEN = "token";
