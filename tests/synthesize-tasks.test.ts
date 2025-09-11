@@ -48,7 +48,7 @@ test('merges tasks and orders by date', async () => {
 
   const updateBody = JSON.parse(fetchMock.mock.calls[1][1].body);
   const insertBody = JSON.parse(fetchMock.mock.calls[2][1].body);
-  const keys = ['title', 'type', 'content', 'priority', 'created', 'source'];
+  const keys = ['id', 'title', 'type', 'content', 'priority', 'created', 'source'];
 
   expect(updateBody).toEqual([
     {
@@ -61,10 +61,11 @@ test('merges tasks and orders by date', async () => {
       source: 'codex',
     },
   ]);
-  expect(Object.keys(updateBody[0])).toEqual(['id', ...keys]);
+  expect(Object.keys(updateBody[0]).sort()).toEqual([...keys].sort());
 
   expect(insertBody).toEqual([
     {
+      id: expect.any(String),
       title: 'Old',
       type: 'task',
       content: null,
@@ -73,6 +74,7 @@ test('merges tasks and orders by date', async () => {
       source: null,
     },
     {
+      id: expect.any(String),
       title: 'Newer',
       type: 'task',
       content: null,
@@ -83,6 +85,7 @@ test('merges tasks and orders by date', async () => {
   ]);
   const sortedKeys = (o: any) => Object.keys(o).sort();
   const insertKeys = sortedKeys(insertBody[0]);
+  expect(insertBody.every(o => typeof o.id === 'string')).toBe(true);
   expect(insertBody.every(o => sortedKeys(o).join(',') === insertKeys.join(','))).toBe(true);
   expect(insertKeys).toEqual([...keys].sort());
 });
@@ -164,6 +167,7 @@ test('sets created null for invalid dates', async () => {
 
   expect(updateBody[0].created).toBeNull();
   expect(insertBody[0].created).toBeNull();
+  expect(typeof insertBody[0].id).toBe('string');
 });
 
 test('skips Supabase update when no tasks generated even with existing tasks', async () => {
