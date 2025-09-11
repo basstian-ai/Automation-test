@@ -11,6 +11,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.resetModules();
+  vi.doUnmock('../src/lib/github.js');
+  vi.doUnmock('../src/lib/supabase.js');
+  vi.doUnmock('../src/lib/lock.js');
+  vi.doUnmock('../src/lib/prompts.js');
+  vi.doUnmock('../src/lib/tasks.js');
+  vi.doUnmock('node:child_process');
   process.env = OLD_ENV;
 });
 
@@ -39,8 +46,10 @@ test('implementTopTask passes repoTree to implementPlan', async () => {
   }));
 
   const mockTask = { id: '1', title: 't', content: 'c', priority: 1 };
+  const rpc = vi.fn().mockResolvedValue({ error: null });
   vi.doMock('../src/lib/supabase.js', () => ({
     supabase: {
+      rpc,
       from: () => ({
         select: () => ({
           eq: () => ({
@@ -76,6 +85,7 @@ test('implementTopTask passes repoTree to implementPlan', async () => {
 
   expect(captured).toBeDefined();
   expect(captured!.length).toBeGreaterThan(0);
+  expect(rpc).toHaveBeenCalled();
 });
 
 test('implementTopTask caps repoTree length', async () => {
@@ -97,8 +107,10 @@ test('implementTopTask caps repoTree length', async () => {
   }));
 
   const mockTask = { id: '1', title: 't', content: 'c', priority: 1 };
+  const rpc = vi.fn().mockResolvedValue({ error: null });
   vi.doMock('../src/lib/supabase.js', () => ({
     supabase: {
+      rpc,
       from: () => ({
         select: () => ({
           eq: () => ({
@@ -133,6 +145,7 @@ test('implementTopTask caps repoTree length', async () => {
   await implementTopTask();
 
   expect(captured).toEqual(['f0', 'f1']);
+  expect(rpc).toHaveBeenCalled();
 });
 
 test('implementTopTask handles delete ops and logs unsupported actions', async () => {
@@ -149,8 +162,10 @@ test('implementTopTask handles delete ops and logs unsupported actions', async (
   }));
 
   const mockTask = { id: '1', title: 't', content: 'c', priority: 1 };
+  const rpc = vi.fn().mockResolvedValue({ error: null });
   vi.doMock('../src/lib/supabase.js', () => ({
     supabase: {
+      rpc,
       from: () => ({
         select: () => ({
           eq: () => ({
