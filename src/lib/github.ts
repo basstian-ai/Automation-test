@@ -227,12 +227,18 @@ export async function commitMany(
       tree: treeEntries
     });
   } catch (e: any) {
+    const url = e?.request?.request?.url || e?.request?.url;
+    const scopes = e?.response?.headers?.["x-oauth-scopes"];
+    if (scopes) console.error(`Token scopes: ${scopes}`);
+    if (e?.status === 404) {
+      console.error(`Branch ${branch} may not exist.`);
+    }
     if (e?.status === 404 || e?.status === 403) {
       throw new Error(
-        `Access to repository ${owner}/${repo} failed with status ${e.status}. Please verify TARGET_OWNER, TARGET_REPO, and PAT_TOKEN permissions.`
+        `Access to repository ${owner}/${repo} failed with status ${e.status}. Request: ${url}. Error: ${e.message}. Please verify TARGET_OWNER, TARGET_REPO, PAT_TOKEN permissions, and that branch ${branch} exists.`
       );
     }
-    throw e;
+    throw new Error(`${e.message}${url ? ` (URL: ${url})` : ""}`);
   }
 
   const newCommit = await git.createCommit({
